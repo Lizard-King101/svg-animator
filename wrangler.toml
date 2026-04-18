@@ -1,0 +1,11 @@
+name = "svg-animator"
+compatibility_date = "2026-04-16"
+workers_dev = false
+
+[assets]
+directory = "dist/svg-animator/browser"
+not_found_handling = "single-page-application"
+
+[[routes]]
+pattern = "svg-animator.multihosts.net"
+custom_domain = true

@@ -1,0 +1,238 @@
+<div class="editor-root">
+
+  <!-- ── Top bar ── -->
+  <div class="header">
+    <div class="function-bar">
+      <button class="btn-new" (click)="openNewDialog()">
+        <fa-icon icon="plus"></fa-icon>
+        <span>New</span>
+      </button>
+      <div class="function-bar-sep"></div>
+      <button class="btn-icon" (click)="history.undo(editor)" [disabled]="!history.canUndo" title="Undo (Ctrl+Z)">
+        <fa-icon icon="rotate-left"></fa-icon>
+      </button>
+      <button class="btn-icon" (click)="history.redo(editor)" [disabled]="!history.canRedo" title="Redo (Ctrl+Y)">
+        <fa-icon icon="rotate-right"></fa-icon>
+      </button>
+      <div class="function-bar-spacer"></div>
+      <button class="btn-export" (click)="exportSVG()" [disabled]="!editor.selectedSVG" title="Export SVG">
+        <fa-icon icon="download"></fa-icon>
+        <span>Export</span>
+      </button>
+    </div>
+    <div class="tabs">
+      <div class="svg-tab"
+           *ngFor="let svg of editor.svgs"
+           [ngClass]="{'selected': editor.selectedSVG == svg}"
+           (click)="editor.selectSVG(svg.id)">
+        <span class="tab-name">{{ svg.name }}</span>
+        <button class="tab-close" (click)="$event.stopPropagation(); editor.closeSVG(svg.id)">
+          <fa-icon icon="times"></fa-icon>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Body ── -->
+  <div class="editor-body">
+
+    <!-- Left toolbar -->
+    <div class="tool-bar">
+      <div class="tool"
+           *ngFor="let tool of editor.tools"
+           (click)="tool.select($event)"
+           (contextmenu)="tool.select($event)"
+           [ngClass]="{'selected': tool.selected, 'has-children': tool.children.length}">
+        <fa-icon *ngIf="tool.icon" [icon]="tool.getIcon"></fa-icon>
+        <ng-container *ngIf="tool.showChildren">
+          <div class="child-tools">
+            <div class="tool"
+                 *ngFor="let ctool of tool.children"
+                 (click)="ctool.select($event)"
+                 (contextmenu)="ctool.select($event)"
+                 [ngClass]="{'selected': ctool.selected}">
+              <fa-icon *ngIf="ctool.icon" [icon]="ctool.icon"></fa-icon>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+    </div>
+
+    <!-- Canvas viewport -->
+    <div #viewPort class="view-port">
+      <svg #canvas display *ngIf="editor.selectedSVG"></svg>
+      <div class="canvas-empty" *ngIf="!editor.selectedSVG">
+        <div class="empty-hint">
+          <fa-icon icon="plus"></fa-icon>
+          <span>Click <strong>New</strong> to start drawing</span>
+        </div>
+      </div>
+      <div class="context-menu" *ngIf="editor.contextMenu"
+           (mousedown)="$event.stopPropagation()"
+           (click)="$event.stopPropagation()"
+           (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
+           [style.left.px]="editor.contextMenu.x"
+           [style.top.px]="editor.contextMenu.y">
+        <button class="context-menu-item"
+                *ngFor="let item of editor.contextMenu.items"
+                (click)="$event.stopPropagation(); editor.runContextMenuItem(item)">
+          <span>{{ item.label }}</span>
+          <span class="context-menu-shortcut" *ngIf="item.shortcut">{{ item.shortcut }}</span>
+        </button>
+        <div class="context-menu-info" *ngIf="editor.contextMenu.infoLines?.length">
+          <div class="context-menu-info-title" *ngIf="editor.contextMenu.infoTitle">{{ editor.contextMenu.infoTitle }}</div>
+          <div class="context-menu-info-line" *ngFor="let line of editor.contextMenu.infoLines">{{ line }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right attribute panel -->
+    <div class="attribute-panel">
+      <ng-container *ngIf="editor.inspectedElement">
+        <div class="panel-header">Properties</div>
+        <div class="attr-list">
+          <ng-container *ngFor="let attr of editor.inspectedElement.attributes">
+            <div class="attr-row">
+              <attr-text   *ngIf="attr.input == 'text'"
+                           [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
+                           [label]="attr.label"></attr-text>
+              <attr-bool   *ngIf="attr.input == 'bool'"
+                           [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
+                           [label]="attr.label"></attr-bool>
+              <color       *ngIf="attr.input == 'color'"
+                           [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
+                           [label]="attr.label"></color>
+              <range       *ngIf="attr.input == 'range'"
+                           [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
+                           [min]="$any(attr).min" [max]="$any(attr).max"
+                           [label]="attr.label"></range>
+              <attr-select *ngIf="attr.input == 'select'"
+                           [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
+                           [options]="$any(attr).options"
+                           [label]="attr.label"></attr-select>
+            </div>
+          </ng-container>
+        </div>
+      </ng-container>
+      <div class="panel-empty" *ngIf="!editor.inspectedElement">
+        <fa-icon icon="mouse-pointer"></fa-icon>
+        <span>Select an element</span>
+      </div>
+
+      <div class="panel-header">Layers</div>
+      <div class="layer-list" *ngIf="layers.length; else emptyLayers">
+        <div class="layer-row"
+             *ngFor="let layer of layers"
+             draggable="true"
+             [ngClass]="{
+               'selected': editor.selectedElement == layer,
+               'hidden': !layer.visible,
+               'locked': layer.locked,
+               'dragging': draggingLayer == layer,
+               'drop-before': dragTargetLayer == layer && dragTargetPosition == 'before',
+               'drop-after': dragTargetLayer == layer && dragTargetPosition == 'after'
+             }"
+             (click)="selectLayer(layer)"
+             (dblclick)="beginLayerRename($event, layer)"
+             (contextmenu)="openLayerContextMenu($event, layer)"
+             (dragstart)="startLayerDrag($event, layer)"
+             (dragover)="updateLayerDrop($event, layer)"
+             (drop)="dropLayer($event, layer)"
+             (dragend)="endLayerDrag()"
+             (dragleave)="clearLayerDrop(layer)">
+          <span class="layer-meta">
+            <fa-icon [icon]="layerIcon(layer)"></fa-icon>
+            <span class="layer-name" *ngIf="renamingLayer != layer">{{ layer.name }}</span>
+            <input class="layer-name-input"
+                   *ngIf="renamingLayer == layer"
+                   [(ngModel)]="layer.name"
+                   (click)="$event.stopPropagation()"
+                   (keydown.enter)="finishLayerRename()"
+                   (keydown.escape)="finishLayerRename()"
+                   (blur)="finishLayerRename()"
+                   maxlength="60"
+                   autofocus />
+          </span>
+          <span class="layer-actions">
+            <button class="layer-toggle"
+                    (click)="toggleLayerVisibility($event, layer)"
+                    [title]="layer.visible ? 'Hide layer' : 'Show layer'">
+              <fa-icon [icon]="layer.visible ? 'eye' : 'eye-slash'"></fa-icon>
+            </button>
+            <button class="layer-toggle"
+                    (click)="toggleLayerLock($event, layer)"
+                    [title]="layer.locked ? 'Unlock layer' : 'Lock layer'">
+              <fa-icon [icon]="layer.locked ? 'lock' : 'lock-open'"></fa-icon>
+            </button>
+            <button class="layer-toggle layer-delete"
+                    (click)="$event.stopPropagation(); deleteLayer(layer)"
+                    title="Delete layer">
+              <fa-icon icon="trash"></fa-icon>
+            </button>
+          </span>
+        </div>
+      </div>
+      <ng-template #emptyLayers>
+        <div class="panel-empty layers-empty">
+          <fa-icon icon="shapes"></fa-icon>
+          <span>No layers yet</span>
+        </div>
+      </ng-template>
+    </div>
+
+  </div>
+
+  <!-- ── New SVG dialog ── -->
+  <div class="dialog-overlay" *ngIf="showNewDialog" (click)="cancelNewSVG()">
+    <div class="dialog" (click)="$event.stopPropagation()">
+      <div class="dialog-header">New Project</div>
+
+      <div class="dialog-body">
+        <div class="dialog-field">
+          <label>Name</label>
+          <input type="text" [(ngModel)]="newName" placeholder="Untitled"
+                 (keydown.enter)="confirmNewSVG()" autofocus />
+        </div>
+
+        <div class="dialog-row">
+          <div class="dialog-field">
+            <label>Width</label>
+            <div class="input-unit">
+              <input type="number" [(ngModel)]="newWidth" min="1" max="8000" />
+              <span>px</span>
+            </div>
+          </div>
+          <div class="dialog-field">
+            <label>Height</label>
+            <div class="input-unit">
+              <input type="number" [(ngModel)]="newHeight" min="1" max="8000" />
+              <span>px</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dialog-field">
+          <label>Presets</label>
+          <div class="preset-grid">
+            <button *ngFor="let r of ASPECT_RATIOS"
+                    class="preset-btn"
+                    [ngClass]="{'active': isAspectSelected(r)}"
+                    (click)="pickAspectRatio(r)">
+              <span class="preset-size">{{ r.label }}</span>
+              <span class="preset-sub">{{ r.sublabel }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="dialog-footer">
+        <button class="btn-cancel" (click)="cancelNewSVG()">Cancel</button>
+        <button class="btn-create" (click)="confirmNewSVG()">
+          <fa-icon icon="plus"></fa-icon>
+          Create
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>

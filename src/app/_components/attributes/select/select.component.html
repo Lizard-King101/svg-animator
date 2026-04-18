@@ -1,0 +1,7 @@
+<label *ngIf="label">{{label}}</label>
+<div class="inputs">
+    <select [(ngModel)]="value">
+        <option value="null" selected>Select</option>
+        <option *ngFor="let option of options" [value]="option.value">{{ option.label }}</option>
+    </select>
+</div>

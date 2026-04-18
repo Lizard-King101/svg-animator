@@ -1,0 +1,5 @@
+<label *ngIf="label">{{label}}</label>
+<div class="inputs">
+    <input class="number" type="number" [(ngModel)]="value" (input)="updateValue()">
+    <input class="range slider" type="range" [(ngModel)]="value" [min]="min" [max]="max" (input)="updateValue()">
+</div>

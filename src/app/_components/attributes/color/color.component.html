@@ -1,0 +1,23 @@
+<label *ngIf="label">{{label}}</label>
+<div class="inputs">
+  <div class="hex-selector">
+    <span class="color-swatch" [ngStyle]="{'background-color': color.hex}"></span>
+    <input type="text" [(ngModel)]="color.hex" (input)="updateHEX()" placeholder="#000000">
+    <select [(ngModel)]="editType">
+      <option value="hsl">HSL</option>
+      <option value="rgbs">RGB</option>
+    </select>
+  </div>
+
+  <div class="rgb" *ngIf="editType == 'rgbs'">
+    <input class="range slider" type="range" [(ngModel)]="rgb.r" [min]="0" [max]="255" (input)="updateRGB()">
+    <input class="range slider" type="range" [(ngModel)]="rgb.g" [min]="0" [max]="255" (input)="updateRGB()">
+    <input class="range slider" type="range" [(ngModel)]="rgb.b" [min]="0" [max]="255" (input)="updateRGB()">
+  </div>
+
+  <div class="hsl" *ngIf="editType == 'hsl'">
+    <input class="range slider" type="range" [(ngModel)]="hsl.h" [min]="0" [max]="360" (input)="updateHSL()">
+    <input class="range slider" type="range" [(ngModel)]="hsl.s" [min]="0" [max]="100" (input)="updateHSL()">
+    <input class="range slider" type="range" [(ngModel)]="hsl.l" [min]="0" [max]="100" (input)="updateHSL()">
+  </div>
+</div>

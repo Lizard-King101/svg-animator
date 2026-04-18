@@ -1,0 +1,101 @@
+:host {
+  display: block;
+  padding: 10px 14px 12px;
+
+  label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    .hex-selector {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+
+      .color-swatch {
+        flex: 0 0 32px;
+        height: 32px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-bright);
+        background: #888;
+        cursor: pointer;
+        transition: border-color 0.15s;
+
+        &:hover { border-color: var(--accent); }
+      }
+
+      input[type="text"] {
+        flex: 1;
+        min-width: 0;
+        height: 32px;
+        padding: 0 8px;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--text-primary);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        outline: none;
+        transition: border-color 0.15s;
+
+        &:focus { border-color: var(--accent); }
+        &::placeholder { color: var(--text-muted); }
+      }
+
+      select {
+        flex: 0 0 52px;
+        height: 32px;
+        padding: 0 4px;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--text-secondary);
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: 11px;
+        outline: none;
+        cursor: pointer;
+        appearance: none;
+        text-align: center;
+        transition: border-color 0.15s, color 0.15s;
+
+        &:hover, &:focus {
+          border-color: var(--border-bright);
+          color: var(--text-primary);
+        }
+      }
+    }
+
+    .channel-labels {
+      display: flex;
+      justify-content: space-around;
+      padding: 0 2px;
+
+      span {
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        width: 33%;
+        text-align: center;
+      }
+    }
+
+    .hsl, .rgb {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+  }
+}

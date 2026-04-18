@@ -1,0 +1,166 @@
+<ng-container *ngFor="let element of editor.selectedSVG?.elements">
+    <ng-container *ngIf="element.visible && asPath(element) as path">
+        <svg:path
+        [id]="path.id"
+        [attr.d]="path.raw"
+        [attr.fill]="path.settings.fill_enabled && path.settings.fill ? path.settings.fill.hex : 'none'"
+        [attr.stroke]="path.settings.stroke?.hex"
+        [attr.stroke-width]="path.settings.stroke_width"
+        [attr.stroke-linecap]="path.settings.line_cap"
+        [attr.stroke-linejoin]="path.settings.line_join"
+        />
+    </ng-container>
+    <ng-container *ngIf="element.visible && asShape(element) as shape">
+        <svg:rect
+        *ngIf="editor.shapeIsRectangle(shape)"
+        [id]="shape.id"
+        [attr.x]="shape.x"
+        [attr.y]="shape.y"
+        [attr.width]="shape.width"
+        [attr.height]="shape.height"
+        [attr.rx]="shape.settings.corner_radius || null"
+        [attr.ry]="shape.settings.corner_radius || null"
+        [attr.fill]="shape.settings.fill?.hex ?? 'none'"
+        [attr.stroke]="shape.settings.stroke?.hex"
+        [attr.stroke-width]="shape.settings.stroke_width"
+        />
+        <svg:ellipse
+        *ngIf="editor.shapeIsEllipse(shape)"
+        [id]="shape.id"
+        [attr.cx]="shape.centerX"
+        [attr.cy]="shape.centerY"
+        [attr.rx]="shape.radiusX"
+        [attr.ry]="shape.radiusY"
+        [attr.fill]="shape.settings.fill?.hex ?? 'none'"
+        [attr.stroke]="shape.settings.stroke?.hex"
+        [attr.stroke-width]="shape.settings.stroke_width"
+        />
+    </ng-container>
+    <ng-container *ngIf="element.visible && asText(element) as text">
+        <svg:text
+        [id]="text.id"
+        [attr.x]="text.x"
+        [attr.y]="text.y"
+        [attr.font-size]="text.settings.font_size"
+        [attr.font-family]="text.settings.font_family"
+        [attr.font-weight]="text.settings.font_weight"
+        [attr.fill]="text.settings.color?.hex ?? '#000000'"
+        dominant-baseline="hanging">
+            <svg:tspan
+            *ngFor="let span of textTspans(text)"
+            [attr.x]="text.x"
+            [attr.dy]="span.dy">{{ span.text }}</svg:tspan>
+        </svg:text>
+        <svg:rect
+        *ngIf="editor.selectedElement == text || editor.activeElement == text"
+        [attr.x]="text.x - 2"
+        [attr.y]="text.y - 2"
+        [attr.width]="text.width + 4"
+        [attr.height]="text.height + 4"
+        fill="none"
+        stroke="#2dd4bf"
+        stroke-width="1"
+        stroke-dasharray="4 3"
+        pointer-events="none"
+        />
+    </ng-container>
+</ng-container>
+
+<ng-container *ngFor="let element of editor.selectedSVG?.tempElements">
+    <ng-container *ngIf="editor.elementIsPath(element)">
+        <svg:path [id]="element.id" [attr.d]="element.raw" stroke="#aeaeae" stroke-width="2" fill="transparent"/>
+    </ng-container>
+    <ng-container *ngIf="asShape(element) as shape">
+        <svg:rect
+        *ngIf="editor.shapeIsRectangle(shape)"
+        [id]="shape.id"
+        [attr.x]="shape.x"
+        [attr.y]="shape.y"
+        [attr.width]="shape.width"
+        [attr.height]="shape.height"
+        [attr.fill]="shape.settings.fill?.hex ?? 'none'"
+        [attr.stroke]="shape.settings.stroke?.hex"
+        [attr.stroke-width]="shape.settings.stroke_width"
+        />
+        <svg:ellipse
+        *ngIf="editor.shapeIsEllipse(shape)"
+        [id]="shape.id"
+        [attr.cx]="shape.centerX"
+        [attr.cy]="shape.centerY"
+        [attr.rx]="shape.radiusX"
+        [attr.ry]="shape.radiusY"
+        [attr.fill]="shape.settings.fill?.hex ?? 'none'"
+        [attr.stroke]="shape.settings.stroke?.hex"
+        [attr.stroke-width]="shape.settings.stroke_width"
+        />
+    </ng-container>
+</ng-container>
+
+<ng-container *ngIf="editor.selectedElement?.visible && !editor.selectedElement?.locked && asPath(editor.selectedElement) as selectedPath">
+    <ng-container *ngFor="let segment of completeSegments(selectedPath)">
+        <svg:path
+        [attr.data-segment-id]="segment.id"
+        [attr.d]="segmentPath(segment)"
+        fill="none"
+        [attr.stroke]="editor.selectedPathLine == segment ? '#2dd4bf' : 'transparent'"
+        [attr.stroke-width]="editor.selectedPathLine == segment ? 2.5 : 12"
+        [attr.pointer-events]="'stroke'"
+        />
+    </ng-container>
+
+    <ng-container *ngFor="let segment of bezierSegments(selectedPath)">
+        <svg:line
+        [attr.x1]="segment.points[0].x"
+        [attr.y1]="segment.points[0].y"
+        [attr.x2]="segment.controlStart?.x"
+        [attr.y2]="segment.controlStart?.y"
+        stroke="#7c8aa5"
+        stroke-width="1"
+        stroke-dasharray="3 3"
+        />
+        <svg:line
+        [attr.x1]="segment.points[1].x"
+        [attr.y1]="segment.points[1].y"
+        [attr.x2]="segment.controlEnd?.x"
+        [attr.y2]="segment.controlEnd?.y"
+        stroke="#7c8aa5"
+        stroke-width="1"
+        stroke-dasharray="3 3"
+        />
+        <svg:circle
+        [attr.data-point-role]="'control-start'"
+        [attr.data-point-id]="segment.controlStart?.id"
+        [attr.data-line-id]="segment.id"
+        [attr.cx]="segment.controlStart?.x"
+        [attr.cy]="segment.controlStart?.y"
+        r="4"
+        fill="#14141a"
+        stroke="#2dd4bf"
+        stroke-width="1.5"
+        />
+        <svg:circle
+        [attr.data-point-role]="'control-end'"
+        [attr.data-point-id]="segment.controlEnd?.id"
+        [attr.data-line-id]="segment.id"
+        [attr.cx]="segment.controlEnd?.x"
+        [attr.cy]="segment.controlEnd?.y"
+        r="4"
+        fill="#14141a"
+        stroke="#2dd4bf"
+        stroke-width="1.5"
+        />
+    </ng-container>
+
+    <ng-container *ngFor="let anchor of pathAnchors(selectedPath)">
+        <svg:circle
+        [attr.data-point-role]="'anchor'"
+        [attr.data-point-id]="anchor.id"
+        [attr.cx]="anchor.x"
+        [attr.cy]="anchor.y"
+        r="4.5"
+        fill="#14141a"
+        [attr.stroke]="editor.selectedPathAnchor == anchor ? '#2dd4bf' : '#dddde8'"
+        stroke-width="1.5"
+        />
+    </ng-container>
+</ng-container>

@@ -1,0 +1,10 @@
+<div class="text-field">
+  <label *ngIf="label" class="text-label">{{ label }}</label>
+  <textarea
+    class="text-input"
+    [value]="value"
+    (input)="update($any($event.target).value)"
+    rows="3"
+    spellcheck="false"
+  ></textarea>
+</div>

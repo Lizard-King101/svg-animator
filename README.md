@@ -1,59 +1,64 @@
-# SvgAnimator
+# ![SVG Animator](banner.svg)
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 19.2.19.
+A browser-based vector drawing tool with an Illustrator-style workflow. Draw paths, shapes, and layers — then (eventually) animate them on a timeline.
 
-## Development server
 
-To start a local development server, run:
+**Live demo → [svg-animator.multihosts.net](https://svg-animator.multihosts.net)**
 
-```bash
-ng serve
-```
+---
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+## What it does now
 
-## Code scaffolding
+- Multi-tab SVG documents with pan + zoom
+- Pen tool — straight segments, bezier curves, open/closed paths
+- Shape tools — rectangle and ellipse with Shift/Alt modifiers
+- Select tool — move elements, drag anchors and bezier handles, convert straight ↔ curve, insert/delete points
+- Layers panel — visibility, lock, rename, duplicate, drag-reorder, delete
+- Properties panel — per-element attributes (stroke, fill, width/height, caps/joins)
+- Project gallery — auto-saves to `localStorage`, thumbnail previews, project name + dimensions picker
+- Export — clean `.svg` file download
+- Undo / redo — per-document history (50 steps)
+- Hosted on Cloudflare Pages, routed with SPA fallback
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+See [`FEATURES.md`](FEATURES.md) for full technical detail, object structures, and what's next.
 
-```bash
-ng generate component component-name
-```
+---
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+## Roadmap toward animation
 
-```bash
-ng generate --help
-```
+The drawing layer is being built with animation in mind. The planned workflow:
 
-## Building
+1. **Transforms** — element-level rotation, scale, skew (prerequisite for meaningful keyframing)
+2. **Keyframes** — each element can have keyed properties (position, opacity, stroke, fill…) at timestamps
+3. **Timeline panel** — scrubable playhead, per-element track rows, easing curves
+4. **Playback** — SVG SMIL or generated CSS animation for preview and export
+5. **Export formats** — animated SVG, CSS animation bundle, or frame-by-frame PNG sequence
 
-To build the project run:
+---
 
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
+## Dev setup
 
 ```bash
-ng test
+npm install
+npm start           # dev server → http://localhost:4200
+npm run build       # production build → dist/svg-animator/browser
 ```
 
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
+Deploy to Cloudflare Pages:
 
 ```bash
-ng e2e
+npm run build
+npx wrangler deploy
 ```
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+---
 
-## Additional Resources
+## Stack
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+| | |
+|---|---|
+| Framework | Angular 21, standalone components, lazy routes |
+| Build | `@angular-devkit/build-angular:application` (esbuild) |
+| Icons | FontAwesome 7 via `@fortawesome/angular-fontawesome` |
+| Hosting | Cloudflare Pages |
+| Persistence | `localStorage` (project save/load) |

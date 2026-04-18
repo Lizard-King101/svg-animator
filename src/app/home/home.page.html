@@ -1,0 +1,40 @@
+<div class="home">
+
+  <div class="home-header">
+    <div class="logo">
+      <fa-icon icon="pen-fancy"></fa-icon>
+      <span>SVG Editor</span>
+    </div>
+    <button class="btn-new" (click)="newProject()">
+      <fa-icon icon="plus"></fa-icon>
+      New Project
+    </button>
+  </div>
+
+  <div class="gallery-section">
+
+    <div class="gallery-empty" *ngIf="projects.length === 0">
+      <fa-icon icon="pen-fancy"></fa-icon>
+      <p>No projects yet</p>
+      <span>Click <strong>New Project</strong> to start drawing</span>
+    </div>
+
+    <div class="gallery-grid" *ngIf="projects.length > 0">
+      <div class="project-card" *ngFor="let project of projects" (click)="openProject(project)">
+        <div class="card-preview">
+          <img [src]="thumbnailUrl(project)" [alt]="project.name" />
+        </div>
+        <div class="card-meta">
+          <span class="card-name">{{ project.name }}</span>
+          <span class="card-date">{{ project.updatedAt | date: 'MMM d, y' }}</span>
+        </div>
+        <button class="card-delete" title="Delete project"
+                (click)="deleteProject($event, project)">
+          <fa-icon icon="trash"></fa-icon>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
