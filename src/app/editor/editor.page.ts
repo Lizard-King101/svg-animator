@@ -3,7 +3,7 @@ import { NgClass, NgFor, NgIf } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute } from "@angular/router";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
-import { EditorService } from "../_services/editor.service";
+import { EditorContextMenuItem, EditorService } from "../_services/editor.service";
 import { HistoryService } from "../_services/history.service";
 import { ProjectService } from "../_services/project.service";
 import { SVGDisplay } from "../_components/svg-display/svg-display.component";
@@ -44,10 +44,17 @@ export class EditorPage implements AfterViewInit {
 
     movingView: boolean = false;
     moveStart: Point;
+    private attributeSaveTimer?: ReturnType<typeof setTimeout>;
+    private saveRevision = 0;
     draggingLayer?: AnyElement;
     dragTargetLayer?: AnyElement;
-    dragTargetPosition?: 'before' | 'after';
+    dragTargetPosition?: 'before' | 'after' | 'inside';
+    private pendingLayerDrag?: { element: AnyElement; pointerId: number; startX: number; startY: number; row: HTMLElement };
+    private suppressLayerClick = false;
     renamingLayer?: AnyElement;
+    selectedLayers: AnyElement[] = [];
+    private lastSelectedLayer?: AnyElement;
+    private collapsedGroupIds = new Set<string>();
 
     // ── New SVG dialog ────────────────────────────────────────────────
     showNewDialog = false;
@@ -94,6 +101,19 @@ export class EditorPage implements AfterViewInit {
                 this.history.redo(this.editor);
                 return;
             }
+            if(event.key.toLowerCase() == 'g' && this.canGroupSelectedLayers()) {
+                event.preventDefault();
+                this.groupSelectedLayers();
+                return;
+            }
+        }
+
+        if(this.selectedLayers.length > 1 && !this.renamingLayer) {
+            if(event.key == 'Delete' || event.key == 'Backspace') {
+                event.preventDefault();
+                this.deleteSelectedLayers();
+                return;
+            }
         }
 
         if(this.editor.selectedElement && !this.renamingLayer) {
@@ -128,7 +148,9 @@ export class EditorPage implements AfterViewInit {
             }
         }
 
+        const beforeState = this.currentElementsState();
         this.editor.keyPressed(event.key);
+        this.snapshotAndSaveIfChanged(beforeState);
     }
     @HostListener('document:keyup', ['$event']) handleKeyUp(event: KeyboardEvent) {
         this.editor.keyReleased(event.key);
@@ -297,6 +319,41 @@ export class EditorPage implements AfterViewInit {
     private snapshotAndSave() {
         this.history.snapshot(this.editor);
         this.autoSave();
+        this.saveRevision++;
+    }
+
+    private currentElementsState(): string | undefined {
+        const svg = this.editor.selectedSVG;
+        return svg ? JSON.stringify(svg.save().elements) : undefined;
+    }
+
+    private snapshotAndSaveIfChanged(beforeState?: string, beforeRevision = this.saveRevision) {
+        if(this.saveRevision !== beforeRevision) {
+            return;
+        }
+
+        const afterState = this.currentElementsState();
+        if(beforeState !== afterState) {
+            this.snapshotAndSave();
+        }
+    }
+
+    scheduleAttributeSnapshot() {
+        if(this.attributeSaveTimer) {
+            clearTimeout(this.attributeSaveTimer);
+        }
+
+        this.attributeSaveTimer = setTimeout(() => {
+            this.attributeSaveTimer = undefined;
+            this.snapshotAndSave();
+        }, 250);
+    }
+
+    runContextMenuItem(item: EditorContextMenuItem) {
+        const beforeRevision = this.saveRevision;
+        const beforeState = this.currentElementsState();
+        this.editor.runContextMenuItem(item);
+        this.snapshotAndSaveIfChanged(beforeState, beforeRevision);
     }
 
     // ── Export ───────────────────────────────────────────────────────
@@ -318,14 +375,82 @@ export class EditorPage implements AfterViewInit {
         return [...(this.editor.selectedSVG?.elements ?? [])].reverse();
     }
 
+    get layerRows(): LayerRow[] {
+        return this.buildLayerRows(this.editor.selectedSVG?.elements ?? [], 0);
+    }
+
+    trackLayerRow(_index: number, row: LayerRow): string {
+        return row.element.id;
+    }
+
+    private buildLayerRows(elements: AnyElement[], depth: number, parent?: Group): LayerRow[] {
+        const rows: LayerRow[] = [];
+
+        [...elements].reverse().forEach((element) => {
+            rows.push({ element, depth, parent });
+            if(element instanceof Group && !this.groupIsCollapsed(element)) {
+                rows.push(...this.buildLayerRows(element.elements, depth + 1, element));
+            }
+        });
+
+        return rows;
+    }
+
+    asGroup(element: AnyElement): Group | null {
+        return element instanceof Group ? element : null;
+    }
+
+    groupIsCollapsed(group: Group): boolean {
+        return this.collapsedGroupIds.has(group.id);
+    }
+
+    toggleGroupCollapsed(event: MouseEvent, group: Group) {
+        event.stopPropagation();
+        if(this.collapsedGroupIds.has(group.id)) {
+            this.collapsedGroupIds.delete(group.id);
+        } else {
+            this.collapsedGroupIds.add(group.id);
+        }
+    }
+
+    isLayerSelected(element: AnyElement): boolean {
+        return this.selectedLayers.includes(element) || this.editor.selectedElement === element;
+    }
+
     /** Bridge for template dynamic-key access on the now-typed settings object. */
     settingsOf(element: AnyElement | undefined): Record<string, any> {
         return (element?.settings ?? {}) as Record<string, any>;
     }
 
-    selectLayer(element: AnyElement) {
+    selectLayer(element: AnyElement, event?: MouseEvent) {
+        if(this.suppressLayerClick) {
+            return;
+        }
+
         this.renamingLayer = undefined;
-        this.editor.selectedElement = element;
+        if(event?.shiftKey && this.lastSelectedLayer) {
+            const rows = this.layerRows.map((row) => row.element);
+            const start = rows.indexOf(this.lastSelectedLayer);
+            const end = rows.indexOf(element);
+            if(start >= 0 && end >= 0) {
+                const [from, to] = start < end ? [start, end] : [end, start];
+                this.selectedLayers = rows.slice(from, to + 1);
+            } else {
+                this.selectedLayers = [element];
+            }
+        } else if(event?.ctrlKey || event?.metaKey) {
+            if(this.selectedLayers.includes(element)) {
+                this.selectedLayers = this.selectedLayers.filter((layer) => layer !== element);
+            } else {
+                this.selectedLayers = [...this.selectedLayers, element];
+            }
+            this.lastSelectedLayer = element;
+        } else {
+            this.selectedLayers = [element];
+            this.lastSelectedLayer = element;
+        }
+
+        this.editor.selectedElement = this.selectedLayers.length == 1 ? this.selectedLayers[0] : undefined;
         this.editor.selectedPathAnchor = undefined;
         this.editor.selectedPathLine = undefined;
     }
@@ -399,9 +524,117 @@ export class EditorPage implements AfterViewInit {
         return clone;
     }
 
+    private cloneGroup(group: Group) {
+        const clone = new Group(this.editor);
+        clone.name = `${group.name} Copy`;
+        clone.visible = group.visible;
+        clone.locked = false;
+        clone.elements = group.elements.map((element) => this.cloneElement(element));
+        return clone;
+    }
+
+    private cloneElement(element: AnyElement): AnyElement {
+        if(element instanceof Path) return this.clonePath(element);
+        if(element instanceof Shape) return this.cloneShape(element);
+        if(element instanceof TextElement) return this.cloneText(element);
+        return this.cloneGroup(element);
+    }
+
     private setElementOrder(elements: AnyElement[]) {
         if(this.editor.selectedSVG) {
             this.editor.selectedSVG.elements = elements;
+        }
+    }
+
+    private layerContext(element: AnyElement): LayerContext | undefined {
+        if(!this.editor.selectedSVG) {
+            return undefined;
+        }
+
+        return this.findLayerContext(this.editor.selectedSVG.elements, element);
+    }
+
+    private findLayerContext(elements: AnyElement[], element: AnyElement, parent?: Group): LayerContext | undefined {
+        const index = elements.indexOf(element);
+        if(index >= 0) {
+            return { elements, index, parent };
+        }
+
+        for(const candidate of elements) {
+            if(candidate instanceof Group) {
+                const found = this.findLayerContext(candidate.elements, element, candidate);
+                if(found) {
+                    return found;
+                }
+            }
+        }
+
+        return undefined;
+    }
+
+    private canGroupWithBelow(element: AnyElement): boolean {
+        const context = this.layerContext(element);
+        return !!context && context.index > 0;
+    }
+
+    private selectedLayerContexts(): LayerContext[] {
+        return this.selectedLayers
+            .map((layer) => this.layerContext(layer))
+            .filter((context): context is LayerContext => !!context);
+    }
+
+    canGroupSelectedLayers(): boolean {
+        if(this.selectedLayers.length < 2) {
+            return false;
+        }
+
+        const contexts = this.selectedLayerContexts();
+        if(contexts.length !== this.selectedLayers.length) {
+            return false;
+        }
+
+        const parentElements = contexts[0].elements;
+        return contexts.every((context) => context.elements === parentElements);
+    }
+
+    groupSelectedLayers() {
+        if(!this.canGroupSelectedLayers()) {
+            return;
+        }
+
+        const contexts = this.selectedLayerContexts();
+        const elements = contexts[0].elements;
+        const selected = new Set(this.selectedLayers);
+        const selectedInDrawOrder = elements.filter((element) => selected.has(element));
+        const firstIndex = elements.findIndex((element) => selected.has(element));
+
+        const group = new Group(this.editor);
+        group.name = `Group ${selectedInDrawOrder.length} Layers`;
+        group.elements = selectedInDrawOrder;
+
+        selectedInDrawOrder.forEach((element) => {
+            const index = elements.indexOf(element);
+            if(index >= 0) {
+                elements.splice(index, 1);
+            }
+        });
+        elements.splice(firstIndex, 0, group);
+        this.selectLayer(group);
+        this.snapshotAndSave();
+    }
+
+    private elementContains(parent: AnyElement, child: AnyElement): boolean {
+        return parent instanceof Group && parent.elements.some((element) => {
+            return element === child || this.elementContains(element, child);
+        });
+    }
+
+    private removeLayerFromSelection(element: AnyElement) {
+        this.selectedLayers = this.selectedLayers.filter((layer) => {
+            return layer !== element && !this.elementContains(element, layer);
+        });
+        if(this.lastSelectedLayer && (this.lastSelectedLayer === element || this.elementContains(element, this.lastSelectedLayer))) {
+            this.lastSelectedLayer = undefined;
         }
     }
 
@@ -424,38 +657,52 @@ export class EditorPage implements AfterViewInit {
             return;
         }
 
-        let duplicate: AnyElement | undefined;
-        if(element instanceof Path) {
-            duplicate = this.clonePath(element);
-        } else if(element instanceof Shape) {
-            duplicate = this.cloneShape(element);
-        } else if(element instanceof TextElement) {
-            duplicate = this.cloneText(element);
-        }
-
-        if(!duplicate) {
+        const context = this.layerContext(element);
+        if(!context) {
             return;
         }
 
-        const elements = [...this.editor.selectedSVG.elements];
-        const index = elements.indexOf(element);
-        elements.splice(index + 1, 0, duplicate);
-        this.setElementOrder(elements);
+        const duplicate = this.cloneElement(element);
+        context.elements.splice(context.index + 1, 0, duplicate);
         this.selectLayer(duplicate);
         this.snapshotAndSave();
     }
 
     deleteLayer(element: AnyElement) {
         if(!this.editor.selectedSVG) return;
-        const elements = this.editor.selectedSVG.elements;
-        const index = elements.indexOf(element);
-        if(index < 0) return;
-        elements.splice(index, 1);
-        if(this.editor.selectedElement === element) {
+        const context = this.layerContext(element);
+        if(!context) return;
+        context.elements.splice(context.index, 1);
+        if(this.editor.selectedElement === element || (this.editor.selectedElement && this.elementContains(element, this.editor.selectedElement))) {
             this.editor.selectedElement = undefined;
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
         }
+        this.removeLayerFromSelection(element);
+        this.snapshotAndSave();
+    }
+
+    deleteSelectedLayers() {
+        if(!this.editor.selectedSVG || this.selectedLayers.length == 0) {
+            return;
+        }
+
+        const selected = [...this.selectedLayers].filter((layer) => {
+            return !this.selectedLayers.some((candidate) => candidate !== layer && this.elementContains(candidate, layer));
+        });
+
+        selected.forEach((layer) => {
+            const context = this.layerContext(layer);
+            if(context) {
+                context.elements.splice(context.index, 1);
+            }
+        });
+
+        this.selectedLayers = [];
+        this.lastSelectedLayer = undefined;
+        this.editor.selectedElement = undefined;
+        this.editor.selectedPathAnchor = undefined;
+        this.editor.selectedPathLine = undefined;
         this.snapshotAndSave();
     }
 
@@ -464,15 +711,17 @@ export class EditorPage implements AfterViewInit {
             return;
         }
 
-        const elements = [...this.editor.selectedSVG.elements];
-        const index = elements.indexOf(element);
-        if(index <= 0) {
+        const context = this.layerContext(element);
+        if(!context || context.index <= 0) {
             return;
         }
 
-        elements.splice(index, 1);
-        elements.splice(index - 1, 0, element);
-        this.setElementOrder(elements);
+        // elements.splice(index, 1);
+        // elements.splice(index - 1, 0, element);
+        // this.setElementOrder(elements);
+        this.snapshotAndSave();
+        context.elements.splice(context.index, 1);
+        context.elements.splice(context.index - 1, 0, element);
     }
 
     moveLayerForward(element: AnyElement) {
@@ -480,24 +729,59 @@ export class EditorPage implements AfterViewInit {
             return;
         }
 
-        const elements = [...this.editor.selectedSVG.elements];
-        const index = elements.indexOf(element);
-        if(index < 0 || index >= elements.length - 1) {
+        const context = this.layerContext(element);
+        if(!context || context.index >= context.elements.length - 1) {
             return;
         }
 
-        elements.splice(index, 1);
-        elements.splice(index + 1, 0, element);
-        this.setElementOrder(elements);
+        context.elements.splice(context.index, 1);
+        context.elements.splice(context.index + 1, 0, element);
+    }
+
+    groupLayerWithBelow(element: AnyElement) {
+        const context = this.layerContext(element);
+        if(!context || context.index <= 0) {
+            return;
+        }
+
+        const below = context.elements[context.index - 1];
+        const group = new Group(this.editor);
+        group.name = `Group ${below.name}, ${element.name}`;
+        group.elements = [below, element];
+        context.elements.splice(context.index - 1, 2, group);
+        this.selectLayer(group);
+        this.snapshotAndSave();
+    }
+
+    ungroupLayer(group: Group) {
+        const context = this.layerContext(group);
+        if(!context) {
+            return;
+        }
+
+        // elements.splice(index, 1);
+        // elements.splice(index + 1, 0, element);
+        // this.setElementOrder(elements);
+        context.elements.splice(context.index, 1, ...group.elements);
+        this.selectedLayers = [...group.elements];
+        this.lastSelectedLayer = this.selectedLayers[this.selectedLayers.length - 1];
+        if(this.editor.selectedElement === group) {
+            this.editor.selectedElement = undefined;
+            this.editor.selectedPathAnchor = undefined;
+            this.editor.selectedPathLine = undefined;
+        }
+        this.snapshotAndSave();
     }
 
     openLayerContextMenu(event: MouseEvent, element: AnyElement) {
         event.preventDefault();
         event.stopPropagation();
-        this.selectLayer(element);
+        if(!this.selectedLayers.includes(element)) {
+            this.selectLayer(element);
+        }
 
-        const menuPosition = this.editor.toViewportPoint(event.clientX, event.clientY);
-        this.editor.openContextMenu(menuPosition.x, menuPosition.y, [
+        const menuPosition = new Point(event.clientX, event.clientY);
+        const items: EditorContextMenuItem[] = [
             {
                 label: 'Rename Layer',
                 shortcut: 'Enter',
@@ -512,6 +796,32 @@ export class EditorPage implements AfterViewInit {
                     this.duplicateLayer(element);
                 }
             },
+            ...(this.canGroupSelectedLayers() ? [{
+                label: 'Group Selection',
+                shortcut: 'Ctrl+G',
+                action: () => {
+                    this.groupSelectedLayers();
+                }
+            }] : []),
+            ...(this.selectedLayers.length > 1 ? [{
+                label: 'Delete Selection',
+                shortcut: 'Del',
+                action: () => {
+                    this.deleteSelectedLayers();
+                }
+            }] : []),
+            ...(this.canGroupWithBelow(element) ? [{
+                label: 'Group With Layer Below',
+                action: () => {
+                    this.groupLayerWithBelow(element);
+                }
+            }] : []),
+            ...(element instanceof Group ? [{
+                label: 'Ungroup',
+                action: () => {
+                    this.ungroupLayer(element);
+                }
+            }] : []),
             {
                 label: 'Move Forward',
                 shortcut: ']',
@@ -533,11 +843,14 @@ export class EditorPage implements AfterViewInit {
                     this.deleteLayer(element);
                 }
             }
-        ]);
+        ];
+
+        this.editor.openContextMenu(menuPosition.x, menuPosition.y, items);
         this.editor.contextMenu!.infoTitle = 'Layer Shortcuts';
         this.editor.contextMenu!.infoLines = [
             'Enter: rename selected layer',
             'Ctrl+D: duplicate selected layer',
+            'Group layers from the layer context menu',
             ']: move selected layer forward',
             '[: move selected layer backward',
             'Del: delete selected layer',
@@ -547,19 +860,21 @@ export class EditorPage implements AfterViewInit {
     toggleLayerVisibility(event: MouseEvent, element: AnyElement) {
         event.stopPropagation();
         element.visible = !element.visible;
-        if(!element.visible && this.editor.selectedElement == element) {
+        if(!element.visible && this.editor.selectedElement && (this.editor.selectedElement == element || this.elementContains(element, this.editor.selectedElement))) {
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
         }
+        this.snapshotAndSave();
     }
 
     toggleLayerLock(event: MouseEvent, element: AnyElement) {
         event.stopPropagation();
         element.locked = !element.locked;
-        if(element.locked && this.editor.selectedElement == element) {
+        if(element.locked && this.editor.selectedElement && (this.editor.selectedElement == element || this.elementContains(element, this.editor.selectedElement))) {
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
         }
+        this.snapshotAndSave();
     }
 
     layerIcon(element: AnyElement) {
@@ -575,7 +890,107 @@ export class EditorPage implements AfterViewInit {
             return 'font';
         }
 
-        return 'shapes';
+        return 'object-group';
+    }
+
+    beginLayerPointerDrag(event: PointerEvent, element: AnyElement) {
+        if(event.button !== 0 || this.renamingLayer) {
+            return;
+        }
+
+        event.stopPropagation();
+        const row = (event.currentTarget as HTMLElement).closest<HTMLElement>('.layer-row[data-layer-id]');
+        if(!row) {
+            return;
+        }
+
+        this.pendingLayerDrag = {
+            element,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            row,
+        };
+        row.setPointerCapture(event.pointerId);
+    }
+
+    updateLayerPointerDrag(event: PointerEvent) {
+        const pending = this.pendingLayerDrag;
+        if(!pending || pending.pointerId !== event.pointerId) {
+            return;
+        }
+
+        const distance = Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY);
+        if(!this.draggingLayer && distance < 4) {
+            return;
+        }
+
+        if(!this.draggingLayer) {
+            this.draggingLayer = pending.element;
+        }
+
+        event.preventDefault();
+        const target = this.layerDropTargetFromPoint(event.clientX, event.clientY);
+        if(!target || target.element === this.draggingLayer || this.elementContains(this.draggingLayer, target.element)) {
+            this.dragTargetLayer = undefined;
+            this.dragTargetPosition = undefined;
+            return;
+        }
+
+        this.updateLayerDropTarget(target.element, target.row, event.clientY);
+    }
+
+    finishLayerPointerDrag(event: PointerEvent) {
+        const pending = this.pendingLayerDrag;
+        if(!pending || pending.pointerId !== event.pointerId) {
+            return;
+        }
+
+        if(pending.row.hasPointerCapture(event.pointerId)) {
+            pending.row.releasePointerCapture(event.pointerId);
+        }
+
+        if(this.draggingLayer) {
+            event.preventDefault();
+            this.commitLayerDrop();
+            this.suppressLayerClick = true;
+            setTimeout(() => {
+                this.suppressLayerClick = false;
+            });
+        }
+
+        this.pendingLayerDrag = undefined;
+    }
+
+    cancelLayerPointerDrag(event: PointerEvent) {
+        const pending = this.pendingLayerDrag;
+        if(pending?.pointerId === event.pointerId) {
+            this.pendingLayerDrag = undefined;
+            this.endLayerDrag();
+        }
+    }
+
+    private layerDropTargetFromPoint(x: number, y: number): { element: AnyElement; row: HTMLElement } | undefined {
+        const target = document.elementFromPoint(x, y);
+        const row = target instanceof Element ? target.closest<HTMLElement>('.layer-row[data-layer-id]') : null;
+        if(!row) {
+            return undefined;
+        }
+
+        const id = row.dataset['layerId'];
+        const element = id ? this.layerRows.find((candidate) => candidate.element.id === id)?.element : undefined;
+        return element ? { element, row } : undefined;
+    }
+
+    private updateLayerDropTarget(element: AnyElement, row: HTMLElement, clientY: number) {
+        const bounds = row.getBoundingClientRect();
+        const offsetY = clientY - bounds.top;
+        this.dragTargetLayer = element;
+        if(element instanceof Group && offsetY > bounds.height / 3 && offsetY < (bounds.height * 2 / 3)) {
+            this.dragTargetPosition = 'inside';
+        } else {
+            this.dragTargetPosition = offsetY < (bounds.height / 2) ? 'before' : 'after';
+        }
     }
 
     startLayerDrag(event: DragEvent, element: AnyElement) {
@@ -588,15 +1003,17 @@ export class EditorPage implements AfterViewInit {
 
     updateLayerDrop(event: DragEvent, element: AnyElement) {
         event.preventDefault();
-        if(!this.draggingLayer || this.draggingLayer == element) {
+        if(
+            !this.draggingLayer ||
+            this.draggingLayer == element ||
+            this.elementContains(this.draggingLayer, element)
+        ) {
             this.dragTargetLayer = undefined;
             this.dragTargetPosition = undefined;
             return;
         }
 
-        const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
-        this.dragTargetLayer = element;
-        this.dragTargetPosition = (event.clientY - bounds.top) < (bounds.height / 2) ? 'before' : 'after';
+        this.updateLayerDropTarget(element, event.currentTarget as HTMLElement, event.clientY);
         if(event.dataTransfer) {
             event.dataTransfer.dropEffect = 'move';
         }
@@ -622,20 +1039,57 @@ export class EditorPage implements AfterViewInit {
             return;
         }
 
-        const displayLayers = this.layers;
-        const draggedIndex = displayLayers.indexOf(this.draggingLayer);
-        const targetIndex = displayLayers.indexOf(element);
-        if(draggedIndex < 0 || targetIndex < 0) {
+        if(this.elementContains(this.draggingLayer, element)) {
             this.endLayerDrag();
             return;
         }
 
-        const reorderedLayers = [...displayLayers];
-        reorderedLayers.splice(draggedIndex, 1);
-        const insertionIndex = targetIndex + (this.dragTargetPosition == 'after' ? 1 : 0);
-        reorderedLayers.splice(insertionIndex > draggedIndex ? insertionIndex - 1 : insertionIndex, 0, this.draggingLayer);
-        this.editor.selectedSVG.elements = reorderedLayers.reverse();
+        this.commitLayerDrop();
+    }
+
+    private commitLayerDrop() {
+        if(!this.editor.selectedSVG || !this.draggingLayer || !this.dragTargetLayer || !this.dragTargetPosition) {
+            this.endLayerDrag();
+            return;
+        }
+
+        const element = this.dragTargetLayer;
+        const sourceContext = this.layerContext(this.draggingLayer);
+        const targetContext = this.layerContext(element);
+        if(!sourceContext || !targetContext) {
+            this.endLayerDrag();
+            return;
+        }
+
+        let targetElements: AnyElement[];
+        let insertionIndex: number;
+        if(this.dragTargetPosition == 'inside' && element instanceof Group) {
+            targetElements = element.elements;
+            insertionIndex = targetElements.length;
+            this.collapsedGroupIds.delete(element.id);
+        } else {
+            targetElements = targetContext.elements;
+            insertionIndex = targetContext.index + (this.dragTargetPosition == 'before' ? 1 : 0);
+        }
+
+        sourceContext.elements.splice(sourceContext.index, 1);
+        if(sourceContext.elements === targetElements && sourceContext.index < insertionIndex) {
+            insertionIndex--;
+        }
+        targetElements.splice(insertionIndex, 0, this.draggingLayer);
         this.snapshotAndSave();
         this.endLayerDrag();
     }
+}
+
+interface LayerRow {
+    element: AnyElement;
+    depth: number;
+    parent?: Group;
+}
+
+interface LayerContext {
+    elements: AnyElement[];
+    index: number;
+    parent?: Group;
 }

@@ -1,4 +1,10 @@
-<ng-container *ngFor="let element of editor.selectedSVG?.elements">
+<ng-template #renderElements let-elements>
+<ng-container *ngFor="let element of elements">
+    <ng-container *ngIf="element.visible && asGroup(element) as group">
+        <svg:g [id]="group.id">
+            <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: group.elements }"></ng-container>
+        </svg:g>
+    </ng-container>
     <ng-container *ngIf="element.visible && asPath(element) as path">
         <svg:path
         [id]="path.id"
@@ -66,6 +72,9 @@
         />
     </ng-container>
 </ng-container>
+</ng-template>
+
+<ng-container *ngTemplateOutlet="renderElements; context: { $implicit: editor.selectedSVG?.elements }"></ng-container>
 
 <ng-container *ngFor="let element of editor.selectedSVG?.tempElements">
     <ng-container *ngIf="editor.elementIsPath(element)">

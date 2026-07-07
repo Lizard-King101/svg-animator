@@ -35,16 +35,19 @@ export class ColorAttribute implements AfterViewInit, ControlValueAccessor {
     updateHEX() {
         this.rgb = this.color.rgb;
         this.hsl = this.color.hsl;
+        this.emitChange();
     }
 
     updateHSL() {
         this.color.hsl = this.hsl;
         this.rgb = this.color.rgb;
+        this.emitChange();
     }
 
     updateRGB() {
         this.color.rgb = this.rgb;
         this.hsl = this.color.hsl;
+        this.emitChange();
     }
 
     ngAfterViewInit() {}
@@ -52,14 +55,20 @@ export class ColorAttribute implements AfterViewInit, ControlValueAccessor {
     onChange(_value: Color) {};
     onTouch(): void {}
 
-    writeValue(_value: Color) {
+    private emitChange() {
+        this.onTouch();
+        this.onChange(this.color);
+    }
+
+    writeValue(_value: Color | null) {
         if (_value) {
             this.color = _value;
             this.rgb = this.color.rgb;
             this.hsl = this.color.hsl;
-            console.log('Write Value', _value);
         } else {
-            this.onChange(this.color);
+            this.color = new Color();
+            this.rgb = this.color.rgb;
+            this.hsl = this.color.hsl;
         }
     }
 

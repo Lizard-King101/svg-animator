@@ -32,9 +32,7 @@ export class RangeAttribute implements AfterViewInit, ControlValueAccessor {
         }
     }
 
-    ngAfterViewInit() {
-        console.log(this.value, this.min, this.max);
-    }
+    ngAfterViewInit() {}
 
     onChange(_value: number) {};
     onTouch(): void {}
@@ -48,7 +46,7 @@ export class RangeAttribute implements AfterViewInit, ControlValueAccessor {
     }
 
     get value() {
-        if (this.val) {
+        if (this.val != undefined) {
             return this.val;
         } else {
             return 0;
@@ -56,10 +54,7 @@ export class RangeAttribute implements AfterViewInit, ControlValueAccessor {
     }
 
     writeValue(_value?: number) {
-        if (_value) {
-            this.value = _value;
-            console.log('Range ', _value);
-        }
+        this.val = _value ?? 0;
     }
 
     registerOnChange(fn: (_v: number) => {}) {

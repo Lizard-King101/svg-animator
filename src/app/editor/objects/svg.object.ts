@@ -78,6 +78,7 @@ export class SVG {
             if (es.type === 'path')  result.push(Path.fromSave(es, editor));
             else if (es.type === 'shape') result.push(Shape.fromSave(es, editor));
             else if (es.type === 'text')  result.push(TextElement.fromSave(es, editor));
+            else if (es.type === 'group') result.push(Group.fromSave(es, editor));
         }
         return result;
     }

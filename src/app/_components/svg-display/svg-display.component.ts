@@ -1,5 +1,5 @@
 import { AfterViewInit, Component, ElementRef, HostBinding } from "@angular/core";
-import { NgFor, NgIf } from "@angular/common";
+import { NgFor, NgIf, NgTemplateOutlet } from "@angular/common";
 import { EditorService } from "src/app/_services/editor.service";
 import { Group } from "src/app/editor/objects/elements/group.object";
 import { Line } from "src/app/editor/objects/line.object";
@@ -11,7 +11,7 @@ import { TextElement } from "src/app/editor/objects/elements/text.object";
 @Component({
     standalone: true,
     selector: '[display]',
-    imports: [NgFor, NgIf],
+    imports: [NgFor, NgIf, NgTemplateOutlet],
     templateUrl: 'svg-display.component.html',
     styles: ':host { user-select: none; }'
 })
@@ -41,6 +41,10 @@ export class SVGDisplay implements AfterViewInit {
 
     asText(element: any): TextElement | null {
         return element instanceof TextElement ? element : null;
+    }
+
+    asGroup(element: any): Group | null {
+        return element instanceof Group ? element : null;
     }
 
     textTspans(text: TextElement): Array<{ text: string; dy: number }> {
