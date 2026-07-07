@@ -50,6 +50,7 @@
         [attr.font-size]="text.settings.font_size"
         [attr.font-family]="text.settings.font_family"
         [attr.font-weight]="text.settings.font_weight"
+        [attr.text-anchor]="text.textAnchor"
         [attr.fill]="text.settings.color?.hex ?? '#000000'"
         dominant-baseline="hanging">
             <svg:tspan
@@ -59,7 +60,7 @@
         </svg:text>
         <svg:rect
         *ngIf="editor.selectedElement == text || editor.activeElement == text"
-        [attr.x]="text.x - 2"
+        [attr.x]="text.boundsX - 2"
         [attr.y]="text.y - 2"
         [attr.width]="text.width + 4"
         [attr.height]="text.height + 4"

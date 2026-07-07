@@ -21,6 +21,8 @@ export interface TextSave {
     };
 }
 
+type TextAnchor = 'start' | 'middle' | 'end';
+
 const TextAttributes = [
     {
         label: 'Content',
@@ -103,6 +105,22 @@ export class TextElement {
     get x() { return this.position.x; }
     get y() { return this.position.y; }
 
+    get textAnchor(): TextAnchor {
+        return TextElement.normalizeTextAnchor(this.settings.text_align);
+    }
+
+    get boundsX(): number {
+        if(this.textAnchor == 'middle') {
+            return this.x - (this.width / 2);
+        }
+
+        if(this.textAnchor == 'end') {
+            return this.x - this.width;
+        }
+
+        return this.x;
+    }
+
     get fontString(): string {
         return `${this.settings.font_weight} ${this.settings.font_size}px ${this.settings.font_family}`;
     }
@@ -146,7 +164,7 @@ export class TextElement {
                 font_family: this.settings.font_family ?? "'Plus Jakarta Sans'",
                 font_size: this.settings.font_size,
                 font_weight: this.settings.font_weight ?? '400',
-                text_align: this.settings.text_align ?? 'left',
+                text_align: this.textAnchor,
                 color: this.settings.color?.hex ?? null,
             },
         };
@@ -162,10 +180,23 @@ export class TextElement {
             content: s.settings.content,
             font_family: s.settings.font_family as any,
             font_size: s.settings.font_size,
-            text_align: s.settings.text_align as any,
+            text_align: TextElement.normalizeTextAnchor(s.settings.text_align),
             font_weight: s.settings.font_weight as any,
             color: s.settings.color ? new Color(s.settings.color) : null,
         };
         return t;
+    }
+
+    private static normalizeTextAnchor(value?: string | null): TextAnchor {
+        switch(value) {
+            case 'center':
+            case 'middle':
+                return 'middle';
+            case 'right':
+            case 'end':
+                return 'end';
+            default:
+                return 'start';
+        }
     }
 }
