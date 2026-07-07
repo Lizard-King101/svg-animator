@@ -2,6 +2,7 @@ import { EditorService } from "src/app/_services/editor.service";
 import { ElementAttribute } from "./element";
 import { Path, PathSave } from "./path.object";
 import { Shape, ShapeSave } from "./shape.object";
+import { TextElement, TextSave } from "./text.object";
 import { Point } from "../point.object";
 
 export interface GroupSave {
@@ -10,8 +11,11 @@ export interface GroupSave {
     name: string;
     visible: boolean;
     locked: boolean;
-    elements: (PathSave | ShapeSave | GroupSave)[];
+    elements: GroupElementSave[];
 }
+
+export type GroupElementSave = PathSave | ShapeSave | TextSave | GroupSave;
+export type GroupElement = Path | Shape | TextElement | Group;
 
 const GroupAttributes: Array<ElementAttribute> = [
 
@@ -22,7 +26,7 @@ export class Group {
     name: string;
     visible: boolean = true;
     locked: boolean = false;
-    elements: (Path | Shape | Group)[] = [];
+    elements: GroupElement[] = [];
 
     attributes: ElementAttribute[] = GroupAttributes;
 
@@ -50,7 +54,22 @@ export class Group {
             name: this.name,
             visible: this.visible,
             locked: this.locked,
-            elements: this.elements.map((e) => e.save()).filter((s): s is PathSave | ShapeSave | GroupSave => s !== undefined),
+            elements: this.elements.map((e) => e.save()) as GroupElementSave[],
         };
+    }
+
+    static fromSave(s: GroupSave, editor: EditorService): Group {
+        const group = new Group(editor);
+        (group as any).id = s.id;
+        group.name = s.name;
+        group.visible = s.visible;
+        group.locked = s.locked;
+        group.elements = s.elements.map((element) => {
+            if(element.type === 'path') return Path.fromSave(element, editor);
+            if(element.type === 'shape') return Shape.fromSave(element, editor);
+            if(element.type === 'text') return TextElement.fromSave(element, editor);
+            return Group.fromSave(element, editor);
+        });
+        return group;
     }
 }
