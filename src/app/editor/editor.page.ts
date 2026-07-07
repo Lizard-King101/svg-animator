@@ -19,7 +19,8 @@ import { Path } from "./objects/elements/path.object";
 import { Point } from "./objects/point.object";
 import { Shape } from "./objects/elements/shape.object";
 import { TextElement } from "./objects/elements/text.object";
-import { AnyElement, SVG } from "./objects/svg.object";
+import { AnyElement } from "./objects/svg.object";
+import { buildSVGMarkup } from "./svg-markup";
 
 @Component({
     standalone: true,
@@ -284,89 +285,12 @@ export class EditorPage implements AfterViewInit {
         return this.newWidth === r.width && this.newHeight === r.height;
     }
 
-    // ── SVG rendering ────────────────────────────────────────────────
-
-    private buildSVGMarkup(svg: SVG): string {
-        const attr = (name: string, value: any) =>
-            value != null ? ` ${name}="${value}"` : '';
-
-        const lines: string[] = [
-            `<svg xmlns="http://www.w3.org/2000/svg" width="${svg.width}" height="${svg.height}" viewBox="0 0 ${svg.width} ${svg.height}">`
-        ];
-
-        for(const element of svg.elements) {
-            if(!element.visible) continue;
-
-            if(element instanceof Path) {
-                const s = element.settings;
-                lines.push(
-                    `  <path` +
-                    attr('d', element.raw) +
-                    attr('fill', s.fill_enabled && s.fill ? s.fill.hex : 'none') +
-                    attr('stroke', s.stroke?.hex ?? null) +
-                    attr('stroke-width', s.stroke_width ?? null) +
-                    attr('stroke-linecap', s.line_cap ?? null) +
-                    attr('stroke-linejoin', s.line_join ?? null) +
-                    `/>`
-                );
-            } else if(element instanceof TextElement) {
-                const s = element.settings;
-                const tspans = element.lines.map((line, i) =>
-                    `    <tspan${i === 0 ? '' : ` x="${element.x}" dy="${element.lineHeight}"`}>${line}</tspan>`
-                ).join('\n');
-                lines.push(
-                    `  <text` +
-                    attr('x', element.x) +
-                    attr('y', element.y) +
-                    attr('font-size', s.font_size) +
-                    attr('font-family', s.font_family) +
-                    attr('font-weight', s.font_weight) +
-                    attr('fill', s.color?.hex ?? '#000000') +
-                    ` dominant-baseline="hanging">` +
-                    `\n${tspans}\n  </text>`
-                );
-            } else if(element instanceof Shape) {
-                const s = element.settings;
-                const fillAttr = attr('fill', s.fill?.hex ?? 'none');
-                const strokeAttr = attr('stroke', s.stroke?.hex ?? null);
-                const swAttr = attr('stroke-width', s.stroke_width ?? null);
-                if(element.type === 'rectangle') {
-                    const cr = s.corner_radius || null;
-                    lines.push(
-                        `  <rect` +
-                        attr('x', element.x) +
-                        attr('y', element.y) +
-                        attr('width', element.width) +
-                        attr('height', element.height) +
-                        attr('rx', cr) +
-                        attr('ry', cr) +
-                        fillAttr + strokeAttr + swAttr +
-                        `/>`
-                    );
-                } else {
-                    lines.push(
-                        `  <ellipse` +
-                        attr('cx', element.centerX) +
-                        attr('cy', element.centerY) +
-                        attr('rx', element.radiusX) +
-                        attr('ry', element.radiusY) +
-                        fillAttr + strokeAttr + swAttr +
-                        `/>`
-                    );
-                }
-            }
-        }
-
-        lines.push('</svg>');
-        return lines.join('\n');
-    }
-
     // ── Auto-save ────────────────────────────────────────────────────
 
     autoSave() {
         const svg = this.editor.selectedSVG;
         if(!svg) return;
-        const thumbnail = this.buildSVGMarkup(svg);
+        const thumbnail = buildSVGMarkup(svg);
         this.projectService.upsert(svg.save(), thumbnail);
     }
 
@@ -380,7 +304,7 @@ export class EditorPage implements AfterViewInit {
     exportSVG() {
         const svg = this.editor.selectedSVG;
         if(!svg) return;
-        const markup = this.buildSVGMarkup(svg);
+        const markup = buildSVGMarkup(svg);
         const blob = new Blob([markup], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
