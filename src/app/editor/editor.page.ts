@@ -43,6 +43,8 @@ export class EditorPage implements AfterViewInit {
 
     movingView: boolean = false;
     moveStart: Point;
+    private attributeSaveTimer?: ReturnType<typeof setTimeout>;
+    private saveRevision = 0;
     draggingLayer?: AnyElement;
     dragTargetLayer?: AnyElement;
     dragTargetPosition?: 'before' | 'after' | 'inside';
@@ -145,7 +147,9 @@ export class EditorPage implements AfterViewInit {
             }
         }
 
+        const beforeState = this.currentElementsState();
         this.editor.keyPressed(event.key);
+        this.snapshotAndSaveIfChanged(beforeState);
     }
     @HostListener('document:keyup', ['$event']) handleKeyUp(event: KeyboardEvent) {
         this.editor.keyReleased(event.key);
@@ -401,6 +405,41 @@ export class EditorPage implements AfterViewInit {
     private snapshotAndSave() {
         this.history.snapshot(this.editor);
         this.autoSave();
+        this.saveRevision++;
+    }
+
+    private currentElementsState(): string | undefined {
+        const svg = this.editor.selectedSVG;
+        return svg ? JSON.stringify(svg.save().elements) : undefined;
+    }
+
+    private snapshotAndSaveIfChanged(beforeState?: string, beforeRevision = this.saveRevision) {
+        if(this.saveRevision !== beforeRevision) {
+            return;
+        }
+
+        const afterState = this.currentElementsState();
+        if(beforeState !== afterState) {
+            this.snapshotAndSave();
+        }
+    }
+
+    scheduleAttributeSnapshot() {
+        if(this.attributeSaveTimer) {
+            clearTimeout(this.attributeSaveTimer);
+        }
+
+        this.attributeSaveTimer = setTimeout(() => {
+            this.attributeSaveTimer = undefined;
+            this.snapshotAndSave();
+        }, 250);
+    }
+
+    runContextMenuItem(item: EditorContextMenuItem) {
+        const beforeRevision = this.saveRevision;
+        const beforeState = this.currentElementsState();
+        this.editor.runContextMenuItem(item);
+        this.snapshotAndSaveIfChanged(beforeState, beforeRevision);
     }
 
     // ── Export ───────────────────────────────────────────────────────
@@ -763,6 +802,10 @@ export class EditorPage implements AfterViewInit {
             return;
         }
 
+        elements.splice(index, 1);
+        elements.splice(index - 1, 0, element);
+        this.setElementOrder(elements);
+        this.snapshotAndSave();
         context.elements.splice(context.index, 1);
         context.elements.splice(context.index - 1, 0, element);
     }
@@ -802,6 +845,9 @@ export class EditorPage implements AfterViewInit {
             return;
         }
 
+        elements.splice(index, 1);
+        elements.splice(index + 1, 0, element);
+        this.setElementOrder(elements);
         context.elements.splice(context.index, 1, ...group.elements);
         this.selectedLayers = [...group.elements];
         this.lastSelectedLayer = this.selectedLayers[this.selectedLayers.length - 1];
@@ -904,6 +950,7 @@ export class EditorPage implements AfterViewInit {
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
         }
+        this.snapshotAndSave();
     }
 
     toggleLayerLock(event: MouseEvent, element: AnyElement) {
@@ -913,6 +960,7 @@ export class EditorPage implements AfterViewInit {
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
         }
+        this.snapshotAndSave();
     }
 
     layerIcon(element: AnyElement) {
