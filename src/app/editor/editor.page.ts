@@ -802,9 +802,9 @@ export class EditorPage implements AfterViewInit {
             return;
         }
 
-        elements.splice(index, 1);
-        elements.splice(index - 1, 0, element);
-        this.setElementOrder(elements);
+        // elements.splice(index, 1);
+        // elements.splice(index - 1, 0, element);
+        // this.setElementOrder(elements);
         this.snapshotAndSave();
         context.elements.splice(context.index, 1);
         context.elements.splice(context.index - 1, 0, element);
@@ -845,9 +845,9 @@ export class EditorPage implements AfterViewInit {
             return;
         }
 
-        elements.splice(index, 1);
-        elements.splice(index + 1, 0, element);
-        this.setElementOrder(elements);
+        // elements.splice(index, 1);
+        // elements.splice(index + 1, 0, element);
+        // this.setElementOrder(elements);
         context.elements.splice(context.index, 1, ...group.elements);
         this.selectedLayers = [...group.elements];
         this.lastSelectedLayer = this.selectedLayers[this.selectedLayers.length - 1];
