@@ -211,11 +211,11 @@ export class EditorService {
 
     findElement(id: string): AnyElement | false {
         if(this.selectedSVG) {
-            for(let element of this.selectedSVG.elements) {
-                if(element.id == id) {
-                    return element;
-                }
+            if(this.selectedElement instanceof Group && this.groupContainsElement(this.selectedElement, id)) {
+                return this.selectedElement;
             }
+            const foundElement = this.findElementInList(this.selectedSVG.elements, id);
+            if(foundElement) return foundElement;
             for(let element of this.selectedSVG.tempElements) {
                 if(element.id == id) {
                     return element;
@@ -229,17 +229,56 @@ export class EditorService {
 
     removeElement(id: string) {
         if(this.selectedSVG) {
-            for(let i = 0; i < this.selectedSVG.elements.length; i++) {
-                if(this.selectedSVG.elements[i].id == id) {
-                    this.selectedSVG.elements.splice(i, 1);
-                }
-            }
+            this.removeElementFromList(this.selectedSVG.elements, id);
             for(let i = 0; i < this.selectedSVG.tempElements.length; i++) {
                 if(this.selectedSVG.tempElements[i].id == id) {
                     this.selectedSVG.tempElements.splice(i, 1);
                 }
             }
         }
+    }
+
+    private findElementInList(elements: AnyElement[], id: string): AnyElement | undefined {
+        for(const element of elements) {
+            if(element.id == id) {
+                return element;
+            }
+
+            if(element instanceof Group && element.visible && !element.locked) {
+                const found = this.findElementInList(element.elements, id);
+                if(found) {
+                    return found;
+                }
+            }
+        }
+
+        return undefined;
+    }
+
+    private groupContainsElement(group: Group, id: string): boolean {
+        return group.elements.some((element) => {
+            if(element.id == id) {
+                return true;
+            }
+
+            return element instanceof Group && this.groupContainsElement(element, id);
+        });
+    }
+
+    private removeElementFromList(elements: AnyElement[], id: string): boolean {
+        for(let i = 0; i < elements.length; i++) {
+            const element = elements[i];
+            if(element.id == id) {
+                elements.splice(i, 1);
+                return true;
+            }
+
+            if(element instanceof Group && this.removeElementFromList(element.elements, id)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     openContextMenu(x: number, y: number, items: EditorContextMenuItem[]) {

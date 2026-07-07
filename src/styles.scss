@@ -104,9 +104,9 @@ input[type=range].slider {
 ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-.editor-root .view-port .context-menu {
-  position: absolute;
-  z-index: 30;
+.editor-root .context-menu {
+  position: fixed;
+  z-index: 1000;
   min-width: 172px;
   display: flex;
   flex-direction: column;
@@ -182,6 +182,7 @@ input[type=range].slider {
   padding: 0 10px 0 12px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
+  user-select: none;
   transition: background 0.12s, color 0.12s;
 }
 
@@ -198,7 +199,8 @@ input[type=range].slider {
 }
 
 .editor-root .attribute-panel .layer-row.drop-before,
-.editor-root .attribute-panel .layer-row.drop-after {
+.editor-root .attribute-panel .layer-row.drop-after,
+.editor-root .attribute-panel .layer-row.drop-inside {
   position: relative;
 }
 
@@ -221,6 +223,12 @@ input[type=range].slider {
   bottom: -1px;
 }
 
+.editor-root .attribute-panel .layer-row.drop-inside {
+  background: var(--accent-dim);
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .editor-root .attribute-panel .layer-row.hidden .layer-name,
 .editor-root .attribute-panel .layer-row.hidden .layer-meta {
   color: var(--text-muted);
@@ -236,6 +244,54 @@ input[type=range].slider {
   gap: 10px;
   min-width: 0;
   color: var(--text-secondary);
+}
+
+.editor-root .attribute-panel .layer-expander,
+.editor-root .attribute-panel .layer-expander-placeholder {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 22px;
+}
+
+.editor-root .attribute-panel .layer-drag-handle {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.editor-root .attribute-panel .layer-drag-handle:hover {
+  color: var(--text-secondary);
+}
+
+.editor-root .attribute-panel .layer-row.dragging .layer-drag-handle {
+  cursor: grabbing;
+  color: var(--accent);
+}
+
+.editor-root .attribute-panel .layer-expander {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.editor-root .attribute-panel .layer-expander:hover {
+  color: var(--accent);
 }
 
 .editor-root .attribute-panel .layer-name {
@@ -266,6 +322,8 @@ input[type=range].slider {
 
 .editor-root .attribute-panel .layer-actions {
   gap: 4px;
+  position: relative;
+  z-index: 1;
 }
 
 .editor-root .attribute-panel .layer-toggle {
@@ -280,6 +338,8 @@ input[type=range].slider {
   border-radius: 4px;
   color: var(--text-secondary);
   cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
   transition: background 0.12s, color 0.12s;
 }
 

@@ -468,7 +468,7 @@ export class SelectTool extends Tool {
             return;
         }
 
-        const menuPosition = this._editor.toViewportPoint(event.clientX, event.clientY);
+        const menuPosition = new Point(event.clientX, event.clientY);
         const canvasPoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
 
         const overlayPoint = this.findOverlayPoint(target);

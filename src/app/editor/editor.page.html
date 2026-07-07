@@ -1,4 +1,4 @@
-<div class="editor-root">
+<div class="editor-root" (click)="editor.closeContextMenu()">
 
   <!-- ── Top bar ── -->
   <div class="header">
@@ -67,23 +67,6 @@
           <span>Click <strong>New</strong> to start drawing</span>
         </div>
       </div>
-      <div class="context-menu" *ngIf="editor.contextMenu"
-           (mousedown)="$event.stopPropagation()"
-           (click)="$event.stopPropagation()"
-           (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
-           [style.left.px]="editor.contextMenu.x"
-           [style.top.px]="editor.contextMenu.y">
-        <button class="context-menu-item"
-                *ngFor="let item of editor.contextMenu.items"
-                (click)="$event.stopPropagation(); editor.runContextMenuItem(item)">
-          <span>{{ item.label }}</span>
-          <span class="context-menu-shortcut" *ngIf="item.shortcut">{{ item.shortcut }}</span>
-        </button>
-        <div class="context-menu-info" *ngIf="editor.contextMenu.infoLines?.length">
-          <div class="context-menu-info-title" *ngIf="editor.contextMenu.infoTitle">{{ editor.contextMenu.infoTitle }}</div>
-          <div class="context-menu-info-line" *ngFor="let line of editor.contextMenu.infoLines">{{ line }}</div>
-        </div>
-      </div>
     </div>
 
     <!-- Right attribute panel -->
@@ -120,32 +103,46 @@
       </div>
 
       <div class="panel-header">Layers</div>
-      <div class="layer-list" *ngIf="layers.length; else emptyLayers">
+      <div class="layer-list" *ngIf="layerRows.length; else emptyLayers">
         <div class="layer-row"
-             *ngFor="let layer of layers"
-             draggable="true"
+             *ngFor="let row of layerRows; trackBy: trackLayerRow"
+             [attr.data-layer-id]="row.element.id"
+             [style.padding-left.px]="12 + (row.depth * 18)"
              [ngClass]="{
-               'selected': editor.selectedElement == layer,
-               'hidden': !layer.visible,
-               'locked': layer.locked,
-               'dragging': draggingLayer == layer,
-               'drop-before': dragTargetLayer == layer && dragTargetPosition == 'before',
-               'drop-after': dragTargetLayer == layer && dragTargetPosition == 'after'
+               'selected': isLayerSelected(row.element),
+               'hidden': !row.element.visible,
+               'locked': row.element.locked,
+               'dragging': draggingLayer == row.element,
+               'drop-before': dragTargetLayer == row.element && dragTargetPosition == 'before',
+               'drop-after': dragTargetLayer == row.element && dragTargetPosition == 'after',
+               'drop-inside': dragTargetLayer == row.element && dragTargetPosition == 'inside'
              }"
-             (click)="selectLayer(layer)"
-             (dblclick)="beginLayerRename($event, layer)"
-             (contextmenu)="openLayerContextMenu($event, layer)"
-             (dragstart)="startLayerDrag($event, layer)"
-             (dragover)="updateLayerDrop($event, layer)"
-             (drop)="dropLayer($event, layer)"
-             (dragend)="endLayerDrag()"
-             (dragleave)="clearLayerDrop(layer)">
+             (click)="selectLayer(row.element, $event)"
+             (dblclick)="beginLayerRename($event, row.element)"
+             (contextmenu)="openLayerContextMenu($event, row.element)"
+             (pointermove)="updateLayerPointerDrag($event)"
+             (pointerup)="finishLayerPointerDrag($event)"
+             (pointercancel)="cancelLayerPointerDrag($event)">
           <span class="layer-meta">
-            <fa-icon [icon]="layerIcon(layer)"></fa-icon>
-            <span class="layer-name" *ngIf="renamingLayer != layer">{{ layer.name }}</span>
+            <button class="layer-drag-handle"
+                    (click)="$event.stopPropagation()"
+                    (dblclick)="$event.stopPropagation()"
+                    (pointerdown)="beginLayerPointerDrag($event, row.element)"
+                    title="Drag layer">
+              <fa-icon icon="grip-vertical"></fa-icon>
+            </button>
+            <button class="layer-expander"
+                    *ngIf="asGroup(row.element) as group"
+                    (click)="toggleGroupCollapsed($event, group)"
+                    [title]="groupIsCollapsed(group) ? 'Expand group' : 'Collapse group'">
+              <fa-icon [icon]="groupIsCollapsed(group) ? 'angle-right' : 'angle-down'"></fa-icon>
+            </button>
+            <span class="layer-expander-placeholder" *ngIf="!asGroup(row.element)"></span>
+            <fa-icon [icon]="layerIcon(row.element)"></fa-icon>
+            <span class="layer-name" *ngIf="renamingLayer != row.element">{{ row.element.name }}</span>
             <input class="layer-name-input"
-                   *ngIf="renamingLayer == layer"
-                   [(ngModel)]="layer.name"
+                   *ngIf="renamingLayer == row.element"
+                   [(ngModel)]="row.element.name"
                    (click)="$event.stopPropagation()"
                    (keydown.enter)="finishLayerRename()"
                    (keydown.escape)="finishLayerRename()"
@@ -155,17 +152,23 @@
           </span>
           <span class="layer-actions">
             <button class="layer-toggle"
-                    (click)="toggleLayerVisibility($event, layer)"
-                    [title]="layer.visible ? 'Hide layer' : 'Show layer'">
-              <fa-icon [icon]="layer.visible ? 'eye' : 'eye-slash'"></fa-icon>
+                    (pointerdown)="$event.stopPropagation()"
+                    (pointerup)="$event.stopPropagation()"
+                    (click)="toggleLayerVisibility($event, row.element)"
+                    [title]="row.element.visible ? 'Hide layer' : 'Show layer'">
+              <fa-icon [icon]="row.element.visible ? 'eye' : 'eye-slash'"></fa-icon>
             </button>
             <button class="layer-toggle"
-                    (click)="toggleLayerLock($event, layer)"
-                    [title]="layer.locked ? 'Unlock layer' : 'Lock layer'">
-              <fa-icon [icon]="layer.locked ? 'lock' : 'lock-open'"></fa-icon>
+                    (pointerdown)="$event.stopPropagation()"
+                    (pointerup)="$event.stopPropagation()"
+                    (click)="toggleLayerLock($event, row.element)"
+                    [title]="row.element.locked ? 'Unlock layer' : 'Lock layer'">
+              <fa-icon [icon]="row.element.locked ? 'lock' : 'lock-open'"></fa-icon>
             </button>
             <button class="layer-toggle layer-delete"
-                    (click)="$event.stopPropagation(); deleteLayer(layer)"
+                    (pointerdown)="$event.stopPropagation()"
+                    (pointerup)="$event.stopPropagation()"
+                    (click)="$event.stopPropagation(); deleteLayer(row.element)"
                     title="Delete layer">
               <fa-icon icon="trash"></fa-icon>
             </button>
@@ -232,6 +235,24 @@
           Create
         </button>
       </div>
+    </div>
+  </div>
+
+  <div class="context-menu" *ngIf="editor.contextMenu"
+       (mousedown)="$event.stopPropagation()"
+       (click)="$event.stopPropagation()"
+       (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
+       [style.left.px]="editor.contextMenu.x"
+       [style.top.px]="editor.contextMenu.y">
+    <button class="context-menu-item"
+            *ngFor="let item of editor.contextMenu.items"
+            (click)="$event.stopPropagation(); editor.runContextMenuItem(item)">
+      <span>{{ item.label }}</span>
+      <span class="context-menu-shortcut" *ngIf="item.shortcut">{{ item.shortcut }}</span>
+    </button>
+    <div class="context-menu-info" *ngIf="editor.contextMenu.infoLines?.length">
+      <div class="context-menu-info-title" *ngIf="editor.contextMenu.infoTitle">{{ editor.contextMenu.infoTitle }}</div>
+      <div class="context-menu-info-line" *ngFor="let line of editor.contextMenu.infoLines">{{ line }}</div>
     </div>
   </div>
 
