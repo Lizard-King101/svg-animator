@@ -75,7 +75,7 @@
            [style.top.px]="editor.contextMenu.y">
         <button class="context-menu-item"
                 *ngFor="let item of editor.contextMenu.items"
-                (click)="$event.stopPropagation(); editor.runContextMenuItem(item)">
+                (click)="$event.stopPropagation(); runContextMenuItem(item)">
           <span>{{ item.label }}</span>
           <span class="context-menu-shortcut" *ngIf="item.shortcut">{{ item.shortcut }}</span>
         </button>
@@ -95,19 +95,24 @@
             <div class="attr-row">
               <attr-text   *ngIf="attr.input == 'text'"
                            [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
+                           (ngModelChange)="scheduleAttributeSnapshot()"
                            [label]="attr.label"></attr-text>
               <attr-bool   *ngIf="attr.input == 'bool'"
                            [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
+                           (ngModelChange)="scheduleAttributeSnapshot()"
                            [label]="attr.label"></attr-bool>
               <color       *ngIf="attr.input == 'color'"
                            [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
+                           (ngModelChange)="scheduleAttributeSnapshot()"
                            [label]="attr.label"></color>
               <range       *ngIf="attr.input == 'range'"
                            [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
+                           (ngModelChange)="scheduleAttributeSnapshot()"
                            [min]="$any(attr).min" [max]="$any(attr).max"
                            [label]="attr.label"></range>
               <attr-select *ngIf="attr.input == 'select'"
                            [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
+                           (ngModelChange)="scheduleAttributeSnapshot()"
                            [options]="$any(attr).options"
                            [label]="attr.label"></attr-select>
             </div>

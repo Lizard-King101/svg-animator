@@ -30,7 +30,7 @@ export class SelectAttribut implements AfterViewInit, ControlValueAccessor {
     onTouch(): void {}
 
     set value(val: any) {
-        if (val != undefined && this.val !== val) {
+        if (this.val !== val) {
             this.val = val;
             this.onTouch();
             this.onChange(this.val);
@@ -38,18 +38,11 @@ export class SelectAttribut implements AfterViewInit, ControlValueAccessor {
     }
 
     get value() {
-        if (this.val) {
-            return this.val;
-        } else {
-            return 0;
-        }
+        return this.val;
     }
 
     writeValue(_value?: any) {
-        if (_value) {
-            this.value = _value;
-            console.log('Select ', _value);
-        }
+        this.val = _value ?? null;
     }
 
     registerOnChange(fn: (_v: any) => {}) {

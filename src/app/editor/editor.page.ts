@@ -3,7 +3,7 @@ import { NgClass, NgFor, NgIf } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute } from "@angular/router";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
-import { EditorService } from "../_services/editor.service";
+import { EditorContextMenuItem, EditorService } from "../_services/editor.service";
 import { HistoryService } from "../_services/history.service";
 import { ProjectService } from "../_services/project.service";
 import { SVGDisplay } from "../_components/svg-display/svg-display.component";
@@ -43,6 +43,8 @@ export class EditorPage implements AfterViewInit {
 
     movingView: boolean = false;
     moveStart: Point;
+    private attributeSaveTimer?: ReturnType<typeof setTimeout>;
+    private saveRevision = 0;
     draggingLayer?: AnyElement;
     dragTargetLayer?: AnyElement;
     dragTargetPosition?: 'before' | 'after';
@@ -127,7 +129,9 @@ export class EditorPage implements AfterViewInit {
             }
         }
 
+        const beforeState = this.currentElementsState();
         this.editor.keyPressed(event.key);
+        this.snapshotAndSaveIfChanged(beforeState);
     }
     @HostListener('document:keyup', ['$event']) handleKeyUp(event: KeyboardEvent) {
         this.editor.keyReleased(event.key);
@@ -373,6 +377,41 @@ export class EditorPage implements AfterViewInit {
     private snapshotAndSave() {
         this.history.snapshot(this.editor);
         this.autoSave();
+        this.saveRevision++;
+    }
+
+    private currentElementsState(): string | undefined {
+        const svg = this.editor.selectedSVG;
+        return svg ? JSON.stringify(svg.save().elements) : undefined;
+    }
+
+    private snapshotAndSaveIfChanged(beforeState?: string, beforeRevision = this.saveRevision) {
+        if(this.saveRevision !== beforeRevision) {
+            return;
+        }
+
+        const afterState = this.currentElementsState();
+        if(beforeState !== afterState) {
+            this.snapshotAndSave();
+        }
+    }
+
+    scheduleAttributeSnapshot() {
+        if(this.attributeSaveTimer) {
+            clearTimeout(this.attributeSaveTimer);
+        }
+
+        this.attributeSaveTimer = setTimeout(() => {
+            this.attributeSaveTimer = undefined;
+            this.snapshotAndSave();
+        }, 250);
+    }
+
+    runContextMenuItem(item: EditorContextMenuItem) {
+        const beforeRevision = this.saveRevision;
+        const beforeState = this.currentElementsState();
+        this.editor.runContextMenuItem(item);
+        this.snapshotAndSaveIfChanged(beforeState, beforeRevision);
     }
 
     // ── Export ───────────────────────────────────────────────────────
@@ -549,6 +588,7 @@ export class EditorPage implements AfterViewInit {
         elements.splice(index, 1);
         elements.splice(index - 1, 0, element);
         this.setElementOrder(elements);
+        this.snapshotAndSave();
     }
 
     moveLayerForward(element: AnyElement) {
@@ -565,6 +605,7 @@ export class EditorPage implements AfterViewInit {
         elements.splice(index, 1);
         elements.splice(index + 1, 0, element);
         this.setElementOrder(elements);
+        this.snapshotAndSave();
     }
 
     openLayerContextMenu(event: MouseEvent, element: AnyElement) {
@@ -627,6 +668,7 @@ export class EditorPage implements AfterViewInit {
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
         }
+        this.snapshotAndSave();
     }
 
     toggleLayerLock(event: MouseEvent, element: AnyElement) {
@@ -636,6 +678,7 @@ export class EditorPage implements AfterViewInit {
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
         }
+        this.snapshotAndSave();
     }
 
     layerIcon(element: AnyElement) {
