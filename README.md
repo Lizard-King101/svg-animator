@@ -26,13 +26,15 @@ See [`FEATURES.md`](FEATURES.md) for full technical detail, object structures, a
 
 ## Roadmap toward animation
 
-The drawing layer is being built with animation in mind. The planned workflow:
+The drawing layer is being built with animation in mind. Transform support is now the foundation for keyframing and runtime playback.
 
-1. **Transforms** — element-level rotation, scale, skew (prerequisite for meaningful keyframing)
-2. **Keyframes** — each element can have keyed properties (position, opacity, stroke, fill…) at timestamps
-3. **Timeline panel** — scrubable playhead, per-element track rows, easing curves
-4. **Playback** — SVG SMIL or generated CSS animation for preview and export
-5. **Export formats** — animated SVG, CSS animation bundle, or frame-by-frame PNG sequence
+The animation MVP plan is tracked in [`ANIMATION_MVP.md`](ANIMATION_MVP.md). Current direction:
+
+1. **Animation model** - versioned tracks, keyframes, property targeting, interpolation
+2. **Animate mode** - timeline, playhead, auto-key, easing, preview playback
+3. **Runtime export** - lightweight JS runtime plus embedded or external animation JSON
+4. **Interaction hooks** - markers, trigger events, parent-page API
+5. **Advanced motion** - path points, proxy controls, rigs, and procedural modifiers after the core loop is stable
 
 ---
 
