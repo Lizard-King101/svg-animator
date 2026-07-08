@@ -417,6 +417,15 @@ export class EditorPage implements AfterViewInit {
         return this.selectedLayers.includes(element) || this.editor.selectedElement === element;
     }
 
+    clippingGroupFor(element: AnyElement): Group | undefined {
+        const context = this.layerContext(element);
+        return context?.parent?.clipElementId === element.id ? context.parent : undefined;
+    }
+
+    isClippingMask(element: AnyElement): boolean {
+        return !!this.clippingGroupFor(element);
+    }
+
     /** Bridge for template dynamic-key access on the now-typed settings object. */
     settingsOf(element: AnyElement | undefined): Record<string, any> {
         return (element?.settings ?? {}) as Record<string, any>;
@@ -529,7 +538,14 @@ export class EditorPage implements AfterViewInit {
         clone.name = `${group.name} Copy`;
         clone.visible = group.visible;
         clone.locked = false;
-        clone.elements = group.elements.map((element) => this.cloneElement(element));
+        const clonedElements = group.elements.map((element) => {
+            return {
+                original: element,
+                clone: this.cloneElement(element),
+            };
+        });
+        clone.elements = clonedElements.map((entry) => entry.clone);
+        clone.clipElementId = clonedElements.find((entry) => entry.original.id === group.clipElementId)?.clone.id ?? null;
         return clone;
     }
 
@@ -575,6 +591,10 @@ export class EditorPage implements AfterViewInit {
     private canGroupWithBelow(element: AnyElement): boolean {
         const context = this.layerContext(element);
         return !!context && context.index > 0;
+    }
+
+    private canClipWithLayerBelow(element: AnyElement): boolean {
+        return this.canGroupWithBelow(element);
     }
 
     private selectedLayerContexts(): LayerContext[] {
@@ -753,6 +773,23 @@ export class EditorPage implements AfterViewInit {
         this.snapshotAndSave();
     }
 
+    clipLayerWithBelow(element: AnyElement) {
+        const context = this.layerContext(element);
+        if(!context || context.index <= 0) {
+            return;
+        }
+
+        const below = context.elements[context.index - 1];
+        const group = new Group(this.editor);
+        group.name = `Clip ${below.name} With ${element.name}`;
+        element.visible = true;
+        group.elements = [below, element];
+        group.clipElementId = element.id;
+        context.elements.splice(context.index - 1, 2, group);
+        this.selectLayer(element);
+        this.snapshotAndSave();
+    }
+
     ungroupLayer(group: Group) {
         const context = this.layerContext(group);
         if(!context) {
@@ -770,6 +807,27 @@ export class EditorPage implements AfterViewInit {
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
         }
+        this.snapshotAndSave();
+    }
+
+    canUseAsClippingMask(element: AnyElement): boolean {
+        const context = this.layerContext(element);
+        return !!context?.parent && context.parent.clipElementId !== element.id;
+    }
+
+    useLayerAsClippingMask(element: AnyElement) {
+        const context = this.layerContext(element);
+        if(!context?.parent) {
+            return;
+        }
+
+        element.visible = true;
+        context.parent.clipElementId = element.id;
+        this.snapshotAndSave();
+    }
+
+    releaseClippingMask(group: Group) {
+        group.clipElementId = null;
         this.snapshotAndSave();
     }
 
@@ -816,10 +874,34 @@ export class EditorPage implements AfterViewInit {
                     this.groupLayerWithBelow(element);
                 }
             }] : []),
+            ...(this.canClipWithLayerBelow(element) ? [{
+                label: 'Clip With Layer Below',
+                action: () => {
+                    this.clipLayerWithBelow(element);
+                }
+            }] : []),
             ...(element instanceof Group ? [{
                 label: 'Ungroup',
                 action: () => {
                     this.ungroupLayer(element);
+                }
+            }] : []),
+            ...(this.canUseAsClippingMask(element) ? [{
+                label: 'Use As Clipping Mask',
+                action: () => {
+                    this.useLayerAsClippingMask(element);
+                }
+            }] : []),
+            ...(this.clippingGroupFor(element) ? [{
+                label: 'Release Clipping Mask',
+                action: () => {
+                    this.releaseClippingMask(this.clippingGroupFor(element)!);
+                }
+            }] : []),
+            ...(element instanceof Group && element.clipElement ? [{
+                label: 'Release Clipping Mask',
+                action: () => {
+                    this.releaseClippingMask(element);
                 }
             }] : []),
             {

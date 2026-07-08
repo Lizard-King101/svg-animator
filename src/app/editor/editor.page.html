@@ -135,6 +135,7 @@
                'hidden': !row.element.visible,
                'locked': row.element.locked,
                'dragging': draggingLayer == row.element,
+               'clipping-mask': isClippingMask(row.element),
                'drop-before': dragTargetLayer == row.element && dragTargetPosition == 'before',
                'drop-after': dragTargetLayer == row.element && dragTargetPosition == 'after',
                'drop-inside': dragTargetLayer == row.element && dragTargetPosition == 'inside'
@@ -162,6 +163,7 @@
             <span class="layer-expander-placeholder" *ngIf="!asGroup(row.element)"></span>
             <fa-icon [icon]="layerIcon(row.element)"></fa-icon>
             <span class="layer-name" *ngIf="renamingLayer != row.element">{{ row.element.name }}</span>
+            <span class="layer-badge" *ngIf="isClippingMask(row.element)">Clip</span>
             <input class="layer-name-input"
                    *ngIf="renamingLayer == row.element"
                    [(ngModel)]="row.element.name"
