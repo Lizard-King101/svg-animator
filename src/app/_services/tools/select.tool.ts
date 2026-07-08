@@ -2,6 +2,9 @@ import { IconName } from "@fortawesome/fontawesome-common-types";
 import { Line } from "src/app/editor/objects/line.object";
 import { Path } from "src/app/editor/objects/elements/path.object";
 import { Point } from "src/app/editor/objects/point.object";
+import { AnyElement } from "src/app/editor/objects/svg.object";
+import { combinedMatrixFor, localBounds, parentMatrixFor, pinAncestorTransformOrigins, pinTransformOrigin, resolvedOrigin } from "src/app/editor/objects/element-bounds";
+import { Bounds, TransformState, applyMatrix, invertMatrix, transformMatrix } from "src/app/editor/objects/transform.object";
 import { EditorService } from "../editor.service";
 import { Tool } from "./tool";
 
@@ -18,6 +21,7 @@ export class SelectTool extends Tool {
     movingLine?: Line;
     convertingIncomingLine?: Line;
     convertingOutgoingLine?: Line;
+    transformDrag?: TransformDrag;
 
     constructor(private _editor: EditorService) {
         super(_editor);
@@ -74,6 +78,193 @@ export class SelectTool extends Tool {
         return path.lines.find((line) => {
             return line.id == id;
         });
+    }
+
+    private cloneTransform(transform: TransformState): TransformState {
+        return {
+            translateX: transform.translateX,
+            translateY: transform.translateY,
+            scaleX: transform.scaleX,
+            scaleY: transform.scaleY,
+            rotation: transform.rotation,
+            originX: transform.originX,
+            originY: transform.originY,
+        };
+    }
+
+    private findTransformHandle(target: HTMLElement): string | undefined {
+        let current: HTMLElement | null = target;
+        while(current) {
+            const handle = current.dataset['transformHandle'];
+            if(handle) {
+                return handle;
+            }
+            current = current.parentElement;
+        }
+
+        return undefined;
+    }
+
+    private rootElements(): AnyElement[] {
+        return this._editor.selectedSVG?.elements ?? [];
+    }
+
+    private canvasToSelectedLocal(point: Point): Point {
+        if(!this._editor.selectedElement) {
+            return point;
+        }
+
+        const inverse = invertMatrix(combinedMatrixFor(this.rootElements(), this._editor.selectedElement));
+        const local = applyMatrix(inverse, point.x, point.y);
+        return new Point(local.x, local.y);
+    }
+
+    private canvasToParentLocal(element: AnyElement, point: Point): Point {
+        const inverse = invertMatrix(parentMatrixFor(this.rootElements(), element));
+        const local = applyMatrix(inverse, point.x, point.y);
+        return new Point(local.x, local.y);
+    }
+
+    private rotateVector(point: Point, degrees: number): Point {
+        const radians = degrees * Math.PI / 180;
+        const cos = Math.cos(radians);
+        const sin = Math.sin(radians);
+        return new Point(
+            (point.x * cos) - (point.y * sin),
+            (point.x * sin) + (point.y * cos),
+        );
+    }
+
+    private oppositeHandlePoint(bounds: Bounds, handle: string): Point {
+        const x = handle.includes('w')
+            ? bounds.x + bounds.width
+            : handle.includes('e')
+                ? bounds.x
+                : bounds.x + bounds.width / 2;
+        const y = handle.includes('n')
+            ? bounds.y + bounds.height
+            : handle.includes('s')
+                ? bounds.y
+                : bounds.y + bounds.height / 2;
+        return new Point(x, y);
+    }
+
+    private handlePoint(bounds: Bounds, handle: string): Point {
+        const x = handle.includes('w')
+            ? bounds.x
+            : handle.includes('e')
+                ? bounds.x + bounds.width
+                : bounds.x + bounds.width / 2;
+        const y = handle.includes('n')
+            ? bounds.y
+            : handle.includes('s')
+                ? bounds.y + bounds.height
+                : bounds.y + bounds.height / 2;
+        return new Point(x, y);
+    }
+
+    private beginTransformDrag(handle: string, event: MouseEvent) {
+        const element = this._editor.selectedElement;
+        if(!element || element.locked || !element.visible) {
+            return false;
+        }
+
+        if(handle == 'move') {
+            pinAncestorTransformOrigins(this.rootElements(), element);
+            const canvasPoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
+            this.moveStart = this.canvasToParentLocal(element, canvasPoint);
+            this.movingElement = true;
+            this.canDeselect = false;
+            return true;
+        }
+
+        const bounds = localBounds(element);
+        const origin = handle == 'origin' ? resolvedOrigin(element) : pinTransformOrigin(element);
+        const initial = this.cloneTransform(element.transform);
+        const own = transformMatrix(initial, origin);
+        const pivotLocal = handle == 'origin' || event.altKey
+            ? new Point(origin.x, origin.y)
+            : this.oppositeHandlePoint(bounds, handle);
+        const pivotParent = applyMatrix(own, pivotLocal.x, pivotLocal.y);
+        const handleLocal = this.handlePoint(bounds, handle);
+        const canvasPoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
+        const parentPoint = this.canvasToParentLocal(element, canvasPoint);
+
+        this.transformDrag = {
+            handle,
+            element,
+            bounds,
+            origin,
+            initial,
+            pivotLocal,
+            pivotParent: new Point(pivotParent.x, pivotParent.y),
+            handleLocal,
+            startAngle: Math.atan2(parentPoint.y - pivotParent.y, parentPoint.x - pivotParent.x) * 180 / Math.PI,
+        };
+        this.canDeselect = false;
+        return true;
+    }
+
+    private updateTransformDrag(event: MouseEvent) {
+        if(!this.transformDrag) {
+            return false;
+        }
+
+        const drag = this.transformDrag;
+        const canvasPoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
+        const parentPoint = this.canvasToParentLocal(drag.element, canvasPoint);
+        const next = this.cloneTransform(drag.initial);
+
+        if(drag.handle == 'origin') {
+            next.originX = parentPoint.x - drag.initial.translateX;
+            next.originY = parentPoint.y - drag.initial.translateY;
+            drag.element.transform = next;
+            return true;
+        }
+
+        if(drag.handle == 'rotate') {
+            const angle = Math.atan2(parentPoint.y - drag.pivotParent.y, parentPoint.x - drag.pivotParent.x) * 180 / Math.PI;
+            next.rotation = drag.initial.rotation + angle - drag.startAngle;
+            drag.element.transform = next;
+            return true;
+        }
+
+        const hasX = drag.handle.includes('e') || drag.handle.includes('w');
+        const hasY = drag.handle.includes('n') || drag.handle.includes('s');
+        const currentVector = parentPoint.subtract(drag.pivotParent);
+        const unrotated = this.rotateVector(currentVector, -drag.initial.rotation);
+        const initialVector = drag.handleLocal.subtract(drag.pivotLocal);
+
+        if(hasX && Math.abs(initialVector.x) > 0.000001) {
+            next.scaleX = this.nonZeroScale(unrotated.x / initialVector.x);
+        }
+
+        if(hasY && Math.abs(initialVector.y) > 0.000001) {
+            next.scaleY = this.nonZeroScale(unrotated.y / initialVector.y);
+        }
+
+        if(event.shiftKey) {
+            const ratio = hasX
+                ? next.scaleX / drag.initial.scaleX
+                : next.scaleY / drag.initial.scaleY;
+            next.scaleX = this.nonZeroScale(drag.initial.scaleX * ratio);
+            next.scaleY = this.nonZeroScale(drag.initial.scaleY * ratio);
+        }
+
+        const own = transformMatrix(next, drag.origin);
+        const mappedPivot = applyMatrix(own, drag.pivotLocal.x, drag.pivotLocal.y);
+        next.translateX += drag.pivotParent.x - mappedPivot.x;
+        next.translateY += drag.pivotParent.y - mappedPivot.y;
+        drag.element.transform = next;
+        return true;
+    }
+
+    private nonZeroScale(value: number): number {
+        if(Math.abs(value) < 0.01) {
+            return value < 0 ? -0.01 : 0.01;
+        }
+
+        return value;
     }
 
     private moveAnchor(path: Path, anchor: Point, delta: Point) {
@@ -322,10 +513,22 @@ export class SelectTool extends Tool {
 
     override down(event: MouseEvent) {
         let target = <HTMLElement>event.target;
-        this.moveStart = this._editor.toCanvasPoint(event.clientX, event.clientY);
+        const canvasPoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
+        this.moveStart = canvasPoint;
+
+        const transformHandle = this.findTransformHandle(target);
+        if(transformHandle && this.beginTransformDrag(transformHandle, event)) {
+            this._editor.selectedPathAnchor = undefined;
+            this._editor.selectedPathLine = undefined;
+            return;
+        }
 
         const overlayPoint = this.findOverlayPoint(target);
         if(overlayPoint) {
+            if(this._editor.selectedElement) {
+                pinAncestorTransformOrigins(this.rootElements(), this._editor.selectedElement);
+            }
+            this.moveStart = this.canvasToSelectedLocal(canvasPoint);
             if(overlayPoint.role == 'anchor' && this._editor.keysDown['Alt'] && this._editor.selectedElement instanceof Path) {
                 this.movingPoint = overlayPoint.point;
                 this.movingPointRole = 'anchor-convert';
@@ -364,6 +567,8 @@ export class SelectTool extends Tool {
             let foundElement = this._editor.findElement(idTarget.id);
             if(foundElement && !foundElement.locked && foundElement.visible) {
                 this.movingElement = true;
+                pinAncestorTransformOrigins(this.rootElements(), foundElement);
+                this.moveStart = this.canvasToParentLocal(foundElement, canvasPoint);
                 this._editor.selectedElement = foundElement;
                 this._editor.selectedPathAnchor = undefined;
                 this._editor.selectedPathLine = undefined;
@@ -374,8 +579,14 @@ export class SelectTool extends Tool {
     }
 
     override drag(event: MouseEvent) {
+        if(this.updateTransformDrag(event)) {
+            this.movedElement = true;
+            this.canDeselect = false;
+            return;
+        }
+
         if(this.moveStart && this.movingPoint && this._editor.selectedElement instanceof Path) {
-            let pos = this._editor.toCanvasPoint(event.clientX, event.clientY);
+            let pos = this.canvasToSelectedLocal(this._editor.toCanvasPoint(event.clientX, event.clientY));
             let delta = pos.subtract(this.moveStart);
             this.moveStart = pos;
 
@@ -436,10 +647,11 @@ export class SelectTool extends Tool {
         }
 
         if(this.moveStart && this.movingElement && this._editor.selectedElement && this._editor.selectedSVG) {
-            let pos = this._editor.toCanvasPoint(event.clientX, event.clientY);
+            let pos = this.canvasToParentLocal(this._editor.selectedElement, this._editor.toCanvasPoint(event.clientX, event.clientY));
             let delta = pos.subtract(this.moveStart);
             this.moveStart = pos;
-            this._editor.selectedElement.moveElement(delta);
+            this._editor.selectedElement.transform.translateX += delta.x;
+            this._editor.selectedElement.transform.translateY += delta.y;
             this.movedElement = true;
             this.canDeselect = false;
         }
@@ -447,6 +659,7 @@ export class SelectTool extends Tool {
 
     override up(event: MouseEvent) {
         this.movingElement = false;
+        this.transformDrag = undefined;
         this.movingPoint = undefined;
         this.movingPointRole = undefined;
         this.movingLine = undefined;
@@ -550,4 +763,16 @@ export class SelectTool extends Tool {
                 break;
         }
     }
+}
+
+interface TransformDrag {
+    handle: string;
+    element: AnyElement;
+    bounds: Bounds;
+    origin: { x: number; y: number };
+    initial: TransformState;
+    pivotLocal: Point;
+    pivotParent: Point;
+    handleLocal: Point;
+    startAngle: number;
 }

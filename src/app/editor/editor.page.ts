@@ -21,6 +21,7 @@ import { Shape } from "./objects/elements/shape.object";
 import { TextElement } from "./objects/elements/text.object";
 import { AnyElement } from "./objects/svg.object";
 import { buildSVGMarkup } from "./svg-markup";
+import { pinTransformOrigin, resolvedOrigin } from "./objects/element-bounds";
 
 @Component({
     standalone: true,
@@ -400,6 +401,10 @@ export class EditorPage implements AfterViewInit {
         return element instanceof Group ? element : null;
     }
 
+    asShape(element: AnyElement | undefined): Shape | null {
+        return element instanceof Shape ? element : null;
+    }
+
     groupIsCollapsed(group: Group): boolean {
         return this.collapsedGroupIds.has(group.id);
     }
@@ -429,6 +434,70 @@ export class EditorPage implements AfterViewInit {
     /** Bridge for template dynamic-key access on the now-typed settings object. */
     settingsOf(element: AnyElement | undefined): Record<string, any> {
         return (element?.settings ?? {}) as Record<string, any>;
+    }
+
+    transformValue(element: AnyElement | undefined, field: TransformField): number {
+        if(!element) {
+            return 0;
+        }
+
+        if(field === 'originX' || field === 'originY') {
+            const origin = resolvedOrigin(element);
+            return field === 'originX' ? origin.x : origin.y;
+        }
+
+        return element.transform[field];
+    }
+
+    setTransformValue(element: AnyElement | undefined, field: TransformField, value: number | string | null) {
+        if(!element) {
+            return;
+        }
+
+        const numeric = typeof value === 'number' ? value : Number(value);
+        if(!Number.isFinite(numeric)) {
+            return;
+        }
+
+        if((field === 'scaleX' || field === 'scaleY' || field === 'rotation') && (element.transform.originX == null || element.transform.originY == null)) {
+            pinTransformOrigin(element);
+        }
+
+        element.transform[field] = numeric;
+        this.scheduleAttributeSnapshot();
+    }
+
+    shapeFrameValue(shape: Shape, field: ShapeFrameField): number {
+        switch(field) {
+            case 'x': return shape.position.x;
+            case 'y': return shape.position.y;
+            case 'width': return shape.settings.width;
+            case 'height': return shape.settings.height;
+        }
+    }
+
+    setShapeFrameValue(shape: Shape, field: ShapeFrameField, value: number | string | null) {
+        const numeric = typeof value === 'number' ? value : Number(value);
+        if(!Number.isFinite(numeric)) {
+            return;
+        }
+
+        switch(field) {
+            case 'x':
+                shape.position.x = numeric;
+                break;
+            case 'y':
+                shape.position.y = numeric;
+                break;
+            case 'width':
+                shape.settings.width = Math.max(1, numeric);
+                break;
+            case 'height':
+                shape.settings.height = Math.max(1, numeric);
+                break;
+        }
+
+        this.scheduleAttributeSnapshot();
     }
 
     selectLayer(element: AnyElement, event?: MouseEvent) {
@@ -485,6 +554,7 @@ export class EditorPage implements AfterViewInit {
         clone.visible = path.visible;
         clone.locked = false;
         clone.closed = path.closed;
+        clone.transform = { ...path.transform };
         clone.settings = {
             ...path.settings,
             stroke: this.cloneColor(path.settings.stroke),
@@ -513,6 +583,7 @@ export class EditorPage implements AfterViewInit {
         clone.name = `${shape.name} Copy`;
         clone.visible = shape.visible;
         clone.locked = false;
+        clone.transform = { ...shape.transform };
         clone.settings = {
             ...shape.settings,
             stroke: this.cloneColor(shape.settings.stroke),
@@ -526,6 +597,7 @@ export class EditorPage implements AfterViewInit {
         clone.name = `${text.name} Copy`;
         clone.visible = text.visible;
         clone.locked = false;
+        clone.transform = { ...text.transform };
         clone.settings = {
             ...text.settings,
             color: text.settings.color ? new Color(text.settings.color.hex) : null,
@@ -538,6 +610,7 @@ export class EditorPage implements AfterViewInit {
         clone.name = `${group.name} Copy`;
         clone.visible = group.visible;
         clone.locked = false;
+        clone.transform = { ...group.transform };
         const clonedElements = group.elements.map((element) => {
             return {
                 original: element,
@@ -1175,3 +1248,6 @@ interface LayerContext {
     index: number;
     parent?: Group;
 }
+
+type TransformField = 'translateX' | 'translateY' | 'scaleX' | 'scaleY' | 'rotation' | 'originX' | 'originY';
+type ShapeFrameField = 'x' | 'y' | 'width' | 'height';

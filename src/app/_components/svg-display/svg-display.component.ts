@@ -7,6 +7,9 @@ import { Path } from "src/app/editor/objects/elements/path.object";
 import { Point } from "src/app/editor/objects/point.object";
 import { Shape } from "src/app/editor/objects/elements/shape.object";
 import { TextElement } from "src/app/editor/objects/elements/text.object";
+import { combinedMatrixFor, localBounds, resolvedOrigin, transformedElementBounds, ownMatrix } from "src/app/editor/objects/element-bounds";
+import { AnyElement } from "src/app/editor/objects/svg.object";
+import { Bounds, applyMatrix, matrixToSvg } from "src/app/editor/objects/transform.object";
 
 @Component({
     standalone: true,
@@ -55,6 +58,57 @@ export class SVGDisplay implements AfterViewInit {
         return group.clipElement ? [group.clipElement] : [];
     }
 
+    transformAttr(element: AnyElement): string | null {
+        return matrixToSvg(ownMatrix(element));
+    }
+
+    selectedOverlayTransformAttr(element: AnyElement): string | null {
+        const elements = this.editor.selectedSVG?.elements ?? [];
+        return matrixToSvg(combinedMatrixFor(elements, element));
+    }
+
+    selectionBox(element?: AnyElement): SelectionBox | null {
+        if(!element || !this.editor.selectedSVG || !element.visible || element.locked) {
+            return null;
+        }
+
+        const bounds = localBounds(element);
+        const matrix = combinedMatrixFor(this.editor.selectedSVG.elements, element);
+        const origin = resolvedOrigin(element);
+        const corners = {
+            nw: applyMatrix(matrix, bounds.x, bounds.y),
+            n: applyMatrix(matrix, bounds.x + bounds.width / 2, bounds.y),
+            ne: applyMatrix(matrix, bounds.x + bounds.width, bounds.y),
+            e: applyMatrix(matrix, bounds.x + bounds.width, bounds.y + bounds.height / 2),
+            se: applyMatrix(matrix, bounds.x + bounds.width, bounds.y + bounds.height),
+            s: applyMatrix(matrix, bounds.x + bounds.width / 2, bounds.y + bounds.height),
+            sw: applyMatrix(matrix, bounds.x, bounds.y + bounds.height),
+            w: applyMatrix(matrix, bounds.x, bounds.y + bounds.height / 2),
+        };
+        const topCenter = corners.n;
+        const rotate = applyMatrix(matrix, bounds.x + bounds.width / 2, bounds.y - 34);
+        const pivot = applyMatrix(matrix, origin.x, origin.y);
+        const hitBounds = transformedElementBounds(this.editor.selectedSVG.elements, element);
+
+        return {
+            points: `${corners.nw.x},${corners.nw.y} ${corners.ne.x},${corners.ne.y} ${corners.se.x},${corners.se.y} ${corners.sw.x},${corners.sw.y}`,
+            topCenter,
+            rotate,
+            pivot,
+            handles: [
+                { role: 'nw', ...corners.nw },
+                { role: 'n', ...corners.n },
+                { role: 'ne', ...corners.ne },
+                { role: 'e', ...corners.e },
+                { role: 'se', ...corners.se },
+                { role: 's', ...corners.s },
+                { role: 'sw', ...corners.sw },
+                { role: 'w', ...corners.w },
+            ],
+            hitBounds,
+        };
+    }
+
     textTspans(text: TextElement): Array<{ text: string; dy: number }> {
         return text.lines.map((line, i) => ({ text: line, dy: i === 0 ? 0 : text.lineHeight }));
     }
@@ -98,4 +152,13 @@ export class SVGDisplay implements AfterViewInit {
 
         return `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
     }
+}
+
+interface SelectionBox {
+    points: string;
+    topCenter: { x: number; y: number };
+    rotate: { x: number; y: number };
+    pivot: { x: number; y: number };
+    handles: Array<{ role: string; x: number; y: number }>;
+    hitBounds: Bounds;
 }

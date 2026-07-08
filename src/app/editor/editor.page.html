@@ -90,6 +90,82 @@
     <div class="attribute-panel">
       <ng-container *ngIf="editor.inspectedElement">
         <div class="panel-header">Properties</div>
+        <div class="transform-section" *ngIf="asShape(editor.inspectedElement) as selectedShape">
+          <div class="transform-title">Frame</div>
+          <div class="transform-grid">
+            <label>
+              <span>X</span>
+              <input type="number"
+                     [ngModel]="shapeFrameValue(selectedShape, 'x')"
+                     (ngModelChange)="setShapeFrameValue(selectedShape, 'x', $event)" />
+            </label>
+            <label>
+              <span>Y</span>
+              <input type="number"
+                     [ngModel]="shapeFrameValue(selectedShape, 'y')"
+                     (ngModelChange)="setShapeFrameValue(selectedShape, 'y', $event)" />
+            </label>
+            <label>
+              <span>W</span>
+              <input type="number" min="1"
+                     [ngModel]="shapeFrameValue(selectedShape, 'width')"
+                     (ngModelChange)="setShapeFrameValue(selectedShape, 'width', $event)" />
+            </label>
+            <label>
+              <span>H</span>
+              <input type="number" min="1"
+                     [ngModel]="shapeFrameValue(selectedShape, 'height')"
+                     (ngModelChange)="setShapeFrameValue(selectedShape, 'height', $event)" />
+            </label>
+          </div>
+        </div>
+        <div class="transform-section">
+          <div class="transform-title">Offset</div>
+          <div class="transform-grid">
+            <label>
+              <span>Offset X</span>
+              <input type="number"
+                     [ngModel]="transformValue(editor.inspectedElement, 'translateX')"
+                     (ngModelChange)="setTransformValue(editor.inspectedElement, 'translateX', $event)" />
+            </label>
+            <label>
+              <span>Offset Y</span>
+              <input type="number"
+                     [ngModel]="transformValue(editor.inspectedElement, 'translateY')"
+                     (ngModelChange)="setTransformValue(editor.inspectedElement, 'translateY', $event)" />
+            </label>
+            <label>
+              <span>Scale X</span>
+              <input type="number" step="0.01"
+                     [ngModel]="transformValue(editor.inspectedElement, 'scaleX')"
+                     (ngModelChange)="setTransformValue(editor.inspectedElement, 'scaleX', $event)" />
+            </label>
+            <label>
+              <span>Scale Y</span>
+              <input type="number" step="0.01"
+                     [ngModel]="transformValue(editor.inspectedElement, 'scaleY')"
+                     (ngModelChange)="setTransformValue(editor.inspectedElement, 'scaleY', $event)" />
+            </label>
+            <label>
+              <span>Rotate</span>
+              <input type="number" step="1"
+                     [ngModel]="transformValue(editor.inspectedElement, 'rotation')"
+                     (ngModelChange)="setTransformValue(editor.inspectedElement, 'rotation', $event)" />
+            </label>
+            <label>
+              <span>Origin X</span>
+              <input type="number"
+                     [ngModel]="transformValue(editor.inspectedElement, 'originX')"
+                     (ngModelChange)="setTransformValue(editor.inspectedElement, 'originX', $event)" />
+            </label>
+            <label>
+              <span>Origin Y</span>
+              <input type="number"
+                     [ngModel]="transformValue(editor.inspectedElement, 'originY')"
+                     (ngModelChange)="setTransformValue(editor.inspectedElement, 'originY', $event)" />
+            </label>
+          </div>
+        </div>
         <div class="attr-list">
           <ng-container *ngFor="let attr of editor.inspectedElement.attributes">
             <div class="attr-row">

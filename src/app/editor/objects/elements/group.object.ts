@@ -4,6 +4,7 @@ import { Path, PathSave } from "./path.object";
 import { Shape, ShapeSave } from "./shape.object";
 import { TextElement, TextSave } from "./text.object";
 import { Point } from "../point.object";
+import { defaultTransform, restoreTransform, serializeTransform, TransformSave, TransformState } from "../transform.object";
 
 export interface GroupSave {
     type: 'group';
@@ -11,6 +12,7 @@ export interface GroupSave {
     name: string;
     visible: boolean;
     locked: boolean;
+    transform?: TransformSave;
     clipElementId?: string | null;
     elements: GroupElementSave[];
 }
@@ -27,6 +29,7 @@ export class Group {
     name: string;
     visible: boolean = true;
     locked: boolean = false;
+    transform: TransformState = defaultTransform();
     clipElementId?: string | null;
     elements: GroupElement[] = [];
 
@@ -60,9 +63,8 @@ export class Group {
     }
 
     moveElement(delta: Point) {
-        this.elements.forEach((e) => {
-            e.moveElement(delta);
-        });
+        this.transform.translateX += delta.x;
+        this.transform.translateY += delta.y;
     }
 
     save(): GroupSave {
@@ -72,6 +74,7 @@ export class Group {
             name: this.name,
             visible: this.visible,
             locked: this.locked,
+            transform: serializeTransform(this.transform),
             clipElementId: this.clipElementId ?? null,
             elements: this.elements.map((e) => e.save()) as GroupElementSave[],
         };
@@ -83,6 +86,7 @@ export class Group {
         group.name = s.name;
         group.visible = s.visible;
         group.locked = s.locked;
+        group.transform = restoreTransform(s.transform);
         group.clipElementId = s.clipElementId ?? null;
         group.elements = s.elements.map((element) => {
             if(element.type === 'path') return Path.fromSave(element, editor);
