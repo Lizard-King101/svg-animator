@@ -1,8 +1,13 @@
 <ng-template #renderElements let-elements>
 <ng-container *ngFor="let element of elements">
     <ng-container *ngIf="element.visible && asGroup(element) as group">
-        <svg:g [id]="group.id">
-            <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: group.elements }"></ng-container>
+        <svg:defs *ngIf="group.clipElement">
+            <svg:clipPath [id]="group.clipPathId">
+                <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: clipElementList(group) }"></ng-container>
+            </svg:clipPath>
+        </svg:defs>
+        <svg:g [id]="group.id" [attr.clip-path]="clipUrl(group)">
+            <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: group.renderedElements }"></ng-container>
         </svg:g>
     </ng-container>
     <ng-container *ngIf="element.visible && asPath(element) as path">

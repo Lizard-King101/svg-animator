@@ -47,6 +47,14 @@ export class SVGDisplay implements AfterViewInit {
         return element instanceof Group ? element : null;
     }
 
+    clipUrl(group: Group): string | null {
+        return group.clipElement ? `url(#${group.clipPathId})` : null;
+    }
+
+    clipElementList(group: Group): Array<Group['elements'][number]> {
+        return group.clipElement ? [group.clipElement] : [];
+    }
+
     textTspans(text: TextElement): Array<{ text: string; dy: number }> {
         return text.lines.map((line, i) => ({ text: line, dy: i === 0 ? 0 : text.lineHeight }));
     }

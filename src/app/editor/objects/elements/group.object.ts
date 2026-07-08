@@ -11,6 +11,7 @@ export interface GroupSave {
     name: string;
     visible: boolean;
     locked: boolean;
+    clipElementId?: string | null;
     elements: GroupElementSave[];
 }
 
@@ -26,6 +27,7 @@ export class Group {
     name: string;
     visible: boolean = true;
     locked: boolean = false;
+    clipElementId?: string | null;
     elements: GroupElement[] = [];
 
     attributes: ElementAttribute[] = GroupAttributes;
@@ -34,6 +36,22 @@ export class Group {
 
     get raw() {
         return '';
+    }
+
+    get clipPathId() {
+        return `clip-${this.id}`;
+    }
+
+    get clipElement(): GroupElement | undefined {
+        return this.clipElementId
+            ? this.elements.find((element) => element.id === this.clipElementId)
+            : undefined;
+    }
+
+    get renderedElements(): GroupElement[] {
+        return this.clipElementId
+            ? this.elements.filter((element) => element.id !== this.clipElementId)
+            : this.elements;
     }
 
     constructor(private editor: EditorService) {
@@ -54,6 +72,7 @@ export class Group {
             name: this.name,
             visible: this.visible,
             locked: this.locked,
+            clipElementId: this.clipElementId ?? null,
             elements: this.elements.map((e) => e.save()) as GroupElementSave[],
         };
     }
@@ -64,12 +83,16 @@ export class Group {
         group.name = s.name;
         group.visible = s.visible;
         group.locked = s.locked;
+        group.clipElementId = s.clipElementId ?? null;
         group.elements = s.elements.map((element) => {
             if(element.type === 'path') return Path.fromSave(element, editor);
             if(element.type === 'shape') return Shape.fromSave(element, editor);
             if(element.type === 'text') return TextElement.fromSave(element, editor);
             return Group.fromSave(element, editor);
         });
+        if(group.clipElementId && !group.clipElement) {
+            group.clipElementId = null;
+        }
         return group;
     }
 }
