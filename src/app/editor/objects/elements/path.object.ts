@@ -3,6 +3,7 @@ import { ElementAttribute, SettingsFromAttributes } from "./element";
 import { Color } from "../color.object";
 import { Line, LineSave } from "../line.object";
 import { Point, PointSave } from "../point.object";
+import { defaultTransform, restoreTransform, serializeTransform, TransformSave, TransformState } from "../transform.object";
 
 export interface PathSave {
     type: 'path';
@@ -10,6 +11,7 @@ export interface PathSave {
     name: string;
     visible: boolean;
     locked: boolean;
+    transform?: TransformSave;
     closed: boolean;
     settings: {
         stroke_width: number;
@@ -97,6 +99,7 @@ export class Path {
     name: string;
     visible: boolean = true;
     locked: boolean = false;
+    transform: TransformState = defaultTransform();
     lines: Line[] = [];
     closed: boolean = false;
 
@@ -193,6 +196,7 @@ export class Path {
             name: this.name,
             visible: this.visible,
             locked: this.locked,
+            transform: serializeTransform(this.transform),
             closed: this.closed,
             settings: {
                 stroke_width: this.settings.stroke_width,
@@ -212,6 +216,7 @@ export class Path {
         p.name = s.name;
         p.visible = s.visible;
         p.locked = s.locked;
+        p.transform = restoreTransform(s.transform);
         p.closed = s.closed;
         p.settings = {
             stroke_width: s.settings.stroke_width,

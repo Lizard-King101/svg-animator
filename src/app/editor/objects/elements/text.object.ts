@@ -3,6 +3,7 @@ import { EditorService } from 'src/app/_services/editor.service';
 import { Color } from '../color.object';
 import { Point, PointSave } from '../point.object';
 import { ElementAttribute, SettingsFromAttributes } from './element';
+import { defaultTransform, restoreTransform, serializeTransform, TransformSave, TransformState } from '../transform.object';
 
 export interface TextSave {
     type: 'text';
@@ -10,6 +11,7 @@ export interface TextSave {
     name: string;
     visible: boolean;
     locked: boolean;
+    transform?: TransformSave;
     position: PointSave;
     settings: {
         content: string;
@@ -89,6 +91,7 @@ export class TextElement {
     name: string;
     visible: boolean = true;
     locked: boolean = false;
+    transform: TransformState = defaultTransform();
     position: Point;
 
     settings: SettingsFromAttributes<typeof TextAttributes> = {
@@ -158,6 +161,7 @@ export class TextElement {
             name: this.name,
             visible: this.visible,
             locked: this.locked,
+            transform: serializeTransform(this.transform),
             position: this.position.toSave(),
             settings: {
                 content: this.settings.content,
@@ -176,6 +180,7 @@ export class TextElement {
         t.name = s.name;
         t.visible = s.visible;
         t.locked = s.locked;
+        t.transform = restoreTransform(s.transform);
         t.settings = {
             content: s.settings.content,
             font_family: s.settings.font_family as any,

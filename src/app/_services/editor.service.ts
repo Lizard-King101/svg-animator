@@ -211,9 +211,6 @@ export class EditorService {
 
     findElement(id: string): AnyElement | false {
         if(this.selectedSVG) {
-            if(this.selectedElement instanceof Group && this.groupContainsElement(this.selectedElement, id)) {
-                return this.selectedElement;
-            }
             const foundElement = this.findElementInList(this.selectedSVG.elements, id);
             if(foundElement) return foundElement;
             for(let element of this.selectedSVG.tempElements) {

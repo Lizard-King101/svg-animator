@@ -2,6 +2,7 @@ import { EditorService } from "src/app/_services/editor.service";
 import { ElementAttribute, SettingsFromAttributes } from "./element";
 import { Color } from "../color.object";
 import { Point, PointSave } from "../point.object";
+import { defaultTransform, restoreTransform, serializeTransform, TransformSave, TransformState } from "../transform.object";
 
 export interface ShapeSave {
     type: 'shape';
@@ -9,6 +10,7 @@ export interface ShapeSave {
     name: string;
     visible: boolean;
     locked: boolean;
+    transform?: TransformSave;
     shapeType: 'rectangle' | 'ellipse';
     position: PointSave;
     settings: {
@@ -21,7 +23,7 @@ export interface ShapeSave {
     };
 }
 
-const ShapeBaseAttributes = [
+const ShapeGeometryAttributes = [
     {
         label: 'Width',
         name: 'width',
@@ -38,6 +40,9 @@ const ShapeBaseAttributes = [
         min: 1,
         max: 300
     },
+] as const satisfies readonly ElementAttribute[];
+
+const ShapeBaseAttributes = [
     {
         label: 'Stroke Width',
         name: 'stroke-width',
@@ -73,13 +78,17 @@ const RectAttributes = [
 ] as const satisfies readonly ElementAttribute[];
 
 // Used only for settings type derivation — includes all possible keys
-const ShapeAttributes = RectAttributes;
+const ShapeAttributes = [
+    ...ShapeGeometryAttributes,
+    ...RectAttributes,
+] as const satisfies readonly ElementAttribute[];
 
 export class Shape {
     id: string;
     name: string;
     visible: boolean = true;
     locked: boolean = false;
+    transform: TransformState = defaultTransform();
     position: Point;
     type: 'ellipse' | 'rectangle';
 
@@ -153,6 +162,7 @@ export class Shape {
             name: this.name,
             visible: this.visible,
             locked: this.locked,
+            transform: serializeTransform(this.transform),
             shapeType: this.type,
             position: this.position.toSave(),
             settings: {
@@ -177,6 +187,7 @@ export class Shape {
         shape.name = s.name;
         shape.visible = s.visible;
         shape.locked = s.locked;
+        shape.transform = restoreTransform(s.transform);
         shape.settings = {
             width: s.settings.width,
             height: s.settings.height,
