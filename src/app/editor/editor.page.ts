@@ -1,5 +1,5 @@
 import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, HostListener, NgZone, ViewChild } from "@angular/core";
-import { NgClass, NgFor, NgIf, NgTemplateOutlet } from "@angular/common";
+import { NgClass, NgFor, NgIf, NgStyle, NgTemplateOutlet } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute } from "@angular/router";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
@@ -22,7 +22,7 @@ import { Path } from "./objects/elements/path.object";
 import { Point } from "./objects/point.object";
 import { Shape } from "./objects/elements/shape.object";
 import { TextElement } from "./objects/elements/text.object";
-import { AnyElement } from "./objects/svg.object";
+import { AnyElement, CanvasGuide } from "./objects/svg.object";
 import { buildSVGMarkup } from "./svg-markup";
 import { pinTransformOrigin, resolvedOrigin } from "./objects/element-bounds";
 import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, createAnimationColorValue } from "./objects/animation.object";
@@ -31,7 +31,7 @@ import { pathPointAnimationProperty, readAnimationProperty } from "./objects/ani
 @Component({
     standalone: true,
     imports: [
-        NgFor, NgIf, NgClass, NgTemplateOutlet,
+        NgFor, NgIf, NgClass, NgStyle, NgTemplateOutlet,
         FormsModule,
         FaIconComponent,
         SVGDisplay,
@@ -64,6 +64,9 @@ export class EditorPage implements AfterViewInit {
     selectedLayers: AnyElement[] = [];
     private lastSelectedLayer?: AnyElement;
     private collapsedGroupIds = new Set<string>();
+    guideDrag?: GuideDragState;
+    guideInput?: GuideInputState;
+    private lastRulerGuideCreated?: CanvasGuide;
 
     // ── New SVG dialog ────────────────────────────────────────────────
     showNewDialog = false;
@@ -322,6 +325,497 @@ export class EditorPage implements AfterViewInit {
         return this.newWidth === r.width && this.newHeight === r.height;
     }
 
+    // ── Rulers and guides ────────────────────────────────────────────
+
+    get rulerSize(): number {
+        return 24;
+    }
+
+    get activeGuideValue(): number | undefined {
+        return this.guideDrag ? this.guideDrag.value : undefined;
+    }
+
+    canvasRenderedLeft(): number {
+        const svg = this.editor.selectedSVG;
+        const rect = this.canvasRectInViewport();
+        return rect ? rect.left : svg ? svg.pos.x + (svg.width * (1 - svg.zoom) / 2) : 0;
+    }
+
+    canvasRenderedTop(): number {
+        const svg = this.editor.selectedSVG;
+        const rect = this.canvasRectInViewport();
+        return rect ? rect.top : svg ? svg.pos.y + (svg.height * (1 - svg.zoom) / 2) : 0;
+    }
+
+    canvasToViewportX(value: number): number {
+        const svg = this.editor.selectedSVG;
+        const rect = this.canvasRectInViewport();
+        if(rect && svg?.width) {
+            return rect.left + (value * rect.width / svg.width);
+        }
+        return svg ? this.canvasRenderedLeft() + (value * svg.zoom) : 0;
+    }
+
+    canvasToViewportY(value: number): number {
+        const svg = this.editor.selectedSVG;
+        const rect = this.canvasRectInViewport();
+        if(rect && svg?.height) {
+            return rect.top + (value * rect.height / svg.height);
+        }
+        return svg ? this.canvasRenderedTop() + (value * svg.zoom) : 0;
+    }
+
+    guideScreenPosition(guide: CanvasGuide): number {
+        return guide.axis === 'x'
+            ? this.canvasToViewportX(guide.value)
+            : this.canvasToViewportY(guide.value);
+    }
+
+    activeGuideScreenPosition(): number {
+        if(!this.guideDrag) {
+            return 0;
+        }
+
+        return this.guideDrag.axis === 'x'
+            ? this.canvasToViewportX(this.guideDrag.value)
+            : this.canvasToViewportY(this.guideDrag.value);
+    }
+
+    activeGuideLabel(): string {
+        if(!this.guideDrag) {
+            return '';
+        }
+
+        return `${this.guideDrag.axis} ${this.formatGuideValue(this.guideDrag.value)}`;
+    }
+
+    activeGuideBadgeStyle(): Record<string, string> {
+        if(!this.guideDrag) {
+            return {};
+        }
+
+        const left = this.guideDrag.axis === 'x'
+            ? this.activeGuideScreenPosition() + 8
+            : this.rulerSize + 8;
+        const top = this.guideDrag.axis === 'y'
+            ? this.activeGuideScreenPosition() + 8
+            : this.rulerSize + 8;
+
+        return {
+            left: `${left}px`,
+            top: `${top}px`,
+        };
+    }
+
+    rulerMarks(axis: "x" | "y"): RulerMark[] {
+        const svg = this.editor.selectedSVG;
+        const viewport = this.viewPort?.nativeElement;
+        if(!svg || !viewport) {
+            return [];
+        }
+
+        const length = axis === "x" ? svg.width : svg.height;
+        const viewportLength = axis === "x" ? viewport.clientWidth : viewport.clientHeight;
+        const step = this.rulerStep(svg.zoom);
+        const start = 0;
+        const marks: RulerMark[] = [];
+
+        for(let value = start; value <= length + 0.0001; value += step) {
+            const position = axis === "x"
+                ? this.canvasToViewportX(value) - this.rulerSize
+                : this.canvasToViewportY(value) - this.rulerSize;
+            if(position < -80 || position > viewportLength - this.rulerSize + 80) {
+                continue;
+            }
+
+            marks.push({
+                value,
+                position,
+                major: true,
+                label: String(Math.round(value)),
+            });
+        }
+
+        return marks;
+    }
+
+    canDragGuides(): boolean {
+        return this.editor.selectedTool?.interactsWithGuides ?? false;
+    }
+
+    beginRulerGuideDrag(axis: "x" | "y", event: PointerEvent) {
+        if(event.button !== 0 || !this.editor.selectedSVG) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        if(event.detail > 1) {
+            return;
+        }
+
+        const guide: CanvasGuide = {
+            id: this.editor.ID,
+            axis,
+            value: this.guideValueFromEvent(axis, event, event.shiftKey),
+        };
+        this.editor.selectedSVG.guides.push(guide);
+        this.guideDrag = {
+            pointerId: event.pointerId,
+            guide,
+            axis,
+            value: guide.value,
+            created: true,
+        };
+        (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    }
+
+    beginExistingGuideDrag(guide: CanvasGuide, event: PointerEvent) {
+        if(event.button !== 0) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        this.guideDrag = {
+            pointerId: event.pointerId,
+            guide,
+            axis: guide.axis,
+            value: guide.value,
+            created: false,
+        };
+        (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    }
+
+    updateGuideDrag(event: PointerEvent) {
+        if(!this.guideDrag || this.guideDrag.pointerId !== event.pointerId) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        this.guideDrag.value = this.guideValueFromEvent(this.guideDrag.axis, event, event.shiftKey);
+        this.guideDrag.guide.value = this.guideDrag.value;
+    }
+
+    endGuideDrag(event: PointerEvent) {
+        if(!this.guideDrag || this.guideDrag.pointerId !== event.pointerId) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+            (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+        } catch {}
+
+        const shouldDelete = this.guideIsInDeleteZone(this.guideDrag.axis, event);
+        if(shouldDelete) {
+            this.deleteGuideFromSvg(this.guideDrag.guide);
+            this.lastRulerGuideCreated = undefined;
+            this.guideDrag = undefined;
+            this.snapshotAndSave();
+            return;
+        }
+
+        this.guideDrag.guide.value = this.guideDrag.value;
+        if(this.guideDrag.created) {
+            this.lastRulerGuideCreated = this.guideDrag.guide;
+        }
+        this.guideDrag = undefined;
+        this.snapshotAndSave();
+    }
+
+    openGuideContextMenu(guide: CanvasGuide, event: MouseEvent) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.editor.openContextMenu(event.clientX, event.clientY, [
+            {
+                label: 'Edit Position',
+                action: () => {
+                    this.openGuideInput(guide.axis, event.clientX, event.clientY, guide);
+                },
+            },
+            {
+                label: 'Delete Guide',
+                shortcut: 'Del',
+                action: () => {
+                    this.deleteGuide(guide);
+                },
+            },
+        ]);
+    }
+
+    openRulerInput(axis: "x" | "y", event: MouseEvent) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.removeLastRulerGuideIfMatching(axis, event);
+        this.openGuideInput(axis, event.clientX, event.clientY);
+    }
+
+    openGuideInput(axis: "x" | "y", clientX: number, clientY: number, guide?: CanvasGuide) {
+        const viewport = this.viewPort?.nativeElement.getBoundingClientRect();
+        const existingValue = guide?.value ?? this.guideValueFromClient(axis, clientX, clientY, false);
+        this.guideInput = {
+            axis,
+            guide,
+            value: this.formatGuideValue(existingValue),
+            x: viewport ? Math.max(this.rulerSize + 4, Math.min(viewport.width - 180, clientX - viewport.left)) : clientX,
+            y: viewport ? Math.max(this.rulerSize + 4, Math.min(viewport.height - 48, clientY - viewport.top)) : clientY,
+            error: undefined,
+        };
+        this.editor.closeContextMenu();
+    }
+
+    applyGuideInput() {
+        if(!this.guideInput || !this.editor.selectedSVG) {
+            return;
+        }
+
+        const parsed = this.parseGuideExpression(this.guideInput.value, this.guideInput.axis);
+        if(parsed == null) {
+            this.guideInput.error = 'Invalid position';
+            return;
+        }
+
+        const guide = this.guideInput.guide ?? {
+            id: this.editor.ID,
+            axis: this.guideInput.axis,
+            value: parsed,
+        };
+        guide.value = parsed;
+        if(!this.guideInput.guide) {
+            this.editor.selectedSVG.guides.push(guide);
+        }
+
+        this.guideInput = undefined;
+        this.snapshotAndSave();
+    }
+
+    cancelGuideInput() {
+        this.guideInput = undefined;
+    }
+
+    deleteGuide(guide: CanvasGuide) {
+        this.deleteGuideFromSvg(guide);
+        this.snapshotAndSave();
+    }
+
+    private guideValueFromEvent(axis: "x" | "y", event: PointerEvent | MouseEvent, roundToTen: boolean): number {
+        return this.guideValueFromClient(axis, event.clientX, event.clientY, roundToTen);
+    }
+
+    private removeLastRulerGuideIfMatching(axis: "x" | "y", event: MouseEvent) {
+        const svg = this.editor.selectedSVG;
+        const guide = this.lastRulerGuideCreated;
+        if(!svg || !guide || guide.axis !== axis) {
+            return;
+        }
+
+        const value = this.guideValueFromEvent(axis, event, false);
+        const threshold = 6 / Math.max(0.01, svg.zoom || 1);
+        if(Math.abs(guide.value - value) <= threshold) {
+            this.deleteGuideFromSvg(guide);
+            this.lastRulerGuideCreated = undefined;
+            this.snapshotAndSave();
+        }
+    }
+
+    private guideValueFromClient(axis: "x" | "y", clientX: number, clientY: number, roundToTen: boolean): number {
+        const canvasPoint = this.editor.toCanvasPoint(clientX, clientY);
+        let value = axis === "x" ? canvasPoint.x : canvasPoint.y;
+        if(roundToTen) {
+            value = Math.round(value / 10) * 10;
+        }
+
+        return value;
+    }
+
+    private canvasRectInViewport(): { left: number; top: number; width: number; height: number } | undefined {
+        const canvas = this.canvas?.nativeElement;
+        const viewport = this.viewPort?.nativeElement;
+        if(!canvas || !viewport) {
+            return undefined;
+        }
+
+        const canvasRect = canvas.getBoundingClientRect();
+        const viewportRect = viewport.getBoundingClientRect();
+        return {
+            left: canvasRect.left - viewportRect.left,
+            top: canvasRect.top - viewportRect.top,
+            width: canvasRect.width,
+            height: canvasRect.height,
+        };
+    }
+
+    private guideIsInDeleteZone(axis: "x" | "y", event: PointerEvent): boolean {
+        const viewport = this.viewPort?.nativeElement.getBoundingClientRect();
+        if(!viewport) {
+            return false;
+        }
+
+        return axis === "x"
+            ? event.clientX <= viewport.left + this.rulerSize
+            : event.clientY <= viewport.top + this.rulerSize;
+    }
+
+    private deleteGuideFromSvg(guide: CanvasGuide) {
+        const svg = this.editor.selectedSVG;
+        if(!svg) {
+            return;
+        }
+
+        svg.guides = svg.guides.filter((candidate) => candidate !== guide);
+    }
+
+    private formatGuideValue(value: number): string {
+        return Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100);
+    }
+
+    private rulerStep(zoom: number): number {
+        const targetPx = 96;
+        const raw = targetPx / Math.max(0.01, zoom);
+        const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
+        const normalized = raw / magnitude;
+        const step = normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+        return step * magnitude;
+    }
+
+    private parseGuideExpression(input: string, axis: "x" | "y"): number | undefined {
+        const svg = this.editor.selectedSVG;
+        if(!svg) {
+            return undefined;
+        }
+
+        const raw = input.trim().toLowerCase();
+        const axisLength = axis === "x" ? svg.width : svg.height;
+        if(raw === "center") {
+            return axisLength / 2;
+        }
+
+        const negativeNumber = /^-\d+(\.\d+)?$/.exec(raw);
+        if(negativeNumber) {
+            return axisLength + Number(raw);
+        }
+
+        const percent = /^(-?\d+(\.\d+)?)%$/.exec(raw);
+        if(percent) {
+            return axisLength * Number(percent[1]) / 100;
+        }
+
+        const tokens = this.tokenizeGuideExpression(raw);
+        if(tokens.length === 0) {
+            return undefined;
+        }
+
+        let index = 0;
+        const peek = () => tokens[index];
+        const consume = () => tokens[index++];
+
+        const parseFactor = (): number | undefined => {
+            const token = consume();
+            if(!token) {
+                return undefined;
+            }
+
+            if(token === "+") {
+                return parseFactor();
+            }
+
+            if(token === "-") {
+                const value = parseFactor();
+                return value == null ? undefined : -value;
+            }
+
+            if(token === "(") {
+                const value = parseExpression();
+                if(consume() !== ")") {
+                    return undefined;
+                }
+                return value;
+            }
+
+            if(token === "w") {
+                return svg.width;
+            }
+
+            if(token === "h") {
+                return svg.height;
+            }
+
+            const numeric = Number(token);
+            return Number.isFinite(numeric) ? numeric : undefined;
+        };
+
+        const parseTerm = (): number | undefined => {
+            let value = parseFactor();
+            while(value != null && (peek() === "*" || peek() === "/")) {
+                const operator = consume();
+                const right = parseFactor();
+                if(right == null) {
+                    return undefined;
+                }
+                value = operator === "*" ? value * right : value / right;
+            }
+            return value;
+        };
+
+        const parseExpression = (): number | undefined => {
+            let value = parseTerm();
+            while(value != null && (peek() === "+" || peek() === "-")) {
+                const operator = consume();
+                const right = parseTerm();
+                if(right == null) {
+                    return undefined;
+                }
+                value = operator === "+" ? value + right : value - right;
+            }
+            return value;
+        };
+
+        const value = parseExpression();
+        if(value == null || index !== tokens.length || !Number.isFinite(value)) {
+            return undefined;
+        }
+
+        return value;
+    }
+
+    private tokenizeGuideExpression(input: string): string[] {
+        const tokens: string[] = [];
+        let i = 0;
+        while(i < input.length) {
+            const char = input[i];
+            if(/\s/.test(char)) {
+                i++;
+                continue;
+            }
+
+            if(/[()+\-*/]/.test(char)) {
+                tokens.push(char);
+                i++;
+                continue;
+            }
+
+            const numberMatch = /^\d+(\.\d+)?/.exec(input.slice(i));
+            if(numberMatch) {
+                tokens.push(numberMatch[0]);
+                i += numberMatch[0].length;
+                continue;
+            }
+
+            if(char === "w" || char === "h") {
+                tokens.push(char);
+                i++;
+                continue;
+            }
+
+            return [];
+        }
+
+        return tokens;
+    }
+
     // ── Auto-save ────────────────────────────────────────────────────
 
     autoSave() {
@@ -343,7 +837,10 @@ export class EditorPage implements AfterViewInit {
 
     private currentElementsState(): string | undefined {
         const svg = this.editor.selectedSVG;
-        return svg ? this.animation.withBaseState(() => JSON.stringify({ elements: svg.save().elements, animation: svg.save().animation })) : undefined;
+        return svg ? this.animation.withBaseState(() => {
+            const save = svg.save();
+            return JSON.stringify({ elements: save.elements, animation: save.animation, guides: save.guides });
+        }) : undefined;
     }
 
     private snapshotAndSaveIfChanged(beforeState?: string, beforeRevision = this.saveRevision) {
@@ -1602,4 +2099,28 @@ interface AnimationTransformDragStart {
 interface AnimationPathPointDragStart {
     path: Path;
     values: Record<string, { x: number; y: number }>;
+}
+
+interface GuideDragState {
+    pointerId: number;
+    guide: CanvasGuide;
+    axis: "x" | "y";
+    value: number;
+    created: boolean;
+}
+
+interface GuideInputState {
+    axis: "x" | "y";
+    guide?: CanvasGuide;
+    value: string;
+    x: number;
+    y: number;
+    error?: string;
+}
+
+interface RulerMark {
+    value: number;
+    position: number;
+    major: boolean;
+    label: string;
 }

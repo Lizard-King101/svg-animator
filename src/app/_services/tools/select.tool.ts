@@ -10,6 +10,7 @@ import { Tool } from "./tool";
 
 export class SelectTool extends Tool {
     override icon: IconName = "mouse-pointer";
+    override interactsWithGuides = true;
 
     canDeselect: boolean = false;
     movedElement: boolean = false;

@@ -2,6 +2,7 @@ import { IconName } from "@fortawesome/fontawesome-svg-core";
 import { Line } from "src/app/editor/objects/line.object";
 import { Path } from "src/app/editor/objects/elements/path.object";
 import { Point } from "src/app/editor/objects/point.object";
+import { snapPoint } from "src/app/editor/objects/snapping.object";
 import { EditorService } from "../editor.service";
 import { Tool } from "./tool";
 
@@ -21,6 +22,15 @@ export class PenTool extends Tool{
 
     private mirroredHandle(anchor: Point, handle: Point) {
         return anchor.add(anchor.subtract(handle));
+    }
+
+    private eventPoint(event: MouseEvent): Point {
+        const point = this._editor.toCanvasPoint(event.clientX, event.clientY);
+        return snapPoint(this._editor.selectedSVG, point, {
+            guides: true,
+            geometry: event.shiftKey,
+            ignore: event.ctrlKey || event.metaKey,
+        }).point;
     }
 
     private updateBezierSegment(line: Line, start: Point, end: Point, handle: Point) {
@@ -55,7 +65,7 @@ export class PenTool extends Tool{
         }
 
         if(this._editor.selectedSVG) {
-            let point = this._editor.toCanvasPoint(event.clientX, event.clientY);
+            let point = this.eventPoint(event);
             if(this._editor.activeElement instanceof Path && this._editor.activeElement.closed) {
                 this._editor.activeElement = undefined;
             }
@@ -135,7 +145,7 @@ export class PenTool extends Tool{
 
     override down(event: MouseEvent) {
         if(this._editor.activeElement instanceof Path && this.workingLine) {
-            this.pendingPoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
+            this.pendingPoint = this.eventPoint(event);
             this.draggingBezier = false;
         }
     }
@@ -147,7 +157,7 @@ export class PenTool extends Tool{
             this.workingLine &&
             this._editor.activeElement instanceof Path
         ) {
-            const handlePoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
+            const handlePoint = this.eventPoint(event);
             const activePath = this._editor.activeElement;
 
             this.updateBezierSegment(this.workingLine, this.workingLine.points[0], this.pendingPoint, handlePoint);
@@ -213,7 +223,7 @@ export class PenTool extends Tool{
 
     override drag(event: MouseEvent) {
         if(this.pendingPoint && this.workingLine && this._editor.activeElement instanceof Path) {
-            const handlePoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
+            const handlePoint = this.eventPoint(event);
 
             if(handlePoint.distanceFrom(this.pendingPoint) > 0) {
                 this.draggingBezier = true;
@@ -223,7 +233,7 @@ export class PenTool extends Tool{
         }
 
         if(this.workingLine) {
-            this.updatePreviewSegment(this.workingLine.points[0], this._editor.toCanvasPoint(event.clientX, event.clientY));
+            this.updatePreviewSegment(this.workingLine.points[0], this.eventPoint(event));
         }
     }
 

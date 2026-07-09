@@ -67,6 +67,84 @@
     <!-- Canvas viewport -->
     <div #viewPort class="view-port">
       <svg #canvas display *ngIf="editor.selectedSVG"></svg>
+      <ng-container *ngIf="editor.selectedSVG && animation.mode == 'edit'">
+        <div class="ruler-corner"></div>
+        <div class="canvas-ruler x-ruler"
+             (mousedown)="$event.stopPropagation()"
+             (mousemove)="$event.stopPropagation()"
+             (mouseup)="$event.stopPropagation()"
+             (click)="$event.stopPropagation()"
+             (pointerdown)="beginRulerGuideDrag('y', $event)"
+             (pointermove)="updateGuideDrag($event)"
+             (pointerup)="endGuideDrag($event)"
+             (pointercancel)="endGuideDrag($event)"
+             (dblclick)="openRulerInput('y', $event)">
+          <span class="ruler-mark"
+                *ngFor="let mark of rulerMarks('x')"
+                [style.left.px]="mark.position">{{ mark.label }}</span>
+        </div>
+        <div class="canvas-ruler y-ruler"
+             (mousedown)="$event.stopPropagation()"
+             (mousemove)="$event.stopPropagation()"
+             (mouseup)="$event.stopPropagation()"
+             (click)="$event.stopPropagation()"
+             (pointerdown)="beginRulerGuideDrag('x', $event)"
+             (pointermove)="updateGuideDrag($event)"
+             (pointerup)="endGuideDrag($event)"
+             (pointercancel)="endGuideDrag($event)"
+             (dblclick)="openRulerInput('x', $event)">
+          <span class="ruler-mark"
+                *ngFor="let mark of rulerMarks('y')"
+                [style.top.px]="mark.position">{{ mark.label }}</span>
+        </div>
+        <div class="guide-layer">
+          <ng-container *ngFor="let guide of editor.selectedSVG.guides">
+            <div class="canvas-guide"
+                 [ngClass]="guide.axis"
+                 [class.can-drag]="canDragGuides()"
+                 [style.left.px]="guide.axis == 'x' ? guideScreenPosition(guide) : null"
+                 [style.top.px]="guide.axis == 'y' ? guideScreenPosition(guide) : null"
+                 (mousedown)="$event.stopPropagation()"
+                 (mousemove)="$event.stopPropagation()"
+                 (mouseup)="$event.stopPropagation()"
+                 (click)="$event.stopPropagation()"
+                 (pointerdown)="beginExistingGuideDrag(guide, $event)"
+                 (pointermove)="updateGuideDrag($event)"
+                 (pointerup)="endGuideDrag($event)"
+                 (pointercancel)="endGuideDrag($event)"
+                 (contextmenu)="openGuideContextMenu(guide, $event)">
+            </div>
+          </ng-container>
+          <div class="canvas-guide active"
+               *ngIf="guideDrag"
+               [ngClass]="guideDrag.axis"
+               [style.left.px]="guideDrag.axis == 'x' ? activeGuideScreenPosition() : null"
+               [style.top.px]="guideDrag.axis == 'y' ? activeGuideScreenPosition() : null"></div>
+          <div class="guide-badge"
+               *ngIf="guideDrag"
+               [ngStyle]="activeGuideBadgeStyle()">{{ activeGuideLabel() }}</div>
+        </div>
+        <div class="guide-input-popover"
+             *ngIf="guideInput"
+             [style.left.px]="guideInput.x"
+             [style.top.px]="guideInput.y"
+             (mousedown)="$event.stopPropagation()"
+             (click)="$event.stopPropagation()">
+          <label>{{ guideInput.axis == 'x' ? 'X' : 'Y' }}</label>
+          <input type="text"
+                 [(ngModel)]="guideInput.value"
+                 (keydown.enter)="applyGuideInput()"
+                 (keydown.escape)="cancelGuideInput()"
+                 autofocus />
+          <button (click)="applyGuideInput()" title="Apply">
+            <fa-icon icon="check"></fa-icon>
+          </button>
+          <button (click)="cancelGuideInput()" title="Cancel">
+            <fa-icon icon="times"></fa-icon>
+          </button>
+          <div class="guide-input-error" *ngIf="guideInput.error">{{ guideInput.error }}</div>
+        </div>
+      </ng-container>
       <div class="canvas-empty" *ngIf="!editor.selectedSVG">
         <div class="empty-hint">
           <fa-icon icon="plus"></fa-icon>

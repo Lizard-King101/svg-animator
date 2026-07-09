@@ -9,11 +9,18 @@ import { AnimationDocument, AnimationSave, cloneAnimation, createDefaultAnimatio
 export type ElementSave = PathSave | ShapeSave | GroupSave | TextSave;
 export type AnyElement = Path | Shape | Group | TextElement;
 
+export interface CanvasGuide {
+    id: string;
+    axis: "x" | "y";
+    value: number;
+}
+
 export interface SVGSave {
     id: string;
     name: string;
     elements: ElementSave[];
     animation?: AnimationSave;
+    guides?: CanvasGuide[];
     width: number;
     height: number;
 }
@@ -24,6 +31,7 @@ export class SVG {
     elements: AnyElement[] = [];
     tempElements: Array<Path | Shape> = [];
     animation: AnimationDocument;
+    guides: CanvasGuide[] = [];
     width: number;
     height: number;
     zoom: number;
@@ -60,6 +68,9 @@ export class SVG {
         (svg as any).id = save.id;
         svg.elements = SVG._restoreElements(save.elements, editor);
         svg.animation = restoreAnimation(save.animation);
+        svg.guides = Array.isArray(save.guides)
+            ? save.guides.map(restoreGuide).filter((guide): guide is CanvasGuide => !!guide)
+            : [];
         (svg as any)._past = [svg.save()];
         (svg as any)._future = [];
         return svg;
@@ -73,6 +84,11 @@ export class SVG {
             name: this.name ?? '',
             elements: this.elements.map((e) => e.save()) as ElementSave[],
             animation: cloneAnimation(this.animation),
+            guides: this.guides.map((guide) => ({
+                id: guide.id,
+                axis: guide.axis,
+                value: round(guide.value),
+            })),
             width: this.width,
             height: this.height,
         };
@@ -92,6 +108,9 @@ export class SVG {
     private restore(snap: SVGSave) {
         this.elements = SVG._restoreElements(snap.elements, this.editor);
         this.animation = restoreAnimation(snap.animation);
+        this.guides = Array.isArray(snap.guides)
+            ? snap.guides.map(restoreGuide).filter((guide): guide is CanvasGuide => !!guide)
+            : [];
     }
 
     // ── History ────────────────────────────────────────────────────
@@ -100,7 +119,9 @@ export class SVG {
         const snap = this.save();
         if (this._past.length > 0) {
             const last = this._past[this._past.length - 1];
-            if (JSON.stringify(last.elements) === JSON.stringify(snap.elements) && JSON.stringify(last.animation) === JSON.stringify(snap.animation)) return;
+            if (JSON.stringify(last.elements) === JSON.stringify(snap.elements)
+                && JSON.stringify(last.animation) === JSON.stringify(snap.animation)
+                && JSON.stringify(last.guides ?? []) === JSON.stringify(snap.guides ?? [])) return;
         }
         this._past.push(snap);
         if (this._past.length > this._maxHistory) this._past.shift();
@@ -120,6 +141,27 @@ export class SVG {
         this._past.push(this.save());
         this.restore(snap);
     }
+}
+
+function restoreGuide(save: Partial<CanvasGuide>): CanvasGuide | undefined {
+    if(!save || (save.axis !== "x" && save.axis !== "y")) {
+        return undefined;
+    }
+
+    const numeric = typeof save.value === "number" ? save.value : Number(save.value);
+    if(!Number.isFinite(numeric)) {
+        return undefined;
+    }
+
+    return {
+        id: typeof save.id === "string" ? save.id : Math.random().toString(36).substr(2, 9),
+        axis: save.axis,
+        value: numeric,
+    };
+}
+
+function round(value: number): number {
+    return Math.round(value * 10000) / 10000;
 }
 
 interface SVGOptions {

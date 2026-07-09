@@ -11,6 +11,7 @@ export class Tool {
         }
     }
     selected: boolean = false;
+    interactsWithGuides = false;
 
     children: Tool[] = [];
     selectedChild?: Tool;
