@@ -71,6 +71,15 @@ export class SVGDisplay implements AfterViewInit {
         return 1 - Math.max(0, Math.min(1, path.drawProgress));
     }
 
+    screenPx(px: number): number {
+        const zoom = Math.max(0.01, this.editor.selectedSVG?.zoom || 1);
+        return px / Math.pow(zoom, 0.85);
+    }
+
+    screenDash(first: number, second: number): string {
+        return `${this.screenPx(first)} ${this.screenPx(second)}`;
+    }
+
     selectedOverlayTransformAttr(element: AnyElement): string | null {
         return this.editor.selectedSVG
             ? matrixToSvg(combinedMotionAdjustedMatrixFor(this.editor.selectedSVG, element))
@@ -96,7 +105,7 @@ export class SVGDisplay implements AfterViewInit {
             w: applyMatrix(matrix, bounds.x, bounds.y + bounds.height / 2),
         };
         const topCenter = corners.n;
-        const rotate = applyMatrix(matrix, bounds.x + bounds.width / 2, bounds.y - 34);
+        const rotate = applyMatrix(matrix, bounds.x + bounds.width / 2, bounds.y - this.screenPx(34));
         const pivot = applyMatrix(matrix, origin.x, origin.y);
         const hitBounds = transformedBounds(bounds, matrix);
 
