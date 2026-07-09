@@ -56,7 +56,7 @@ export interface AnimatablePropertyDefinition {
     property: string;
     label: string;
     valueType: AnimationValueType;
-    group: "transform" | "style" | "visibility";
+    group: "transform" | "style" | "visibility" | "path";
     mvp: boolean;
 }
 
@@ -74,6 +74,7 @@ export const ANIMATABLE_PROPERTIES: readonly AnimatablePropertyDefinition[] = [
     { property: "settings.fill", label: "Fill", valueType: "color", group: "style", mvp: true },
     { property: "settings.stroke", label: "Stroke", valueType: "color", group: "style", mvp: true },
     { property: "settings.stroke_width", label: "Stroke Width", valueType: "number", group: "style", mvp: true },
+    { property: "path.drawProgress", label: "Draw Progress", valueType: "number", group: "path", mvp: true },
     { property: "visible", label: "Visibility", valueType: "boolean", group: "visibility", mvp: true },
 ];
 

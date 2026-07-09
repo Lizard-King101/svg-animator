@@ -148,6 +148,7 @@
           <button class="key-diamond"
                   *ngFor="let keyframe of keyframes(row)"
                   [attr.data-keyframe-id]="keyframe.id"
+                  [attr.data-keyframe-ids]="keyframe.groupedKeyframeIds?.join(',')"
                   [ngClass]="{'selected': isKeyframeSelected(keyframe)}"
                   [style.left]="keyframeLeft(keyframe.time)"
                   (pointerdown)="beginKeyframeDrag(keyframe, $event)"

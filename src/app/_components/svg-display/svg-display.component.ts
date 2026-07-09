@@ -66,6 +66,10 @@ export class SVGDisplay implements AfterViewInit {
         return element.opacity === 1 ? null : element.opacity;
     }
 
+    drawOffsetAttr(path: Path): number {
+        return 1 - Math.max(0, Math.min(1, path.drawProgress));
+    }
+
     selectedOverlayTransformAttr(element: AnyElement): string | null {
         const elements = this.editor.selectedSVG?.elements ?? [];
         return matrixToSvg(combinedMatrixFor(elements, element));
