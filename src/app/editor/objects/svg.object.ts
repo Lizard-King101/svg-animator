@@ -21,6 +21,7 @@ export interface SVGSave {
     elements: ElementSave[];
     animation?: AnimationSave;
     guides?: CanvasGuide[];
+    guidesLocked?: boolean;
     width: number;
     height: number;
 }
@@ -32,6 +33,7 @@ export class SVG {
     tempElements: Array<Path | Shape> = [];
     animation: AnimationDocument;
     guides: CanvasGuide[] = [];
+    guidesLocked = false;
     width: number;
     height: number;
     zoom: number;
@@ -71,6 +73,7 @@ export class SVG {
         svg.guides = Array.isArray(save.guides)
             ? save.guides.map(restoreGuide).filter((guide): guide is CanvasGuide => !!guide)
             : [];
+        svg.guidesLocked = !!save.guidesLocked;
         (svg as any)._past = [svg.save()];
         (svg as any)._future = [];
         return svg;
@@ -89,6 +92,7 @@ export class SVG {
                 axis: guide.axis,
                 value: round(guide.value),
             })),
+            guidesLocked: this.guidesLocked,
             width: this.width,
             height: this.height,
         };
@@ -111,6 +115,7 @@ export class SVG {
         this.guides = Array.isArray(snap.guides)
             ? snap.guides.map(restoreGuide).filter((guide): guide is CanvasGuide => !!guide)
             : [];
+        this.guidesLocked = !!snap.guidesLocked;
     }
 
     // ── History ────────────────────────────────────────────────────
@@ -121,7 +126,8 @@ export class SVG {
             const last = this._past[this._past.length - 1];
             if (JSON.stringify(last.elements) === JSON.stringify(snap.elements)
                 && JSON.stringify(last.animation) === JSON.stringify(snap.animation)
-                && JSON.stringify(last.guides ?? []) === JSON.stringify(snap.guides ?? [])) return;
+                && JSON.stringify(last.guides ?? []) === JSON.stringify(snap.guides ?? [])
+                && !!last.guidesLocked === !!snap.guidesLocked) return;
         }
         this._past.push(snap);
         if (this._past.length > this._maxHistory) this._past.shift();

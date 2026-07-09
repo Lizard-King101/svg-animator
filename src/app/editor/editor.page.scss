@@ -667,9 +667,27 @@ $border-color_1: var(--accent);
     z-index: 18;
     width: 24px;
     height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
     background: var(--bg-surface);
     border-right: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
+    border-left: none;
+    border-top: none;
+    color: var(--text-muted);
+    font-size: 10px;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    &.locked {
+      color: var(--accent);
+    }
   }
 
   .canvas-ruler {
@@ -698,6 +716,10 @@ $border-color_1: var(--accent);
     width: 24px;
     border-right: 1px solid var(--border);
     cursor: ew-resize;
+  }
+
+  .canvas-ruler.guides-locked {
+    cursor: default;
   }
 
   .ruler-mark {

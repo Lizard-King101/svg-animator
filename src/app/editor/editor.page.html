@@ -68,8 +68,16 @@
     <div #viewPort class="view-port">
       <svg #canvas display *ngIf="editor.selectedSVG"></svg>
       <ng-container *ngIf="editor.selectedSVG && animation.mode == 'edit'">
-        <div class="ruler-corner"></div>
+        <button class="ruler-corner"
+                type="button"
+                [ngClass]="{'locked': editor.selectedSVG.guidesLocked}"
+                (mousedown)="$event.stopPropagation()"
+                (click)="toggleGuideLock($event)"
+                [title]="editor.selectedSVG.guidesLocked ? 'Unlock guides' : 'Lock guides'">
+          <fa-icon [icon]="editor.selectedSVG.guidesLocked ? 'lock' : 'lock-open'"></fa-icon>
+        </button>
         <div class="canvas-ruler x-ruler"
+             [ngClass]="{'guides-locked': editor.selectedSVG.guidesLocked}"
              (mousedown)="$event.stopPropagation()"
              (mousemove)="$event.stopPropagation()"
              (mouseup)="$event.stopPropagation()"
@@ -84,6 +92,7 @@
                 [style.left.px]="mark.position">{{ mark.label }}</span>
         </div>
         <div class="canvas-ruler y-ruler"
+             [ngClass]="{'guides-locked': editor.selectedSVG.guidesLocked}"
              (mousedown)="$event.stopPropagation()"
              (mousemove)="$event.stopPropagation()"
              (mouseup)="$event.stopPropagation()"

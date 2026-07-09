@@ -440,11 +440,26 @@ export class EditorPage implements AfterViewInit {
     }
 
     canDragGuides(): boolean {
-        return this.editor.selectedTool?.interactsWithGuides ?? false;
+        return !this.editor.selectedSVG?.guidesLocked && (this.editor.selectedTool?.interactsWithGuides ?? false);
+    }
+
+    toggleGuideLock(event: MouseEvent) {
+        event.preventDefault();
+        event.stopPropagation();
+        const svg = this.editor.selectedSVG;
+        if(!svg) {
+            return;
+        }
+
+        svg.guidesLocked = !svg.guidesLocked;
+        this.guideDrag = undefined;
+        this.guideInput = undefined;
+        this.editor.closeContextMenu();
+        this.snapshotAndSave();
     }
 
     beginRulerGuideDrag(axis: "x" | "y", event: PointerEvent) {
-        if(event.button !== 0 || !this.editor.selectedSVG) {
+        if(event.button !== 0 || !this.editor.selectedSVG || this.editor.selectedSVG.guidesLocked) {
             return;
         }
 
@@ -471,7 +486,7 @@ export class EditorPage implements AfterViewInit {
     }
 
     beginExistingGuideDrag(guide: CanvasGuide, event: PointerEvent) {
-        if(event.button !== 0) {
+        if(event.button !== 0 || this.editor.selectedSVG?.guidesLocked) {
             return;
         }
 
@@ -529,6 +544,10 @@ export class EditorPage implements AfterViewInit {
     openGuideContextMenu(guide: CanvasGuide, event: MouseEvent) {
         event.preventDefault();
         event.stopPropagation();
+        if(this.editor.selectedSVG?.guidesLocked) {
+            return;
+        }
+
         this.editor.openContextMenu(event.clientX, event.clientY, [
             {
                 label: 'Edit Position',
@@ -549,11 +568,19 @@ export class EditorPage implements AfterViewInit {
     openRulerInput(axis: "x" | "y", event: MouseEvent) {
         event.preventDefault();
         event.stopPropagation();
+        if(this.editor.selectedSVG?.guidesLocked) {
+            return;
+        }
+
         this.removeLastRulerGuideIfMatching(axis, event);
         this.openGuideInput(axis, event.clientX, event.clientY);
     }
 
     openGuideInput(axis: "x" | "y", clientX: number, clientY: number, guide?: CanvasGuide) {
+        if(this.editor.selectedSVG?.guidesLocked) {
+            return;
+        }
+
         const viewport = this.viewPort?.nativeElement.getBoundingClientRect();
         const existingValue = guide?.value ?? this.guideValueFromClient(axis, clientX, clientY, false);
         this.guideInput = {
@@ -568,7 +595,7 @@ export class EditorPage implements AfterViewInit {
     }
 
     applyGuideInput() {
-        if(!this.guideInput || !this.editor.selectedSVG) {
+        if(!this.guideInput || !this.editor.selectedSVG || this.editor.selectedSVG.guidesLocked) {
             return;
         }
 
@@ -597,6 +624,10 @@ export class EditorPage implements AfterViewInit {
     }
 
     deleteGuide(guide: CanvasGuide) {
+        if(this.editor.selectedSVG?.guidesLocked) {
+            return;
+        }
+
         this.deleteGuideFromSvg(guide);
         this.snapshotAndSave();
     }
@@ -839,7 +870,12 @@ export class EditorPage implements AfterViewInit {
         const svg = this.editor.selectedSVG;
         return svg ? this.animation.withBaseState(() => {
             const save = svg.save();
-            return JSON.stringify({ elements: save.elements, animation: save.animation, guides: save.guides });
+            return JSON.stringify({
+                elements: save.elements,
+                animation: save.animation,
+                guides: save.guides,
+                guidesLocked: save.guidesLocked,
+            });
         }) : undefined;
     }
 
