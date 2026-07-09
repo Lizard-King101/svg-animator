@@ -82,7 +82,10 @@
                  step="0.01"
                  [ngModel]="propertyValue(row)"
                  (click)="$event.stopPropagation()"
-                 (pointerdown)="$event.stopPropagation()"
+                 (pointerdown)="beginNumberDrag(row, $event)"
+                 (pointermove)="updateNumberDrag($event)"
+                 (pointerup)="endNumberDrag($event)"
+                 (pointercancel)="endNumberDrag($event)"
                  (ngModelChange)="setPropertyValue(row, $event)" />
           <label class="property-bool" *ngIf="row.property.valueType == 'boolean'">
             <input type="checkbox"
@@ -137,13 +140,14 @@
              [style.width.px]="timelineContentWidth"
              [style.--timeline-grid-step]="gridStepWidth()"
              [style.--timeline-grid-offset]="gridOffset()"
-             (pointerdown)="beginScrub($event)"
-             (pointermove)="updateScrub($event)"
-             (pointerup)="endScrub($event)"
-             (pointercancel)="endScrub($event)">
+             (pointerdown)="beginLaneGesture(row, $event)"
+             (pointermove)="updateLaneGesture($event)"
+             (pointerup)="endLaneGesture($event)"
+             (pointercancel)="endLaneGesture($event)">
           <div class="playhead" [style.left]="playheadLeft()"></div>
           <button class="key-diamond"
                   *ngFor="let keyframe of keyframes(row)"
+                  [attr.data-keyframe-id]="keyframe.id"
                   [ngClass]="{'selected': isKeyframeSelected(keyframe)}"
                   [style.left]="keyframeLeft(keyframe.time)"
                   (pointerdown)="beginKeyframeDrag(keyframe, $event)"
@@ -157,12 +161,17 @@
       </div>
     </ng-container>
 
-    <div class="timeline-left-cell timeline-overscroll"></div>
-    <div class="timeline-time-cell timeline-overscroll">
+    <div class="timeline-left-cell timeline-overscroll"
+         [style.min-height.px]="overscrollHeight"></div>
+    <div class="timeline-time-cell timeline-overscroll"
+         [style.min-height.px]="overscrollHeight">
       <div class="timeline-time-content timeline-lane timeline-overscroll"
            [style.width.px]="timelineContentWidth"
+           [style.min-height.px]="overscrollHeight"
            [style.--timeline-grid-step]="gridStepWidth()"
            [style.--timeline-grid-offset]="gridOffset()"></div>
     </div>
   </div>
+
+  <div class="marquee-selection" *ngIf="marquee?.active" [ngStyle]="marqueeStyle()"></div>
 </div>

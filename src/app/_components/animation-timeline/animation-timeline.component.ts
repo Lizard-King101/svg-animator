@@ -1,4 +1,4 @@
-import { NgClass, NgFor, NgIf } from "@angular/common";
+import { NgClass, NgFor, NgIf, NgStyle } from "@angular/common";
 import { Component, ElementRef, EventEmitter, HostBinding, HostListener, Output } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
@@ -14,7 +14,7 @@ import { AnyElement } from "src/app/editor/objects/svg.object";
 @Component({
     standalone: true,
     selector: "animation-timeline",
-    imports: [NgFor, NgIf, NgClass, FormsModule, FaIconComponent, ColorAttribute],
+    imports: [NgFor, NgIf, NgClass, NgStyle, FormsModule, FaIconComponent, ColorAttribute],
     templateUrl: "animation-timeline.component.html",
     styleUrls: ["animation-timeline.component.scss"],
 })
@@ -23,6 +23,8 @@ export class AnimationTimelineComponent {
     @HostBinding("style.flex-basis.px") timelineHeight = 310;
     @HostBinding("class.resizing") resizingTimeline = false;
     @HostBinding("class.dragging-keyframe") get draggingKeyframe() { return !!this.keyframeDrag; }
+    @HostBinding("class.dragging-number") get draggingNumber() { return !!this.numberDrag; }
+    @HostBinding("class.selecting-keyframes") get selectingKeyframes() { return !!this.marquee; }
 
     readonly properties = ANIMATABLE_PROPERTIES;
     readonly timePadding = 28;
@@ -35,6 +37,8 @@ export class AnimationTimelineComponent {
     private resizeStartY = 0;
     private resizeStartHeight = 310;
     private keyframeDrag?: KeyframeDrag;
+    private numberDrag?: NumberDrag;
+    marquee?: KeyframeMarquee;
     private keyframeClipboard: CopiedKeyframe[] = [];
     private colorCache = new Map<string, { source: string; color: Color }>();
 
@@ -77,6 +81,15 @@ export class AnimationTimelineComponent {
 
     get timelineContentWidth(): number {
         return Math.max(360, (this.animation.duration * this.pixelsPerSecond) + (this.timePadding * 2));
+    }
+
+    get overscrollHeight(): number {
+        const toolbarHeight = 36;
+        const rulerHeight = 30;
+        const rowHeight = 30;
+        const availableHeight = this.timelineHeight - toolbarHeight - rulerHeight;
+        const usedRowHeight = this.rows.length * rowHeight;
+        return Math.max(96, availableHeight - usedRowHeight);
     }
 
     keyframeLeft(time: number): string {
@@ -168,7 +181,13 @@ export class AnimationTimelineComponent {
         event.stopPropagation();
         this.scrubbing = false;
 
-        if(!this.selectedKeyframeIds.has(keyframe.id)) {
+        if(event.shiftKey) {
+            if(this.selectedKeyframeIds.has(keyframe.id)) {
+                this.selectedKeyframeIds.delete(keyframe.id);
+            } else {
+                this.selectedKeyframeIds.add(keyframe.id);
+            }
+        } else if(!this.selectedKeyframeIds.has(keyframe.id)) {
             this.selectedKeyframeIds.clear();
             this.selectedKeyframeIds.add(keyframe.id);
         }
@@ -188,6 +207,12 @@ export class AnimationTimelineComponent {
             })),
         };
         (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    }
+
+    clearKeyframeSelection() {
+        if(!this.keyframeDrag) {
+            this.selectedKeyframeIds.clear();
+        }
     }
 
     updateKeyframeDrag(event: PointerEvent) {
@@ -394,13 +419,78 @@ export class AnimationTimelineComponent {
     }
 
     setPropertyValue(row: TimelineRow, value: unknown) {
+        this.setPropertyValueInternal(row, value, true);
+    }
+
+    beginNumberDrag(row: TimelineRow, event: PointerEvent) {
+        if(row.type !== "property" || row.property.valueType !== "number" || event.button !== 0) {
+            return;
+        }
+
+        const startValue = Number(this.propertyValue(row));
+        if(!Number.isFinite(startValue)) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        this.numberDrag = {
+            row,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startValue,
+            moved: false,
+        };
+        (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    }
+
+    updateNumberDrag(event: PointerEvent) {
+        if(!this.numberDrag || this.numberDrag.pointerId !== event.pointerId) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const deltaX = event.clientX - this.numberDrag.startX;
+        if(Math.abs(deltaX) > 2) {
+            this.numberDrag.moved = true;
+        }
+
+        const step = this.numericDragStep(this.numberDrag.row.property, event);
+        const value = this.normalizeDraggedNumber(this.numberDrag.row.property, this.numberDrag.startValue + (deltaX * step));
+        this.setPropertyValueInternal(this.numberDrag.row, value, false);
+    }
+
+    endNumberDrag(event: PointerEvent) {
+        if(!this.numberDrag || this.numberDrag.pointerId !== event.pointerId) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const moved = this.numberDrag.moved;
+        this.numberDrag = undefined;
+        try {
+            (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+        } catch {}
+
+        if(moved) {
+            this.animationChange.emit();
+        }
+    }
+
+    private setPropertyValueInternal(row: TimelineRow, value: unknown, emitChange: boolean) {
         if(row.type !== "property") {
             return;
         }
 
         const normalized = this.normalizeValue(row.property, value);
         this.animation.setAnimatedPropertyValue(row.element, row.property.property, row.property.valueType, normalized);
-        this.animationChange.emit();
+        if(emitChange) {
+            this.animationChange.emit();
+        }
     }
 
     beginScrub(event: PointerEvent) {
@@ -420,6 +510,92 @@ export class AnimationTimelineComponent {
         try {
             (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
         } catch {}
+    }
+
+    beginLaneGesture(row: TimelineRow, event: PointerEvent) {
+        if(event.button !== 0) {
+            return;
+        }
+
+        if(!event.shiftKey) {
+            this.selectedKeyframeIds.clear();
+        }
+
+        this.scrubbing = false;
+        const lane = event.currentTarget as HTMLElement;
+        const rect = lane.getBoundingClientRect();
+        this.marquee = {
+            pointerId: event.pointerId,
+            lane,
+            additive: event.shiftKey,
+            startX: event.clientX,
+            startY: event.clientY,
+            currentX: event.clientX,
+            currentY: event.clientY,
+            active: false,
+            baseSelection: new Set(this.selectedKeyframeIds),
+            rect,
+        };
+        lane.setPointerCapture(event.pointerId);
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    updateLaneGesture(event: PointerEvent) {
+        if(!this.marquee || this.marquee.pointerId !== event.pointerId) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        this.marquee.currentX = event.clientX;
+        this.marquee.currentY = event.clientY;
+
+        const distance = Math.hypot(this.marquee.currentX - this.marquee.startX, this.marquee.currentY - this.marquee.startY);
+        if(distance > 3) {
+            this.marquee.active = true;
+        }
+
+        if(this.marquee.active) {
+            this.updateMarqueeSelection();
+        }
+    }
+
+    endLaneGesture(event: PointerEvent) {
+        if(!this.marquee || this.marquee.pointerId !== event.pointerId) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const marquee = this.marquee;
+        this.marquee = undefined;
+        try {
+            marquee.lane.releasePointerCapture(event.pointerId);
+        } catch {}
+
+        if(!marquee.active) {
+            this.animation.seek(this.xToTime(event.clientX - marquee.rect.left));
+        }
+    }
+
+    marqueeStyle() {
+        if(!this.marquee || !this.marquee.active) {
+            return {};
+        }
+
+        const hostRect = this.host.nativeElement.getBoundingClientRect();
+        const left = Math.min(this.marquee.startX, this.marquee.currentX) - hostRect.left;
+        const top = Math.min(this.marquee.startY, this.marquee.currentY) - hostRect.top;
+        const width = Math.abs(this.marquee.currentX - this.marquee.startX);
+        const height = Math.abs(this.marquee.currentY - this.marquee.startY);
+        return {
+            left: `${left}px`,
+            top: `${top}px`,
+            width: `${width}px`,
+            height: `${height}px`,
+        };
     }
 
     beginResize(event: PointerEvent) {
@@ -481,6 +657,11 @@ export class AnimationTimelineComponent {
 
         if((event.key === "Delete" || event.key === "Backspace") && this.deleteSelectedKeyframes()) {
             this.consumeShortcut(event);
+            return;
+        }
+
+        if((event.key === "ArrowLeft" || event.key === "ArrowRight") && this.nudgeSelectedKeyframes(event.key === "ArrowLeft" ? -1 : 1, event.shiftKey)) {
+            this.consumeShortcut(event);
         }
     }
 
@@ -518,6 +699,45 @@ export class AnimationTimelineComponent {
         }
 
         return value;
+    }
+
+    private numericDragStep(property: AnimatablePropertyDefinition, event: PointerEvent): number {
+        const baseStep = this.numericBaseStep(property);
+        if(event.shiftKey) {
+            return baseStep * 10;
+        }
+        if(event.altKey || event.ctrlKey || event.metaKey) {
+            return baseStep / 10;
+        }
+        return baseStep;
+    }
+
+    private numericBaseStep(property: AnimatablePropertyDefinition): number {
+        switch(property.property) {
+            case "transform.scaleX":
+            case "transform.scaleY":
+            case "opacity":
+                return 0.01;
+            case "transform.rotation":
+                return 1;
+            case "settings.stroke_width":
+                return 0.25;
+            default:
+                return 1;
+        }
+    }
+
+    private normalizeDraggedNumber(property: AnimatablePropertyDefinition, value: number): number {
+        let normalized = value;
+        if(property.property === "opacity") {
+            normalized = Math.max(0, Math.min(1, normalized));
+        }
+        if(property.property === "settings.stroke_width") {
+            normalized = Math.max(0, normalized);
+        }
+
+        const precision = this.numericBaseStep(property) < 1 ? 1000 : 100;
+        return Math.round(normalized * precision) / precision;
     }
 
     private scrubToEvent(event: PointerEvent) {
@@ -561,6 +781,51 @@ export class AnimationTimelineComponent {
     private sortDraggedTracks() {
         const tracks = new Set(this.keyframeDrag?.entries.map((entry) => entry.track) ?? []);
         tracks.forEach((track) => track.keyframes.sort((a, b) => a.time - b.time));
+    }
+
+    private nudgeSelectedKeyframes(direction: -1 | 1, largeStep: boolean): boolean {
+        const entries = this.selectedKeyframeEntries();
+        if(entries.length === 0) {
+            return false;
+        }
+
+        const delta = direction * (largeStep ? 0.1 : 0.01);
+        entries.forEach((entry) => {
+            entry.keyframe.time = this.snapTime(entry.keyframe.time + delta);
+        });
+
+        const tracks = new Set(entries.map((entry) => entry.track));
+        tracks.forEach((track) => track.keyframes.sort((a, b) => a.time - b.time));
+        this.animation.previewAt(this.animation.currentTime);
+        this.animationChange.emit();
+        return true;
+    }
+
+    private updateMarqueeSelection() {
+        const marquee = this.marquee;
+        if(!marquee) {
+            return;
+        }
+
+        const left = Math.min(marquee.startX, marquee.currentX);
+        const right = Math.max(marquee.startX, marquee.currentX);
+        const top = Math.min(marquee.startY, marquee.currentY);
+        const bottom = Math.max(marquee.startY, marquee.currentY);
+        const nextSelection = marquee.additive ? new Set(marquee.baseSelection) : new Set<string>();
+
+        this.host.nativeElement.querySelectorAll<HTMLElement>(".key-diamond").forEach((diamond) => {
+            const rect = diamond.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            if(centerX >= left && centerX <= right && centerY >= top && centerY <= bottom) {
+                const id = diamond.dataset["keyframeId"];
+                if(id) {
+                    nextSelection.add(id);
+                }
+            }
+        });
+
+        this.selectedKeyframeIds = nextSelection;
     }
 
     private ensureTimelineTrack(targetId: string, property: string, valueType: AnimationTrack["valueType"]): AnimationTrack {
@@ -645,9 +910,9 @@ export class AnimationTimelineComponent {
     }
 }
 
-type TimelineRow =
-    | { type: "layer"; element: AnyElement; depth: number }
-    | { type: "property"; element: AnyElement; depth: number; property: AnimatablePropertyDefinition };
+type TimelineRow = LayerTimelineRow | PropertyTimelineRow;
+type LayerTimelineRow = { type: "layer"; element: AnyElement; depth: number };
+type PropertyTimelineRow = { type: "property"; element: AnyElement; depth: number; property: AnimatablePropertyDefinition };
 
 interface TimelineRulerMark {
     time: number;
@@ -669,6 +934,27 @@ interface KeyframeDrag {
     startX: number;
     moved: boolean;
     entries: KeyframeDragEntry[];
+}
+
+interface NumberDrag {
+    row: PropertyTimelineRow;
+    pointerId: number;
+    startX: number;
+    startValue: number;
+    moved: boolean;
+}
+
+interface KeyframeMarquee {
+    pointerId: number;
+    lane: HTMLElement;
+    additive: boolean;
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+    active: boolean;
+    baseSelection: Set<string>;
+    rect: DOMRect;
 }
 
 interface CopiedKeyframe {
