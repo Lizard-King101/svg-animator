@@ -31,7 +31,21 @@ function drawOffsetAttr(path: Path): number {
     return 1 - Math.max(0, Math.min(1, path.drawProgress));
 }
 
-export function buildSVGMarkup(svg: SVG): string {
+function drawAttr(path: Path, value: number): number | null {
+    return drawOffsetAttr(path) > 0 ? value : null;
+}
+
+function drawDashoffsetAttr(path: Path): number | null {
+    const offset = drawOffsetAttr(path);
+    return offset > 0 ? offset : null;
+}
+
+export interface SVGMarkupOptions {
+    bakeRoundedCorners?: boolean;
+}
+
+export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string {
+    const bakeRoundedCorners = options.bakeRoundedCorners ?? true;
     const lines: string[] = [
         `<svg xmlns="http://www.w3.org/2000/svg" width="${escapeXmlAttribute(svg.width)}" height="${escapeXmlAttribute(svg.height)}" viewBox="0 0 ${escapeXmlAttribute(svg.width)} ${escapeXmlAttribute(svg.height)}">`
     ];
@@ -58,7 +72,7 @@ export function buildSVGMarkup(svg: SVG): string {
                 lines.push(
                     `${indent}<path` +
                     attr('id', element.id) +
-                    attr('d', element.raw) +
+                    attr('d', bakeRoundedCorners ? element.raw : element.rawUnrounded) +
                     attr('transform', transform) +
                     attr('opacity', opacityAttr(element.opacity)) +
                     attr('fill', s.fill_enabled && s.fill ? s.fill.hex : 'none') +
@@ -66,9 +80,9 @@ export function buildSVGMarkup(svg: SVG): string {
                     attr('stroke-width', s.stroke_width ?? null) +
                     attr('stroke-linecap', s.line_cap ?? null) +
                     attr('stroke-linejoin', s.line_join ?? null) +
-                    attr('pathLength', 1) +
-                    attr('stroke-dasharray', 1) +
-                    attr('stroke-dashoffset', drawOffsetAttr(element)) +
+                    attr('pathLength', drawAttr(element, 1)) +
+                    attr('stroke-dasharray', drawAttr(element, 1)) +
+                    attr('stroke-dashoffset', drawDashoffsetAttr(element)) +
                     `/>`
                 );
             } else if(element instanceof TextElement) {

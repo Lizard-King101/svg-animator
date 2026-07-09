@@ -74,6 +74,9 @@ export class EditorPage implements AfterViewInit {
     newWidth = 800;
     newHeight = 600;
 
+    showExportDialog = false;
+    exportBakeRoundedCorners = true;
+
     readonly ASPECT_RATIOS = [
         { label: '1920×1080', sublabel: '16:9 HD',     width: 1920, height: 1080 },
         { label: '1280×720',  sublabel: '16:9 720p',   width: 1280, height: 720  },
@@ -88,6 +91,11 @@ export class EditorPage implements AfterViewInit {
     @ViewChild('viewPort') viewPort?: ElementRef<HTMLElement>;
 
     @HostListener('document:keydown', ['$event']) handleKeyDown(event: KeyboardEvent) {
+        if(this.showExportDialog) {
+            if(event.key == 'Escape') this.cancelExport();
+            return;
+        }
+
         if(this.showNewDialog) {
             if(event.key == 'Escape') this.cancelNewSVG();
             return;
@@ -910,12 +918,23 @@ export class EditorPage implements AfterViewInit {
 
     // ── Export ───────────────────────────────────────────────────────
 
-    exportSVG() {
+    openExportDialog() {
+        if(!this.editor.selectedSVG) return;
+        this.exportBakeRoundedCorners = true;
+        this.showExportDialog = true;
+    }
+
+    cancelExport() {
+        this.showExportDialog = false;
+    }
+
+    confirmExportSVG() {
         const svg = this.editor.selectedSVG;
         if(!svg) return;
+        const options = { bakeRoundedCorners: this.exportBakeRoundedCorners };
         const markup = this.animation.mode === 'animate'
-            ? buildSVGMarkup(svg)
-            : this.animation.withBaseState(() => buildSVGMarkup(svg));
+            ? buildSVGMarkup(svg, options)
+            : this.animation.withBaseState(() => buildSVGMarkup(svg, options));
         const blob = new Blob([markup], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -923,6 +942,7 @@ export class EditorPage implements AfterViewInit {
         a.download = `${svg.name ?? 'drawing'}.svg`;
         a.click();
         URL.revokeObjectURL(url);
+        this.showExportDialog = false;
     }
 
     setEditorMode(mode: 'edit' | 'animate') {
@@ -997,6 +1017,10 @@ export class EditorPage implements AfterViewInit {
 
     asShape(element: AnyElement | undefined): Shape | null {
         return element instanceof Shape ? element : null;
+    }
+
+    asPath(element: AnyElement | undefined): Path | null {
+        return element instanceof Path ? element : null;
     }
 
     groupIsCollapsed(group: Group): boolean {
@@ -1118,6 +1142,63 @@ export class EditorPage implements AfterViewInit {
         }
 
         this.scheduleAttributeSnapshot();
+    }
+
+    selectedCornerAnchor(path: Path): Point | null {
+        const anchor = this.editor.selectedPathAnchor;
+        return anchor && path.findPointById(anchor.id) === anchor ? anchor : null;
+    }
+
+    cornerRadiusValue(anchor: Point): number {
+        return anchor.cornerRadius ?? 0;
+    }
+
+    cornerRadiusEnabled(path: Path, anchor: Point): boolean {
+        return path.cornerEligible(anchor);
+    }
+
+    anchorPositionValue(anchor: Point, axis: 'x' | 'y'): number {
+        return anchor[axis];
+    }
+
+    setAnchorPositionValue(path: Path, anchor: Point, axis: 'x' | 'y', value: number | string | null) {
+        const numeric = typeof value === 'number' ? value : Number(value);
+        if(!Number.isFinite(numeric)) {
+            return;
+        }
+
+        const delta = axis === 'x'
+            ? new Point(numeric - anchor.x, 0)
+            : new Point(0, numeric - anchor.y);
+        this.movePathAnchor(path, anchor, delta);
+        this.scheduleAttributeSnapshot();
+    }
+
+    setCornerRadius(path: Path, anchor: Point, value: number | string | null) {
+        const numeric = typeof value === 'number' ? value : Number(value);
+        if(!Number.isFinite(numeric)) {
+            return;
+        }
+
+        anchor.cornerRadius = Math.max(0, numeric);
+        this.scheduleAttributeSnapshot();
+    }
+
+    private movePathAnchor(path: Path, anchor: Point, delta: Point) {
+        const moved: Point[] = [anchor];
+        anchor.addTo(delta);
+
+        path.lines.forEach((line) => {
+            if(line.points[0] == anchor && line.controlStart && !moved.includes(line.controlStart)) {
+                line.controlStart.addTo(delta);
+                moved.push(line.controlStart);
+            }
+
+            if(line.points[1] == anchor && line.controlEnd && !moved.includes(line.controlEnd)) {
+                line.controlEnd.addTo(delta);
+                moved.push(line.controlEnd);
+            }
+        });
     }
 
     animationPropertiesFor(element: AnyElement | undefined): readonly AnimatablePropertyDefinition[] {
@@ -1352,6 +1433,7 @@ export class EditorPage implements AfterViewInit {
         let cloned = pointMap.get(point.id);
         if(!cloned) {
             cloned = new Point(point.x, point.y);
+            cloned.cornerRadius = point.cornerRadius;
             pointMap.set(point.id, cloned);
         }
         return cloned;

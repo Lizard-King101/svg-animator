@@ -341,6 +341,11 @@ $border-color_1: var(--accent);
 				&:focus {
 					border-color: $border-color_1;
 				}
+
+				&:disabled {
+					opacity: 0.45;
+					cursor: not-allowed;
+				}
 			}
 		}
 	}
@@ -1110,6 +1115,62 @@ $border-color_1: var(--accent);
         box-shadow: 0 0 12px var(--accent-glow);
       }
     }
+  }
+}
+
+.export-dialog {
+  width: 440px;
+
+  .export-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .export-option,
+  .export-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 40px;
+    padding: 8px 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+
+    input {
+      flex: 0 0 auto;
+      accent-color: var(--accent);
+    }
+
+    span {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+      font-size: 12px;
+    }
+
+    strong {
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    small {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+  }
+
+  .export-option.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .export-check {
+    background: transparent;
   }
 }
 

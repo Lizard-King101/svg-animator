@@ -21,9 +21,9 @@
         [attr.stroke-width]="path.settings.stroke_width"
         [attr.stroke-linecap]="path.settings.line_cap"
         [attr.stroke-linejoin]="path.settings.line_join"
-        pathLength="1"
-        stroke-dasharray="1"
-        [attr.stroke-dashoffset]="drawOffsetAttr(path)"
+        [attr.pathLength]="drawPathLengthAttr(path)"
+        [attr.stroke-dasharray]="drawDasharrayAttr(path)"
+        [attr.stroke-dashoffset]="drawDashoffsetAttr(path)"
         />
     </ng-container>
     <ng-container *ngIf="element.visible && asShape(element) as shape">
@@ -142,7 +142,7 @@
         <ng-container *ngFor="let segment of completeSegments(selectedPath)">
             <svg:path
             [attr.data-segment-id]="segment.id"
-            [attr.d]="segmentPath(segment)"
+            [attr.d]="segmentPath(selectedPath, segment)"
             fill="none"
             [attr.stroke]="editor.selectedPathLine == segment ? '#2dd4bf' : 'transparent'"
             [attr.stroke-width]="screenPx(editor.selectedPathLine == segment ? 2.5 : 12)"

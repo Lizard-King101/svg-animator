@@ -3,25 +3,33 @@ export interface PointSave {
     id: string;
     x: number;
     y: number;
+    cornerRadius?: number;
 }
 
 export class Point {
     id: string;
     x: number;
     y: number;
+    cornerRadius: number = 0;
 
-    constructor(x: number, y: number, id?: string) {
+    constructor(x: number, y: number, id?: string, cornerRadius = 0) {
         this.id = id ?? Math.random().toString(36).substr(2, 9);
         this.x = x;
         this.y = y;
+        this.cornerRadius = Math.max(0, cornerRadius);
     }
 
     toSave(): PointSave {
-        return { id: this.id, x: this.x, y: this.y };
+        return {
+            id: this.id,
+            x: this.x,
+            y: this.y,
+            ...(this.cornerRadius > 0 ? { cornerRadius: this.cornerRadius } : {}),
+        };
     }
 
     static fromSave(s: PointSave): Point {
-        return new Point(s.x, s.y, s.id);
+        return new Point(s.x, s.y, s.id, s.cornerRadius ?? 0);
     }
 
     distanceFrom(x: number, y: number): number;

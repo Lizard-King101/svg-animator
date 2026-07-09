@@ -21,7 +21,7 @@
         <button [ngClass]="{'active': animation.mode == 'animate'}"
                 (click)="setEditorMode('animate')">Animate</button>
       </div>
-      <button class="btn-export" (click)="exportSVG()" [disabled]="!editor.selectedSVG" title="Export SVG">
+      <button class="btn-export" (click)="openExportDialog()" [disabled]="!editor.selectedSVG" title="Export SVG">
         <fa-icon icon="download"></fa-icon>
         <span>Export</span>
       </button>
@@ -221,6 +221,34 @@
                      (ngModelChange)="setShapeFrameValue(selectedShape, 'height', $event)" />
             </label>
           </div>
+        </div>
+        <div class="transform-section" *ngIf="asPath(editor.inspectedElement) as selectedPath">
+          <ng-container *ngIf="selectedCornerAnchor(selectedPath) as anchor">
+            <div class="transform-title">Anchor</div>
+            <div class="transform-grid">
+              <label>
+                <span>X</span>
+                <input type="number"
+                       [ngModel]="anchorPositionValue(anchor, 'x')"
+                       (ngModelChange)="setAnchorPositionValue(selectedPath, anchor, 'x', $event)" />
+              </label>
+              <label>
+                <span>Y</span>
+                <input type="number"
+                       [ngModel]="anchorPositionValue(anchor, 'y')"
+                       (ngModelChange)="setAnchorPositionValue(selectedPath, anchor, 'y', $event)" />
+              </label>
+              <label>
+                <span>Corner Radius</span>
+                <input type="number"
+                       min="0"
+                       step="1"
+                       [disabled]="!cornerRadiusEnabled(selectedPath, anchor)"
+                       [ngModel]="cornerRadiusValue(anchor)"
+                       (ngModelChange)="setCornerRadius(selectedPath, anchor, $event)" />
+              </label>
+            </div>
+          </ng-container>
         </div>
         <div class="transform-section">
           <div class="transform-title">Offset</div>
@@ -440,6 +468,51 @@
         <button class="btn-create" (click)="confirmNewSVG()">
           <fa-icon icon="plus"></fa-icon>
           Create
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Export dialog ── -->
+  <div class="dialog-overlay" *ngIf="showExportDialog" (click)="cancelExport()">
+    <div class="dialog export-dialog" (click)="$event.stopPropagation()">
+      <div class="dialog-header">Export</div>
+
+      <div class="dialog-body">
+        <div class="export-options">
+          <label class="export-option">
+            <input type="radio" checked />
+            <span>
+              <strong>Static SVG</strong>
+            </span>
+          </label>
+          <label class="export-option disabled">
+            <input type="radio" disabled />
+            <span>
+              <strong>Animated SVG</strong>
+              <small>Planned</small>
+            </span>
+          </label>
+          <label class="export-option disabled">
+            <input type="radio" disabled />
+            <span>
+              <strong>Embedded Animation JSON</strong>
+              <small>Planned</small>
+            </span>
+          </label>
+        </div>
+
+        <label class="export-check">
+          <input type="checkbox" [(ngModel)]="exportBakeRoundedCorners" />
+          <span>Bake rounded corners into path data</span>
+        </label>
+      </div>
+
+      <div class="dialog-footer">
+        <button class="btn-cancel" (click)="cancelExport()">Cancel</button>
+        <button class="btn-create" (click)="confirmExportSVG()">
+          <fa-icon icon="download"></fa-icon>
+          Export
         </button>
       </div>
     </div>

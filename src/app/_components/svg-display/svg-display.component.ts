@@ -71,6 +71,19 @@ export class SVGDisplay implements AfterViewInit {
         return 1 - Math.max(0, Math.min(1, path.drawProgress));
     }
 
+    drawPathLengthAttr(path: Path): number | null {
+        return this.drawOffsetAttr(path) > 0 ? 1 : null;
+    }
+
+    drawDasharrayAttr(path: Path): number | null {
+        return this.drawOffsetAttr(path) > 0 ? 1 : null;
+    }
+
+    drawDashoffsetAttr(path: Path): number | null {
+        const offset = this.drawOffsetAttr(path);
+        return offset > 0 ? offset : null;
+    }
+
     screenPx(px: number): number {
         const zoom = Math.max(0.01, this.editor.selectedSVG?.zoom || 1);
         return px / Math.pow(zoom, 0.85);
@@ -158,18 +171,8 @@ export class SVGDisplay implements AfterViewInit {
         });
     }
 
-    segmentPath(line: Line) {
-        if(line.points.length < 2) {
-            return '';
-        }
-
-        const start = line.points[0];
-        const end = line.points[1];
-        if(line.type == 'bezier' && line.controlStart && line.controlEnd) {
-            return `M ${start.x} ${start.y} C ${line.controlStart.x} ${line.controlStart.y} ${line.controlEnd.x} ${line.controlEnd.y} ${end.x} ${end.y}`;
-        }
-
-        return `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
+    segmentPath(path: Path, line: Line) {
+        return path.segmentRaw(line);
     }
 }
 
