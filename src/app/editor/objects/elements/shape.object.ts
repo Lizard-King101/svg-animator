@@ -1,6 +1,7 @@
 import { EditorService } from "src/app/_services/editor.service";
 import { ElementAttribute, SettingsFromAttributes } from "./element";
 import { Color } from "../color.object";
+import { defaultMotion, MotionSave, MotionState, restoreMotion, serializeMotion } from "../motion.object";
 import { Point, PointSave } from "../point.object";
 import { defaultTransform, restoreTransform, serializeTransform, TransformSave, TransformState } from "../transform.object";
 
@@ -12,6 +13,7 @@ export interface ShapeSave {
     locked: boolean;
     opacity?: number;
     transform?: TransformSave;
+    motion?: MotionSave;
     shapeType: 'rectangle' | 'ellipse';
     position: PointSave;
     settings: {
@@ -91,6 +93,7 @@ export class Shape {
     locked: boolean = false;
     opacity: number = 1;
     transform: TransformState = defaultTransform();
+    motion: MotionState = defaultMotion();
     position: Point;
     type: 'ellipse' | 'rectangle';
 
@@ -166,6 +169,7 @@ export class Shape {
             locked: this.locked,
             opacity: this.opacity,
             transform: serializeTransform(this.transform),
+            motion: serializeMotion(this.motion),
             shapeType: this.type,
             position: this.position.toSave(),
             settings: {
@@ -192,6 +196,7 @@ export class Shape {
         shape.locked = s.locked;
         shape.opacity = s.opacity ?? 1;
         shape.transform = restoreTransform(s.transform);
+        shape.motion = restoreMotion(s.motion);
         shape.settings = {
             width: s.settings.width,
             height: s.settings.height,

@@ -75,6 +75,11 @@ export const ANIMATABLE_PROPERTIES: readonly AnimatablePropertyDefinition[] = [
     { property: "settings.stroke", label: "Stroke", valueType: "color", group: "style", mvp: true },
     { property: "settings.stroke_width", label: "Stroke Width", valueType: "number", group: "style", mvp: true },
     { property: "path.drawProgress", label: "Draw Progress", valueType: "number", group: "path", mvp: true },
+    { property: "motion.progress", label: "Motion Progress", valueType: "number", group: "path", mvp: true },
+    { property: "motion.rotateToPath", label: "Rotate To Path", valueType: "boolean", group: "path", mvp: true },
+    { property: "motion.offsetAngle", label: "Offset Angle", valueType: "number", group: "path", mvp: true },
+    { property: "motion.offsetX", label: "Motion Offset X", valueType: "number", group: "path", mvp: true },
+    { property: "motion.offsetY", label: "Motion Offset Y", valueType: "number", group: "path", mvp: true },
     { property: "visible", label: "Visibility", valueType: "boolean", group: "visibility", mvp: true },
 ];
 

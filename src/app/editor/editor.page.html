@@ -73,18 +73,28 @@
           <span>Click <strong>New</strong> to start drawing</span>
         </div>
       </div>
+      <ng-template #contextMenuItems let-items>
+        <div class="context-menu-row" *ngFor="let item of items">
+          <button class="context-menu-item"
+                  [ngClass]="{'has-submenu': item.children?.length}"
+                  (click)="$event.stopPropagation(); runContextMenuItem(item)">
+            <span>{{ item.label }}</span>
+            <span class="context-menu-shortcut" *ngIf="item.shortcut">{{ item.shortcut }}</span>
+            <fa-icon class="context-menu-arrow" *ngIf="item.children?.length" icon="angle-right"></fa-icon>
+          </button>
+          <div class="context-submenu" *ngIf="item.children?.length">
+            <ng-container *ngTemplateOutlet="contextMenuItems; context: { $implicit: item.children }"></ng-container>
+          </div>
+        </div>
+      </ng-template>
+
       <div class="context-menu" *ngIf="editor.contextMenu"
            (mousedown)="$event.stopPropagation()"
            (click)="$event.stopPropagation()"
            (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
            [style.left.px]="editor.contextMenu.x"
            [style.top.px]="editor.contextMenu.y">
-        <button class="context-menu-item"
-                *ngFor="let item of editor.contextMenu.items"
-                (click)="$event.stopPropagation(); runContextMenuItem(item)">
-          <span>{{ item.label }}</span>
-          <span class="context-menu-shortcut" *ngIf="item.shortcut">{{ item.shortcut }}</span>
-        </button>
+        <ng-container *ngTemplateOutlet="contextMenuItems; context: { $implicit: editor.contextMenu.items }"></ng-container>
         <div class="context-menu-info" *ngIf="editor.contextMenu.infoLines?.length">
           <div class="context-menu-info-title" *ngIf="editor.contextMenu.infoTitle">{{ editor.contextMenu.infoTitle }}</div>
           <div class="context-menu-info-line" *ngFor="let line of editor.contextMenu.infoLines">{{ line }}</div>
@@ -348,18 +358,28 @@
     </div>
   </div>
 
+  <ng-template #rootContextMenuItems let-items>
+    <div class="context-menu-row" *ngFor="let item of items">
+      <button class="context-menu-item"
+              [ngClass]="{'has-submenu': item.children?.length}"
+              (click)="$event.stopPropagation(); runContextMenuItem(item)">
+        <span>{{ item.label }}</span>
+        <span class="context-menu-shortcut" *ngIf="item.shortcut">{{ item.shortcut }}</span>
+        <fa-icon class="context-menu-arrow" *ngIf="item.children?.length" icon="angle-right"></fa-icon>
+      </button>
+      <div class="context-submenu" *ngIf="item.children?.length">
+        <ng-container *ngTemplateOutlet="rootContextMenuItems; context: { $implicit: item.children }"></ng-container>
+      </div>
+    </div>
+  </ng-template>
+
   <div class="context-menu" *ngIf="editor.contextMenu"
        (mousedown)="$event.stopPropagation()"
        (click)="$event.stopPropagation()"
        (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
        [style.left.px]="editor.contextMenu.x"
        [style.top.px]="editor.contextMenu.y">
-    <button class="context-menu-item"
-            *ngFor="let item of editor.contextMenu.items"
-            (click)="$event.stopPropagation(); editor.runContextMenuItem(item)">
-      <span>{{ item.label }}</span>
-      <span class="context-menu-shortcut" *ngIf="item.shortcut">{{ item.shortcut }}</span>
-    </button>
+    <ng-container *ngTemplateOutlet="rootContextMenuItems; context: { $implicit: editor.contextMenu.items }"></ng-container>
     <div class="context-menu-info" *ngIf="editor.contextMenu.infoLines?.length">
       <div class="context-menu-info-title" *ngIf="editor.contextMenu.infoTitle">{{ editor.contextMenu.infoTitle }}</div>
       <div class="context-menu-info-line" *ngFor="let line of editor.contextMenu.infoLines">{{ line }}</div>

@@ -1,5 +1,5 @@
 import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, HostListener, NgZone, ViewChild } from "@angular/core";
-import { NgClass, NgFor, NgIf } from "@angular/common";
+import { NgClass, NgFor, NgIf, NgTemplateOutlet } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute } from "@angular/router";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
@@ -31,7 +31,7 @@ import { pathPointAnimationProperty, readAnimationProperty } from "./objects/ani
 @Component({
     standalone: true,
     imports: [
-        NgFor, NgIf, NgClass,
+        NgFor, NgIf, NgClass, NgTemplateOutlet,
         FormsModule,
         FaIconComponent,
         SVGDisplay,
@@ -627,6 +627,10 @@ export class EditorPage implements AfterViewInit {
             return element instanceof Path;
         }
 
+        if(definition.property.startsWith('motion.')) {
+            return !!element.motion.pathId;
+        }
+
         if(definition.property.startsWith('transform.') || definition.property === 'visible' || definition.property === 'opacity') {
             return true;
         }
@@ -650,7 +654,7 @@ export class EditorPage implements AfterViewInit {
                 return value;
             }
 
-            return definition.property === 'path.drawProgress'
+            return definition.property === 'path.drawProgress' || definition.property === 'motion.progress'
                 ? Math.max(0, Math.min(1, numeric))
                 : numeric;
         }
@@ -834,6 +838,7 @@ export class EditorPage implements AfterViewInit {
         clone.opacity = path.opacity;
         clone.closed = path.closed;
         clone.transform = { ...path.transform };
+        clone.motion = { ...path.motion };
         clone.settings = {
             ...path.settings,
             stroke: this.cloneColor(path.settings.stroke),
@@ -864,6 +869,7 @@ export class EditorPage implements AfterViewInit {
         clone.locked = false;
         clone.opacity = shape.opacity;
         clone.transform = { ...shape.transform };
+        clone.motion = { ...shape.motion };
         clone.settings = {
             ...shape.settings,
             stroke: this.cloneColor(shape.settings.stroke),
@@ -879,6 +885,7 @@ export class EditorPage implements AfterViewInit {
         clone.locked = false;
         clone.opacity = text.opacity;
         clone.transform = { ...text.transform };
+        clone.motion = { ...text.motion };
         clone.settings = {
             ...text.settings,
             color: text.settings.color ? new Color(text.settings.color.hex) : null,
@@ -893,6 +900,7 @@ export class EditorPage implements AfterViewInit {
         clone.locked = false;
         clone.opacity = group.opacity;
         clone.transform = { ...group.transform };
+        clone.motion = { ...group.motion };
         const clonedElements = group.elements.map((element) => {
             return {
                 original: element,
@@ -1186,6 +1194,42 @@ export class EditorPage implements AfterViewInit {
         this.snapshotAndSave();
     }
 
+    availableMotionPaths(element: AnyElement): Path[] {
+        const svg = this.editor.selectedSVG;
+        if(!svg) {
+            return [];
+        }
+
+        const paths: Path[] = [];
+        const collect = (elements: AnyElement[]) => {
+            elements.forEach((candidate) => {
+                if(candidate instanceof Path && candidate !== element && !this.elementContains(element, candidate)) {
+                    paths.push(candidate);
+                }
+
+                if(candidate instanceof Group) {
+                    collect(candidate.elements);
+                }
+            });
+        };
+
+        collect(svg.elements);
+        return paths;
+    }
+
+    attachMotionPath(element: AnyElement, path: Path) {
+        element.motion.pathId = path.id;
+        element.motion.progress = 0;
+        element.motion.offsetX = 0;
+        element.motion.offsetY = 0;
+        this.snapshotAndSave();
+    }
+
+    detachMotionPath(element: AnyElement) {
+        element.motion.pathId = null;
+        this.snapshotAndSave();
+    }
+
     openLayerContextMenu(event: MouseEvent, element: AnyElement) {
         event.preventDefault();
         event.stopPropagation();
@@ -1194,6 +1238,7 @@ export class EditorPage implements AfterViewInit {
         }
 
         const menuPosition = new Point(event.clientX, event.clientY);
+        const motionPaths = this.availableMotionPaths(element);
         const items: EditorContextMenuItem[] = [
             {
                 label: 'Rename Layer',
@@ -1209,6 +1254,21 @@ export class EditorPage implements AfterViewInit {
                     this.duplicateLayer(element);
                 }
             },
+            ...(motionPaths.length ? [{
+                label: 'Attach Motion To',
+                children: motionPaths.map((path) => ({
+                    label: path.name,
+                    action: () => {
+                        this.attachMotionPath(element, path);
+                    }
+                }))
+            }] : []),
+            ...(element.motion.pathId ? [{
+                label: 'Detach Motion Path',
+                action: () => {
+                    this.detachMotionPath(element);
+                }
+            }] : []),
             ...(this.canGroupSelectedLayers() ? [{
                 label: 'Group Selection',
                 shortcut: 'Ctrl+G',

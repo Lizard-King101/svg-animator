@@ -58,6 +58,36 @@ $border-color_1: var(--accent);
 			color: $color_2;
 		}
 	}
+	.context-menu-row {
+		position: relative;
+	}
+	.context-menu-row:hover > .context-submenu {
+		display: flex;
+	}
+	.context-menu-item.has-submenu {
+		padding-right: 8px;
+	}
+	.context-menu-arrow {
+		margin-left: auto;
+		color: $color_3;
+		font-size: 10px;
+	}
+	.context-submenu {
+		position: absolute;
+		top: -6px;
+		left: calc(100% + 6px);
+		z-index: 1001;
+		min-width: 190px;
+		max-height: min(360px, calc(100vh - 24px));
+		overflow-y: auto;
+		display: none;
+		flex-direction: column;
+		padding: 6px;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border-bright);
+		border-radius: var(--radius-md);
+		box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+	}
 	.context-menu-shortcut {
 		color: $color_3;
 		font-family: $font-family_1;
