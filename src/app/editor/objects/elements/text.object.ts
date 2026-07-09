@@ -11,6 +11,7 @@ export interface TextSave {
     name: string;
     visible: boolean;
     locked: boolean;
+    opacity?: number;
     transform?: TransformSave;
     position: PointSave;
     settings: {
@@ -91,6 +92,7 @@ export class TextElement {
     name: string;
     visible: boolean = true;
     locked: boolean = false;
+    opacity: number = 1;
     transform: TransformState = defaultTransform();
     position: Point;
 
@@ -161,6 +163,7 @@ export class TextElement {
             name: this.name,
             visible: this.visible,
             locked: this.locked,
+            opacity: this.opacity,
             transform: serializeTransform(this.transform),
             position: this.position.toSave(),
             settings: {
@@ -180,6 +183,7 @@ export class TextElement {
         t.name = s.name;
         t.visible = s.visible;
         t.locked = s.locked;
+        t.opacity = s.opacity ?? 1;
         t.transform = restoreTransform(s.transform);
         t.settings = {
             content: s.settings.content,

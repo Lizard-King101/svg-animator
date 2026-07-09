@@ -23,6 +23,10 @@ function attr(name: string, value: unknown): string {
     return value != null ? ` ${name}="${escapeXmlAttribute(value)}"` : '';
 }
 
+function opacityAttr(value: number): number | null {
+    return value === 1 ? null : value;
+}
+
 export function buildSVGMarkup(svg: SVG): string {
     const lines: string[] = [
         `<svg xmlns="http://www.w3.org/2000/svg" width="${escapeXmlAttribute(svg.width)}" height="${escapeXmlAttribute(svg.height)}" viewBox="0 0 ${escapeXmlAttribute(svg.width)} ${escapeXmlAttribute(svg.height)}">`
@@ -42,7 +46,7 @@ export function buildSVGMarkup(svg: SVG): string {
                     lines.push(`${indent}  </clipPath>`);
                     lines.push(`${indent}</defs>`);
                 }
-                lines.push(`${indent}<g${attr('id', element.id)}${attr('transform', transform)}${attr('clip-path', element.clipElement ? `url(#${element.clipPathId})` : null)}>`);
+                lines.push(`${indent}<g${attr('id', element.id)}${attr('transform', transform)}${attr('opacity', opacityAttr(element.opacity))}${attr('clip-path', element.clipElement ? `url(#${element.clipPathId})` : null)}>`);
                 appendElements(element.renderedElements as AnyElement[], depth + 1);
                 lines.push(`${indent}</g>`);
             } else if(element instanceof Path) {
@@ -52,6 +56,7 @@ export function buildSVGMarkup(svg: SVG): string {
                     attr('id', element.id) +
                     attr('d', element.raw) +
                     attr('transform', transform) +
+                    attr('opacity', opacityAttr(element.opacity)) +
                     attr('fill', s.fill_enabled && s.fill ? s.fill.hex : 'none') +
                     attr('stroke', s.stroke?.hex ?? null) +
                     attr('stroke-width', s.stroke_width ?? null) +
@@ -71,6 +76,7 @@ export function buildSVGMarkup(svg: SVG): string {
                     attr('x', element.x) +
                     attr('y', element.y) +
                     attr('transform', transform) +
+                    attr('opacity', opacityAttr(element.opacity)) +
                     attr('font-size', s.font_size) +
                     attr('font-family', s.font_family) +
                     attr('font-weight', s.font_weight) +
@@ -92,6 +98,7 @@ export function buildSVGMarkup(svg: SVG): string {
                         attr('x', element.x) +
                         attr('y', element.y) +
                         attr('transform', transform) +
+                        attr('opacity', opacityAttr(element.opacity)) +
                         attr('width', element.width) +
                         attr('height', element.height) +
                         attr('rx', cr) +
@@ -106,6 +113,7 @@ export function buildSVGMarkup(svg: SVG): string {
                         attr('cx', element.centerX) +
                         attr('cy', element.centerY) +
                         attr('transform', transform) +
+                        attr('opacity', opacityAttr(element.opacity)) +
                         attr('rx', element.radiusX) +
                         attr('ry', element.radiusY) +
                         fillAttr + strokeAttr + swAttr +

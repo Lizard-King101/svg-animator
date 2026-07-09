@@ -10,6 +10,7 @@ export interface ShapeSave {
     name: string;
     visible: boolean;
     locked: boolean;
+    opacity?: number;
     transform?: TransformSave;
     shapeType: 'rectangle' | 'ellipse';
     position: PointSave;
@@ -88,6 +89,7 @@ export class Shape {
     name: string;
     visible: boolean = true;
     locked: boolean = false;
+    opacity: number = 1;
     transform: TransformState = defaultTransform();
     position: Point;
     type: 'ellipse' | 'rectangle';
@@ -162,6 +164,7 @@ export class Shape {
             name: this.name,
             visible: this.visible,
             locked: this.locked,
+            opacity: this.opacity,
             transform: serializeTransform(this.transform),
             shapeType: this.type,
             position: this.position.toSave(),
@@ -187,6 +190,7 @@ export class Shape {
         shape.name = s.name;
         shape.visible = s.visible;
         shape.locked = s.locked;
+        shape.opacity = s.opacity ?? 1;
         shape.transform = restoreTransform(s.transform);
         shape.settings = {
             width: s.settings.width,

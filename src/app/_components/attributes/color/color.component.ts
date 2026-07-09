@@ -33,18 +33,21 @@ export class ColorAttribute implements AfterViewInit, ControlValueAccessor {
     }
 
     updateHEX() {
+        this.color.preferredSpace = 'rgb';
         this.rgb = this.color.rgb;
         this.hsl = this.color.hsl;
         this.emitChange();
     }
 
     updateHSL() {
+        this.color.preferredSpace = 'hsl';
         this.color.hsl = this.hsl;
         this.rgb = this.color.rgb;
         this.emitChange();
     }
 
     updateRGB() {
+        this.color.preferredSpace = 'rgb';
         this.color.rgb = this.rgb;
         this.hsl = this.color.hsl;
         this.emitChange();
@@ -62,7 +65,13 @@ export class ColorAttribute implements AfterViewInit, ControlValueAccessor {
 
     writeValue(_value: Color | null) {
         if (_value) {
-            this.color = _value;
+            const preferredSpace = _value.preferredSpace ?? 'rgb';
+            if(this.color.hex === _value.hex && this.color.preferredSpace === preferredSpace) {
+                return;
+            }
+
+            this.color = new Color(_value.hex);
+            this.color.preferredSpace = preferredSpace;
             this.rgb = this.color.rgb;
             this.hsl = this.color.hsl;
         } else {

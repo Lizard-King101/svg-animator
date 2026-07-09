@@ -2,6 +2,7 @@ export class Color {
     _hex: string = '#ff0000';
     _rgb: RGB = {r: 255, g: 0, b: 0};
     _hsl: HSL = {h: 0, s: 1, l: .5};
+    preferredSpace: ColorSpace = 'rgb';
 
 
     get hex(): string {
@@ -149,3 +150,5 @@ export interface HSL {
     s: number;
     l: number;
 }
+
+export type ColorSpace = 'rgb' | 'hsl';

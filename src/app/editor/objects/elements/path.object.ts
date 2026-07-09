@@ -11,6 +11,7 @@ export interface PathSave {
     name: string;
     visible: boolean;
     locked: boolean;
+    opacity?: number;
     transform?: TransformSave;
     closed: boolean;
     settings: {
@@ -99,6 +100,7 @@ export class Path {
     name: string;
     visible: boolean = true;
     locked: boolean = false;
+    opacity: number = 1;
     transform: TransformState = defaultTransform();
     lines: Line[] = [];
     closed: boolean = false;
@@ -196,6 +198,7 @@ export class Path {
             name: this.name,
             visible: this.visible,
             locked: this.locked,
+            opacity: this.opacity,
             transform: serializeTransform(this.transform),
             closed: this.closed,
             settings: {
@@ -216,6 +219,7 @@ export class Path {
         p.name = s.name;
         p.visible = s.visible;
         p.locked = s.locked;
+        p.opacity = s.opacity ?? 1;
         p.transform = restoreTransform(s.transform);
         p.closed = s.closed;
         p.settings = {

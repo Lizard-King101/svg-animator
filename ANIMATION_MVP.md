@@ -7,6 +7,7 @@ Status legend:
 | Status | Meaning |
 |---|---|
 | Done | Implemented and merged |
+| In progress | Partially implemented; known checklist items remain |
 | Planned | Intended for the MVP or a named later phase |
 | Deferred | Valuable, but intentionally outside the first animation release |
 | Open | Needs a product or technical decision |
@@ -41,6 +42,9 @@ This preserves editability and makes animation data portable to external webpage
 | Clip/group movement UX | Done | Selected groups and clip shapes can be moved via selection bounds |
 | Stable transform origins | Done | Origins are pinned when needed to avoid group bounds drift |
 | Legacy save compatibility | Done | Missing transform data defaults safely |
+| Animation schema | Done | Versioned animation document now lives on `SVGSave` |
+| Keyframe/track model | Done | Tracks target `elementId + propertyPath` |
+| Interpolation helpers | Done | Number, color, boolean/string stepped values, and easing helpers |
 
 ---
 
@@ -50,17 +54,17 @@ The MVP should prove the full animation loop with the smallest stable property s
 
 | Feature | Status | Notes |
 |---|---|---|
-| Animation schema | Planned | Versioned JSON stored with project saves |
+| Animation schema | Done | Versioned JSON stored with project saves |
 | Timeline state | Planned | Duration, current time, playback state, loop settings |
-| Keyframe model | Planned | Timestamped values with easing metadata |
-| Track targeting | Planned | Tracks target `elementId + propertyPath` |
-| Interpolation engine | Planned | Number, color, boolean/discrete, and transform interpolation |
-| Editor playback | Planned | Scrub and preview inside the editor |
-| Timeline panel | Planned | Playhead, track rows, keyframes, selected element filtering |
+| Keyframe model | Done | Timestamped values with easing metadata |
+| Track targeting | Done | Tracks target `elementId + propertyPath` |
+| Interpolation engine | Done | Number, color, boolean/discrete, and easing helpers |
+| Editor playback | Done | Service owns current time, play/pause/seek, loop, and preview restore |
+| Timeline panel | In progress | Bottom panel has layer rows, property lanes, playback controls, scrubber, and key diamonds |
 | Auto-key mode | Planned | Property edits at the playhead create/update keyframes |
 | Manual key controls | Planned | Add/remove keyframe for selected property |
 | Transform animation | Planned | Translate X/Y, scale X/Y, rotation, origin X/Y |
-| Opacity animation | Planned | Element/group opacity should be added as an animatable property |
+| Opacity animation | Done | Element/group opacity is in the model, render path, export, and property resolver |
 | SVG export with animation data | Planned | Embed JSON payload or export JSON beside SVG |
 | Lightweight runtime | Planned | External script evaluates animation data against SVG DOM |
 
@@ -183,9 +187,9 @@ Export formats to support over time:
 | Transform scale | Planned | Uses existing transform channels |
 | Transform rotation | Planned | Uses pinned origin |
 | Transform origin | Planned | Advanced but already part of transform model |
-| Opacity | Planned | Needs element/group opacity support in model/render/export |
-| Fill color | Planned | Useful for common SVG animation |
-| Stroke color | Planned | Useful for common SVG animation |
+| Opacity | Done | Element/group opacity support is in model/render/export |
+| Fill color | In progress | Structured color keyframes preserve RGB/HSL interpolation intent |
+| Stroke color | In progress | Structured color keyframes preserve RGB/HSL interpolation intent |
 | Stroke width | Planned | Number interpolation |
 | Visibility | Planned | Discrete/stepped interpolation |
 
@@ -361,35 +365,37 @@ Status: Done
 
 ### Phase 1: Animation Model
 
-Status: Planned
+Status: In progress
 
-- Add `animation` to `SVGSave`
-- Define versioned schema
-- Add track/keyframe classes or plain model helpers
-- Add interpolation utilities
-- Add migration/restore defaults
+- Add `animation` to `SVGSave` - Done
+- Define versioned schema - Done
+- Add track/keyframe classes or plain model helpers - Done
+- Add interpolation utilities - Done
+- Add migration/restore defaults - Done
 - Add tests for save/load and legacy compatibility
 
 ### Phase 2: Editor Playback
 
-Status: Planned
+Status: In progress
 
-- Timeline state in editor service or a dedicated animation service
-- Play, pause, seek, loop
-- Evaluate animation state into rendered SVG preview
-- Keep base document state separate from evaluated preview state
+- Timeline state in editor service or a dedicated animation service - Done
+- Play, pause, seek, loop - Done
+- Evaluate animation state into rendered SVG preview - Done
+- Keep base document state separate from evaluated preview state - Done
+- Add focused tests for preview restore and missing targets
 
 ### Phase 3: Timeline UI
 
-Status: Planned
+Status: In progress
 
-- Animate mode toggle
-- Bottom timeline panel
-- Playhead
-- Duration controls
-- Keyframe buttons
+- Animate mode toggle - Done
+- Header playback shell - Replaced by bottom timeline
+- Bottom timeline panel - Done
+- Playhead - Done
+- Duration controls - Done
+- Keyframe buttons - Done
 - Auto-key toggle
-- Track rows for selected element properties
+- Track rows for expanded layer properties - Done
 - Basic easing selection
 
 ### Phase 4: Transform And Opacity Tracks
@@ -449,13 +455,14 @@ Status: Deferred
 |---|---|
 | Create animation MVP planning doc | Done |
 | Update README to link animation MVP plan | Done |
-| Add animation schema types | Planned |
-| Add animation defaults to new SVGs | Planned |
-| Preserve animation data in project save/load | Planned |
-| Add interpolation utilities | Planned |
-| Add editor playback service | Planned |
-| Add Animate mode shell | Planned |
-| Add timeline panel shell | Planned |
-| Add transform keyframe UI | Planned |
+| Add animation schema types | Done |
+| Add animation defaults to new SVGs | Done |
+| Preserve animation data in project save/load | Done |
+| Add interpolation utilities | Done |
+| Add editor playback service | Done |
+| Add Animate mode shell | Done |
+| Add timeline panel shell | Done |
+| Add transform keyframe UI | Done |
+| Add selected-element property key rows | Done |
+| Add opacity model/render/export support | Done |
 | Add runtime export spike | Planned |
-

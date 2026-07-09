@@ -4,6 +4,7 @@ import { Path, PathSave } from "./elements/path.object";
 import { Shape, ShapeSave } from "./elements/shape.object";
 import { TextElement, TextSave } from "./elements/text.object";
 import { Point } from "./point.object";
+import { AnimationDocument, AnimationSave, cloneAnimation, createDefaultAnimation, restoreAnimation } from "./animation.object";
 
 export type ElementSave = PathSave | ShapeSave | GroupSave | TextSave;
 export type AnyElement = Path | Shape | Group | TextElement;
@@ -12,6 +13,7 @@ export interface SVGSave {
     id: string;
     name: string;
     elements: ElementSave[];
+    animation?: AnimationSave;
     width: number;
     height: number;
 }
@@ -21,6 +23,7 @@ export class SVG {
     name?: string;
     elements: AnyElement[] = [];
     tempElements: Array<Path | Shape> = [];
+    animation: AnimationDocument;
     width: number;
     height: number;
     zoom: number;
@@ -40,6 +43,7 @@ export class SVG {
         this.height = options.height;
         this.pos = options.pos;
         this.zoom = options.zoom ?? 1;
+        this.animation = createDefaultAnimation();
         this._past.push(this.save());
     }
 
@@ -55,7 +59,8 @@ export class SVG {
         });
         (svg as any).id = save.id;
         svg.elements = SVG._restoreElements(save.elements, editor);
-        (svg as any)._past = [save];
+        svg.animation = restoreAnimation(save.animation);
+        (svg as any)._past = [svg.save()];
         (svg as any)._future = [];
         return svg;
     }
@@ -67,6 +72,7 @@ export class SVG {
             id: this.id,
             name: this.name ?? '',
             elements: this.elements.map((e) => e.save()) as ElementSave[],
+            animation: cloneAnimation(this.animation),
             width: this.width,
             height: this.height,
         };
@@ -85,6 +91,7 @@ export class SVG {
 
     private restore(snap: SVGSave) {
         this.elements = SVG._restoreElements(snap.elements, this.editor);
+        this.animation = restoreAnimation(snap.animation);
     }
 
     // ── History ────────────────────────────────────────────────────
@@ -93,7 +100,7 @@ export class SVG {
         const snap = this.save();
         if (this._past.length > 0) {
             const last = this._past[this._past.length - 1];
-            if (JSON.stringify(last.elements) === JSON.stringify(snap.elements)) return;
+            if (JSON.stringify(last.elements) === JSON.stringify(snap.elements) && JSON.stringify(last.animation) === JSON.stringify(snap.animation)) return;
         }
         this._past.push(snap);
         if (this._past.length > this._maxHistory) this._past.shift();

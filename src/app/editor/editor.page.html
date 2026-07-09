@@ -15,6 +15,12 @@
         <fa-icon icon="rotate-right"></fa-icon>
       </button>
       <div class="function-bar-spacer"></div>
+      <div class="mode-toggle" *ngIf="editor.selectedSVG">
+        <button [ngClass]="{'active': animation.mode == 'edit'}"
+                (click)="setEditorMode('edit')">Edit</button>
+        <button [ngClass]="{'active': animation.mode == 'animate'}"
+                (click)="setEditorMode('animate')">Animate</button>
+      </div>
       <button class="btn-export" (click)="exportSVG()" [disabled]="!editor.selectedSVG" title="Export SVG">
         <fa-icon icon="download"></fa-icon>
         <span>Export</span>
@@ -24,9 +30,9 @@
       <div class="svg-tab"
            *ngFor="let svg of editor.svgs"
            [ngClass]="{'selected': editor.selectedSVG == svg}"
-           (click)="editor.selectSVG(svg.id)">
+           (click)="selectSVGTab(svg.id)">
         <span class="tab-name">{{ svg.name }}</span>
-        <button class="tab-close" (click)="$event.stopPropagation(); editor.closeSVG(svg.id)">
+        <button class="tab-close" (click)="$event.stopPropagation(); closeSVGTab(svg.id)">
           <fa-icon icon="times"></fa-icon>
         </button>
       </div>
@@ -87,7 +93,7 @@
     </div>
 
     <!-- Right attribute panel -->
-    <div class="attribute-panel">
+    <div class="attribute-panel" *ngIf="animation.mode == 'edit'">
       <ng-container *ngIf="editor.inspectedElement">
         <div class="panel-header">Properties</div>
         <div class="transform-section" *ngIf="asShape(editor.inspectedElement) as selectedShape">
@@ -170,25 +176,25 @@
           <ng-container *ngFor="let attr of editor.inspectedElement.attributes">
             <div class="attr-row">
               <attr-text   *ngIf="attr.input == 'text'"
-                           [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
-                           (ngModelChange)="scheduleAttributeSnapshot()"
+                           [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
+                           (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
                            [label]="attr.label"></attr-text>
               <attr-bool   *ngIf="attr.input == 'bool'"
-                           [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
-                           (ngModelChange)="scheduleAttributeSnapshot()"
+                           [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
+                           (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
                            [label]="attr.label"></attr-bool>
               <color       *ngIf="attr.input == 'color'"
-                           [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
-                           (ngModelChange)="scheduleAttributeSnapshot()"
+                           [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
+                           (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
                            [label]="attr.label"></color>
               <range       *ngIf="attr.input == 'range'"
-                           [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
-                           (ngModelChange)="scheduleAttributeSnapshot()"
+                           [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
+                           (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
                            [min]="$any(attr).min" [max]="$any(attr).max"
                            [label]="attr.label"></range>
               <attr-select *ngIf="attr.input == 'select'"
-                           [(ngModel)]="settingsOf(editor.inspectedElement)[attr.output]"
-                           (ngModelChange)="scheduleAttributeSnapshot()"
+                           [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
+                           (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
                            [options]="$any(attr).options"
                            [label]="attr.label"></attr-select>
             </div>
@@ -284,6 +290,10 @@
     </div>
 
   </div>
+
+  <animation-timeline
+    *ngIf="editor.selectedSVG && animation.mode == 'animate'"
+    (animationChange)="handleTimelineChange()"></animation-timeline>
 
   <!-- ── New SVG dialog ── -->
   <div class="dialog-overlay" *ngIf="showNewDialog" (click)="cancelNewSVG()">
