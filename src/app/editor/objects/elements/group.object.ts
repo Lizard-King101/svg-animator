@@ -12,6 +12,7 @@ export interface GroupSave {
     name: string;
     visible: boolean;
     locked: boolean;
+    opacity?: number;
     transform?: TransformSave;
     clipElementId?: string | null;
     elements: GroupElementSave[];
@@ -29,6 +30,7 @@ export class Group {
     name: string;
     visible: boolean = true;
     locked: boolean = false;
+    opacity: number = 1;
     transform: TransformState = defaultTransform();
     clipElementId?: string | null;
     elements: GroupElement[] = [];
@@ -74,6 +76,7 @@ export class Group {
             name: this.name,
             visible: this.visible,
             locked: this.locked,
+            opacity: this.opacity,
             transform: serializeTransform(this.transform),
             clipElementId: this.clipElementId ?? null,
             elements: this.elements.map((e) => e.save()) as GroupElementSave[],
@@ -86,6 +89,7 @@ export class Group {
         group.name = s.name;
         group.visible = s.visible;
         group.locked = s.locked;
+        group.opacity = s.opacity ?? 1;
         group.transform = restoreTransform(s.transform);
         group.clipElementId = s.clipElementId ?? null;
         group.elements = s.elements.map((element) => {

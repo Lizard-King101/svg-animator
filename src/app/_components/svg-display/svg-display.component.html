@@ -6,7 +6,7 @@
                 <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: clipElementList(group) }"></ng-container>
             </svg:clipPath>
         </svg:defs>
-        <svg:g [id]="group.id" [attr.clip-path]="clipUrl(group)" [attr.transform]="transformAttr(group)">
+        <svg:g [id]="group.id" [attr.clip-path]="clipUrl(group)" [attr.transform]="transformAttr(group)" [attr.opacity]="opacityAttr(group)">
             <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: group.renderedElements }"></ng-container>
         </svg:g>
     </ng-container>
@@ -15,6 +15,7 @@
         [id]="path.id"
         [attr.d]="path.raw"
         [attr.transform]="transformAttr(path)"
+        [attr.opacity]="opacityAttr(path)"
         [attr.fill]="path.settings.fill_enabled && path.settings.fill ? path.settings.fill.hex : 'none'"
         [attr.stroke]="path.settings.stroke?.hex"
         [attr.stroke-width]="path.settings.stroke_width"
@@ -27,6 +28,7 @@
         *ngIf="editor.shapeIsRectangle(shape)"
         [id]="shape.id"
         [attr.transform]="transformAttr(shape)"
+        [attr.opacity]="opacityAttr(shape)"
         [attr.x]="shape.x"
         [attr.y]="shape.y"
         [attr.width]="shape.width"
@@ -41,6 +43,7 @@
         *ngIf="editor.shapeIsEllipse(shape)"
         [id]="shape.id"
         [attr.transform]="transformAttr(shape)"
+        [attr.opacity]="opacityAttr(shape)"
         [attr.cx]="shape.centerX"
         [attr.cy]="shape.centerY"
         [attr.rx]="shape.radiusX"
@@ -54,6 +57,7 @@
         <svg:text
         [id]="text.id"
         [attr.transform]="transformAttr(text)"
+        [attr.opacity]="opacityAttr(text)"
         [attr.x]="text.x"
         [attr.y]="text.y"
         [attr.font-size]="text.settings.font_size"
@@ -75,13 +79,14 @@
 
 <ng-container *ngFor="let element of editor.selectedSVG?.tempElements">
     <ng-container *ngIf="editor.elementIsPath(element)">
-        <svg:path [id]="element.id" [attr.d]="element.raw" [attr.transform]="transformAttr(element)" stroke="#aeaeae" stroke-width="2" fill="transparent"/>
+        <svg:path [id]="element.id" [attr.d]="element.raw" [attr.transform]="transformAttr(element)" [attr.opacity]="opacityAttr(element)" stroke="#aeaeae" stroke-width="2" fill="transparent"/>
     </ng-container>
     <ng-container *ngIf="asShape(element) as shape">
         <svg:rect
         *ngIf="editor.shapeIsRectangle(shape)"
         [id]="shape.id"
         [attr.transform]="transformAttr(shape)"
+        [attr.opacity]="opacityAttr(shape)"
         [attr.x]="shape.x"
         [attr.y]="shape.y"
         [attr.width]="shape.width"
@@ -94,6 +99,7 @@
         *ngIf="editor.shapeIsEllipse(shape)"
         [id]="shape.id"
         [attr.transform]="transformAttr(shape)"
+        [attr.opacity]="opacityAttr(shape)"
         [attr.cx]="shape.centerX"
         [attr.cy]="shape.centerY"
         [attr.rx]="shape.radiusX"

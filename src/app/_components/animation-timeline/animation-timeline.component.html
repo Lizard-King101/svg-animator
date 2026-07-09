@@ -1,0 +1,177 @@
+<div class="timeline-root">
+  <div class="timeline-resize-handle"
+       title="Resize timeline"
+       (pointerdown)="beginResize($event)"
+       (pointermove)="updateResize($event)"
+       (pointerup)="endResize($event)"
+       (pointercancel)="endResize($event)">
+    <span></span>
+  </div>
+
+  <div class="timeline-toolbar">
+    <button class="timeline-icon" (click)="animation.togglePlayback()" [title]="animation.playing ? 'Pause' : 'Play'">
+      <fa-icon [icon]="animation.playing ? 'pause' : 'play'"></fa-icon>
+    </button>
+    <button class="timeline-icon" (click)="animation.stop()" title="Stop">
+      <fa-icon icon="stop"></fa-icon>
+    </button>
+    <label class="timeline-field">
+      <span>Time</span>
+      <input type="number" min="0" step="0.01"
+             [ngModel]="animation.currentTime"
+             (ngModelChange)="animation.seek($event)" />
+    </label>
+    <label class="timeline-field">
+      <span>Duration</span>
+      <input type="number" min="0.1" step="0.1"
+             [ngModel]="animation.duration"
+             (ngModelChange)="setDuration($event)" />
+    </label>
+    <label class="timeline-check">
+      <input type="checkbox"
+             [ngModel]="animation.loop"
+             (ngModelChange)="setLoop($event)" />
+      <span>Loop</span>
+    </label>
+    <div class="timeline-toolbar-sep"></div>
+    <button class="timeline-icon" (click)="zoomTimeline(-20)" title="Zoom out">
+      <fa-icon icon="minus"></fa-icon>
+    </button>
+    <button class="timeline-icon" (click)="fitTimeline()" title="Fit duration">
+      <fa-icon icon="arrows-left-right"></fa-icon>
+    </button>
+    <button class="timeline-icon" (click)="zoomTimeline(20)" title="Zoom in">
+      <fa-icon icon="plus"></fa-icon>
+    </button>
+  </div>
+
+  <div class="timeline-table">
+    <div class="timeline-head-left">Layers</div>
+    <div class="timeline-time-cell timeline-ruler-cell">
+      <div class="timeline-time-content timeline-ruler"
+           [style.width.px]="timelineContentWidth"
+           (pointerdown)="beginScrub($event)"
+           (pointermove)="updateScrub($event)"
+           (pointerup)="endScrub($event)"
+           (pointercancel)="endScrub($event)">
+        <div class="playhead" [style.left]="playheadLeft()"></div>
+        <span class="ruler-mark"
+              *ngFor="let mark of rulerMarks()"
+              [style.left.px]="mark.left">{{ mark.label }}</span>
+      </div>
+    </div>
+
+    <ng-container *ngFor="let row of rows; trackBy: trackRow">
+      <div class="timeline-left-cell"
+           [ngClass]="{'selected': editor.selectedElement == row.element, 'property': row.type == 'property'}"
+           [style.padding-left.px]="10 + row.depth * 16"
+           (click)="selectLayer(row.element)">
+        <button class="row-expander"
+                *ngIf="row.type == 'layer'"
+                (click)="$event.stopPropagation(); toggleLayer(row.element)">
+          <fa-icon [icon]="expandedLayerIds.has(row.element.id) ? 'angle-down' : 'angle-right'"></fa-icon>
+        </button>
+        <span class="row-expander-placeholder" *ngIf="row.type == 'property'"></span>
+        <span class="row-name" *ngIf="row.type == 'layer'">{{ row.element.name }}</span>
+        <ng-container *ngIf="row.type == 'property'">
+          <span class="row-name">{{ row.property.label }}</span>
+          <span class="row-value" *ngIf="row.property.valueType != 'color'">{{ propertyDisplayValue(row) }}</span>
+          <input class="property-number"
+                 *ngIf="row.property.valueType == 'number'"
+                 type="number"
+                 step="0.01"
+                 [ngModel]="propertyValue(row)"
+                 (click)="$event.stopPropagation()"
+                 (pointerdown)="beginNumberDrag(row, $event)"
+                 (pointermove)="updateNumberDrag($event)"
+                 (pointerup)="endNumberDrag($event)"
+                 (pointercancel)="endNumberDrag($event)"
+                 (ngModelChange)="setPropertyValue(row, $event)" />
+          <label class="property-bool" *ngIf="row.property.valueType == 'boolean'">
+            <input type="checkbox"
+                   [ngModel]="propertyValue(row)"
+                   (click)="$event.stopPropagation()"
+                   (ngModelChange)="setPropertyValue(row, $event)" />
+          </label>
+          <div class="property-color"
+               *ngIf="row.property.valueType == 'color'"
+               (click)="$event.stopPropagation()"
+               (pointerdown)="$event.stopPropagation()">
+            <button class="color-compact"
+                    (click)="toggleColorEditor(row, $event)"
+                    title="Edit color">
+              <span class="color-swatch" [style.background-color]="colorDisplayValue(row)"></span>
+              <span class="color-hex">{{ colorDisplayValue(row) }}</span>
+            </button>
+            <div class="color-popover"
+                 *ngIf="colorEditorOpen(row)"
+                 (click)="$event.stopPropagation()"
+                 (pointerdown)="$event.stopPropagation()">
+              <color [ngModel]="colorValue(row)"
+                     (ngModelChange)="setPropertyValue(row, $event)"></color>
+            </div>
+          </div>
+          <div class="key-controls">
+            <button class="key-button"
+                    [disabled]="previousKeyframeTime(row) == null"
+                    (click)="jumpToKeyframe(row, 'previous', $event)"
+                    title="Previous keyframe">
+              <fa-icon icon="chevron-left"></fa-icon>
+            </button>
+            <button class="key-button key-toggle"
+                    [ngClass]="{'active': hasKeyAtTime(row)}"
+                    (click)="$event.stopPropagation(); toggleKey(row)"
+                    [title]="hasKeyAtTime(row) ? 'Remove keyframe' : 'Add keyframe'">
+              <fa-icon icon="diamond"></fa-icon>
+            </button>
+            <button class="key-button"
+                    [disabled]="nextKeyframeTime(row) == null"
+                    (click)="jumpToKeyframe(row, 'next', $event)"
+                    title="Next keyframe">
+              <fa-icon icon="chevron-right"></fa-icon>
+            </button>
+          </div>
+        </ng-container>
+      </div>
+
+      <div class="timeline-time-cell">
+        <div class="timeline-time-content timeline-lane"
+             [ngClass]="{'property': row.type == 'property'}"
+             [style.width.px]="timelineContentWidth"
+             [style.--timeline-grid-step]="gridStepWidth()"
+             [style.--timeline-grid-offset]="gridOffset()"
+             (pointerdown)="beginLaneGesture(row, $event)"
+             (pointermove)="updateLaneGesture($event)"
+             (pointerup)="endLaneGesture($event)"
+             (pointercancel)="endLaneGesture($event)">
+          <div class="playhead" [style.left]="playheadLeft()"></div>
+          <button class="key-diamond"
+                  *ngFor="let keyframe of keyframes(row)"
+                  [attr.data-keyframe-id]="keyframe.id"
+                  [ngClass]="{'selected': isKeyframeSelected(keyframe)}"
+                  [style.left]="keyframeLeft(keyframe.time)"
+                  (pointerdown)="beginKeyframeDrag(keyframe, $event)"
+                  (pointermove)="updateKeyframeDrag($event)"
+                  (pointerup)="endKeyframeDrag($event)"
+                  (pointercancel)="endKeyframeDrag($event)"
+                  (click)="$event.stopPropagation()"
+                  [title]="keyframe.time.toFixed(2) + 's'">
+          </button>
+        </div>
+      </div>
+    </ng-container>
+
+    <div class="timeline-left-cell timeline-overscroll"
+         [style.min-height.px]="overscrollHeight"></div>
+    <div class="timeline-time-cell timeline-overscroll"
+         [style.min-height.px]="overscrollHeight">
+      <div class="timeline-time-content timeline-lane timeline-overscroll"
+           [style.width.px]="timelineContentWidth"
+           [style.min-height.px]="overscrollHeight"
+           [style.--timeline-grid-step]="gridStepWidth()"
+           [style.--timeline-grid-offset]="gridOffset()"></div>
+    </div>
+  </div>
+
+  <div class="marquee-selection" *ngIf="marquee?.active" [ngStyle]="marqueeStyle()"></div>
+</div>

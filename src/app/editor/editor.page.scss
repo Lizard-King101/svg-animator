@@ -340,6 +340,31 @@ $border-color_1: var(--accent);
 
     .function-bar-spacer { flex: 1; }
 
+    .mode-toggle {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+
+      button {
+        height: 22px;
+        padding: 0 9px;
+        background: transparent;
+        border: none;
+        border-radius: 3px;
+        color: var(--text-secondary);
+        font-size: 11px;
+        cursor: pointer;
+
+        &.active {
+          background: var(--accent-dim);
+          color: var(--accent);
+        }
+      }
+    }
+
     .btn-icon {
       display: inline-flex;
       align-items: center;

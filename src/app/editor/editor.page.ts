@@ -4,9 +4,11 @@ import { FormsModule } from "@angular/forms";
 import { ActivatedRoute } from "@angular/router";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { EditorContextMenuItem, EditorService } from "../_services/editor.service";
+import { AnimationPlaybackService } from "../_services/animation-playback.service";
 import { HistoryService } from "../_services/history.service";
 import { ProjectService } from "../_services/project.service";
 import { SVGDisplay } from "../_components/svg-display/svg-display.component";
+import { AnimationTimelineComponent } from "../_components/animation-timeline/animation-timeline.component";
 import { BoolAttribute } from "../_components/attributes/bool/bool.component";
 import { ColorAttribute } from "../_components/attributes/color/color.component";
 import { RangeAttribute } from "../_components/attributes/range/range.component";
@@ -14,6 +16,7 @@ import { SelectAttribut } from "../_components/attributes/select/select.componen
 import { TextAttribute } from "../_components/attributes/text/text.component";
 import { Color } from "./objects/color.object";
 import { Group } from "./objects/elements/group.object";
+import { ElementAttribute } from "./objects/elements/element";
 import { Line } from "./objects/line.object";
 import { Path } from "./objects/elements/path.object";
 import { Point } from "./objects/point.object";
@@ -22,6 +25,8 @@ import { TextElement } from "./objects/elements/text.object";
 import { AnyElement } from "./objects/svg.object";
 import { buildSVGMarkup } from "./svg-markup";
 import { pinTransformOrigin, resolvedOrigin } from "./objects/element-bounds";
+import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, createAnimationColorValue } from "./objects/animation.object";
+import { readAnimationProperty } from "./objects/animation-targets";
 
 @Component({
     standalone: true,
@@ -34,9 +39,10 @@ import { pinTransformOrigin, resolvedOrigin } from "./objects/element-bounds";
         ColorAttribute,
         RangeAttribute,
         SelectAttribut,
-        TextAttribute
+        TextAttribute,
+        AnimationTimelineComponent
     ],
-    providers: [EditorService, HistoryService],
+    providers: [EditorService, HistoryService, AnimationPlaybackService],
     templateUrl: 'editor.page.html',
     styleUrls: ['editor.page.scss']
 })
@@ -52,6 +58,7 @@ export class EditorPage implements AfterViewInit {
     dragTargetPosition?: 'before' | 'after' | 'inside';
     private pendingLayerDrag?: { element: AnyElement; pointerId: number; startX: number; startY: number; row: HTMLElement };
     private suppressLayerClick = false;
+    private animationTransformDragStart?: AnimationTransformDragStart;
     renamingLayer?: AnyElement;
     selectedLayers: AnyElement[] = [];
     private lastSelectedLayer?: AnyElement;
@@ -71,6 +78,7 @@ export class EditorPage implements AfterViewInit {
         { label: '595×842',   sublabel: 'A4 Portrait', width: 595,  height: 842  },
         { label: '1080×1920', sublabel: 'Story 9:16',  width: 1080, height: 1920 },
     ];
+    readonly ANIMATABLE_PROPERTIES = ANIMATABLE_PROPERTIES;
 
     @ViewChild('canvas') canvas?: ElementRef<SVGElement>;
     @ViewChild('viewPort') viewPort?: ElementRef<HTMLElement>;
@@ -109,7 +117,7 @@ export class EditorPage implements AfterViewInit {
             }
         }
 
-        if(this.selectedLayers.length > 1 && !this.renamingLayer) {
+        if(this.animation.mode == 'edit' && this.selectedLayers.length > 1 && !this.renamingLayer) {
             if(event.key == 'Delete' || event.key == 'Backspace') {
                 event.preventDefault();
                 this.deleteSelectedLayers();
@@ -142,7 +150,7 @@ export class EditorPage implements AfterViewInit {
                 return;
             }
 
-            if((event.key == 'Delete' || event.key == 'Backspace') && !this.editor.selectedPathAnchor) {
+            if(this.animation.mode == 'edit' && (event.key == 'Delete' || event.key == 'Backspace') && !this.editor.selectedPathAnchor) {
                 event.preventDefault();
                 this.deleteLayer(this.editor.selectedElement);
                 return;
@@ -159,6 +167,7 @@ export class EditorPage implements AfterViewInit {
 
     constructor(
         public editor: EditorService,
+        public animation: AnimationPlaybackService,
         public history: HistoryService,
         public projectService: ProjectService,
         private route: ActivatedRoute,
@@ -180,6 +189,7 @@ export class EditorPage implements AfterViewInit {
                     case 0:
                         if (this.editor.selectedTool) {
                             this.editor.selectedTool.down(event);
+                            this.captureAnimationTransformDragStart();
                         }
                         break;
                     case 1:
@@ -196,6 +206,7 @@ export class EditorPage implements AfterViewInit {
         viewport.addEventListener('mouseup', (event: MouseEvent) => {
             this.ngZone.run(() => {
                 if (this.editor.selectedTool) this.editor.selectedTool.up(event);
+                this.commitAnimationTransformDrag();
                 this.movingView = false;
                 // Skip snapshot on right-click — contextmenu fires next and handles it
                 if (event.button !== 2) this.snapshotAndSave();
@@ -313,19 +324,23 @@ export class EditorPage implements AfterViewInit {
     autoSave() {
         const svg = this.editor.selectedSVG;
         if(!svg) return;
-        const thumbnail = buildSVGMarkup(svg);
-        this.projectService.upsert(svg.save(), thumbnail);
+        this.animation.withBaseState(() => {
+            const thumbnail = buildSVGMarkup(svg);
+            this.projectService.upsert(svg.save(), thumbnail);
+        });
     }
 
     private snapshotAndSave() {
-        this.history.snapshot(this.editor);
+        this.animation.withBaseState(() => {
+            this.history.snapshot(this.editor);
+        });
         this.autoSave();
         this.saveRevision++;
     }
 
     private currentElementsState(): string | undefined {
         const svg = this.editor.selectedSVG;
-        return svg ? JSON.stringify(svg.save().elements) : undefined;
+        return svg ? this.animation.withBaseState(() => JSON.stringify({ elements: svg.save().elements, animation: svg.save().animation })) : undefined;
     }
 
     private snapshotAndSaveIfChanged(beforeState?: string, beforeRevision = this.saveRevision) {
@@ -362,7 +377,7 @@ export class EditorPage implements AfterViewInit {
     exportSVG() {
         const svg = this.editor.selectedSVG;
         if(!svg) return;
-        const markup = buildSVGMarkup(svg);
+        const markup = this.animation.withBaseState(() => buildSVGMarkup(svg));
         const blob = new Blob([markup], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -370,6 +385,47 @@ export class EditorPage implements AfterViewInit {
         a.download = `${svg.name ?? 'drawing'}.svg`;
         a.click();
         URL.revokeObjectURL(url);
+    }
+
+    setEditorMode(mode: 'edit' | 'animate') {
+        this.animation.setMode(mode);
+    }
+
+    setAnimationDuration(value: number | string | null) {
+        const numeric = typeof value === 'number' ? value : Number(value);
+        if(!Number.isFinite(numeric)) {
+            return;
+        }
+
+        this.animation.setDuration(numeric);
+        this.scheduleAttributeSnapshot();
+    }
+
+    setAnimationLoop(value: boolean) {
+        this.animation.setLoop(value);
+        this.scheduleAttributeSnapshot();
+    }
+
+    handleTimelineChange() {
+        this.snapshotAndSave();
+    }
+
+    selectSVGTab(id: string) {
+        this.animation.pause();
+        this.animation.restorePreview();
+        this.editor.selectSVG(id);
+        if(this.animation.mode === 'animate') {
+            this.animation.seek(0);
+        }
+    }
+
+    closeSVGTab(id: string) {
+        this.animation.pause();
+        this.animation.restorePreview();
+        this.editor.closeSVG(id);
+        if(this.animation.mode === 'animate') {
+            this.animation.seek(0);
+        }
     }
 
     get layers() {
@@ -436,6 +492,23 @@ export class EditorPage implements AfterViewInit {
         return (element?.settings ?? {}) as Record<string, any>;
     }
 
+    handleAttributeChange(element: AnyElement | undefined, attr: ElementAttribute, value: unknown) {
+        if(!element) {
+            return;
+        }
+
+        const property = `settings.${attr.output}`;
+        const definition = this.ANIMATABLE_PROPERTIES.find((candidate) => candidate.property === property);
+        if(this.animation.mode === 'animate' && definition && this.animationPropertySupported(element, definition)) {
+            this.animation.setAnimatedPropertyValue(element, property, definition.valueType, this.normalizeAnimationValue(value, definition));
+            this.scheduleAttributeSnapshot();
+            return;
+        }
+
+        this.settingsOf(element)[attr.output] = value;
+        this.scheduleAttributeSnapshot();
+    }
+
     transformValue(element: AnyElement | undefined, field: TransformField): number {
         if(!element) {
             return 0;
@@ -456,6 +529,15 @@ export class EditorPage implements AfterViewInit {
 
         const numeric = typeof value === 'number' ? value : Number(value);
         if(!Number.isFinite(numeric)) {
+            return;
+        }
+
+        if(this.animation.mode === 'animate') {
+            if((field === 'scaleX' || field === 'scaleY' || field === 'rotation') && (element.transform.originX == null || element.transform.originY == null)) {
+                pinTransformOrigin(element);
+            }
+            this.animation.setAnimatedPropertyValue(element, `transform.${field}`, 'number', numeric);
+            this.scheduleAttributeSnapshot();
             return;
         }
 
@@ -498,6 +580,113 @@ export class EditorPage implements AfterViewInit {
         }
 
         this.scheduleAttributeSnapshot();
+    }
+
+    animationPropertiesFor(element: AnyElement | undefined): readonly AnimatablePropertyDefinition[] {
+        if(!element) {
+            return [];
+        }
+
+        return this.ANIMATABLE_PROPERTIES.filter((definition) => this.animationPropertySupported(element, definition));
+    }
+
+    addOrUpdateAnimationKey(element: AnyElement, definition: AnimatablePropertyDefinition) {
+        if((definition.property === 'transform.scaleX' || definition.property === 'transform.scaleY' || definition.property === 'transform.rotation') && (element.transform.originX == null || element.transform.originY == null)) {
+            pinTransformOrigin(element);
+        }
+
+        this.animation.upsertKeyframe(element, definition.property, definition.valueType);
+        this.snapshotAndSave();
+    }
+
+    removeAnimationKey(element: AnyElement, definition: AnimatablePropertyDefinition) {
+        this.animation.removeKeyframeAtCurrentTime(element, definition.property);
+        this.snapshotAndSave();
+    }
+
+    animationPropertyValue(element: AnyElement, definition: AnimatablePropertyDefinition): string {
+        const value = readAnimationProperty(element, definition.property);
+        if(typeof value === 'number') {
+            return Number.isInteger(value) ? String(value) : value.toFixed(2);
+        }
+
+        if(value == null) {
+            return '-';
+        }
+
+        return String(value);
+    }
+
+    private animationPropertySupported(element: AnyElement, definition: AnimatablePropertyDefinition): boolean {
+        if(definition.property.startsWith('transform.') || definition.property === 'visible' || definition.property === 'opacity') {
+            return true;
+        }
+
+        if(definition.property.startsWith('settings.')) {
+            const key = definition.property.slice('settings.'.length);
+            return key in (element.settings as Record<string, unknown>);
+        }
+
+        return readAnimationProperty(element, definition.property) !== undefined;
+    }
+
+    private normalizeAnimationValue(value: unknown, definition: AnimatablePropertyDefinition): unknown {
+        if(definition.valueType === 'color') {
+            return createAnimationColorValue(value, value instanceof Color ? value.preferredSpace : 'rgb');
+        }
+
+        if(definition.valueType === 'number') {
+            const numeric = typeof value === 'number' ? value : Number(value);
+            return Number.isFinite(numeric) ? numeric : value;
+        }
+
+        return value;
+    }
+
+    private captureAnimationTransformDragStart() {
+        if(this.animation.mode !== 'animate' || !this.editor.selectedElement) {
+            this.animationTransformDragStart = undefined;
+            return;
+        }
+
+        this.animationTransformDragStart = {
+            element: this.editor.selectedElement,
+            values: this.transformAnimationValues(this.editor.selectedElement),
+        };
+    }
+
+    private commitAnimationTransformDrag() {
+        const start = this.animationTransformDragStart;
+        this.animationTransformDragStart = undefined;
+        if(this.animation.mode !== 'animate' || !start || this.editor.selectedElement !== start.element) {
+            return;
+        }
+
+        const currentValues = this.transformAnimationValues(start.element);
+        this.ANIMATABLE_PROPERTIES
+            .filter((definition) => definition.property.startsWith('transform.'))
+            .forEach((definition) => {
+                const startValue = start.values[definition.property];
+                const currentValue = currentValues[definition.property];
+                if(startValue == null || currentValue == null || Math.abs(currentValue - startValue) < 0.0005) {
+                    return;
+                }
+
+                this.animation.upsertKeyframe(start.element, definition.property, definition.valueType, currentValue, startValue);
+            });
+    }
+
+    private transformAnimationValues(element: AnyElement): Record<string, number> {
+        const values: Record<string, number> = {};
+        this.ANIMATABLE_PROPERTIES
+            .filter((definition) => definition.property.startsWith('transform.'))
+            .forEach((definition) => {
+                const value = readAnimationProperty(element, definition.property);
+                if(typeof value === 'number' && Number.isFinite(value)) {
+                    values[definition.property] = value;
+                }
+            });
+        return values;
     }
 
     selectLayer(element: AnyElement, event?: MouseEvent) {
@@ -553,6 +742,7 @@ export class EditorPage implements AfterViewInit {
         clone.name = `${path.name} Copy`;
         clone.visible = path.visible;
         clone.locked = false;
+        clone.opacity = path.opacity;
         clone.closed = path.closed;
         clone.transform = { ...path.transform };
         clone.settings = {
@@ -583,6 +773,7 @@ export class EditorPage implements AfterViewInit {
         clone.name = `${shape.name} Copy`;
         clone.visible = shape.visible;
         clone.locked = false;
+        clone.opacity = shape.opacity;
         clone.transform = { ...shape.transform };
         clone.settings = {
             ...shape.settings,
@@ -597,6 +788,7 @@ export class EditorPage implements AfterViewInit {
         clone.name = `${text.name} Copy`;
         clone.visible = text.visible;
         clone.locked = false;
+        clone.opacity = text.opacity;
         clone.transform = { ...text.transform };
         clone.settings = {
             ...text.settings,
@@ -610,6 +802,7 @@ export class EditorPage implements AfterViewInit {
         clone.name = `${group.name} Copy`;
         clone.visible = group.visible;
         clone.locked = false;
+        clone.opacity = group.opacity;
         clone.transform = { ...group.transform };
         const clonedElements = group.elements.map((element) => {
             return {
@@ -1251,3 +1444,8 @@ interface LayerContext {
 
 type TransformField = 'translateX' | 'translateY' | 'scaleX' | 'scaleY' | 'rotation' | 'originX' | 'originY';
 type ShapeFrameField = 'x' | 'y' | 'width' | 'height';
+
+interface AnimationTransformDragStart {
+    element: AnyElement;
+    values: Record<string, number>;
+}
