@@ -5,7 +5,7 @@ import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { AnimationPlaybackService } from "src/app/_services/animation-playback.service";
 import { EditorService } from "src/app/_services/editor.service";
 import { ColorAttribute } from "../attributes/color/color.component";
-import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, AnimationTrack, Keyframe, makeAnimationId } from "src/app/editor/objects/animation.object";
+import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, AnimationTrack, EasingType, Keyframe, makeAnimationId } from "src/app/editor/objects/animation.object";
 import { parsePathPointProperty, pathPointAnimationProperty, readAnimationProperty } from "src/app/editor/objects/animation-targets";
 import { Color } from "src/app/editor/objects/color.object";
 import { Group } from "src/app/editor/objects/elements/group.object";
@@ -36,6 +36,12 @@ export class AnimationTimelineComponent {
     @HostBinding("class.selecting-keyframes") get selectingKeyframes() { return !!this.marquee; }
 
     readonly properties = ANIMATABLE_PROPERTIES;
+    readonly easingOptions: readonly EasingToolbarOption[] = [
+        { type: "linear", label: "Linear", icon: "diamond" },
+        { type: "ease-in", label: "Ease In", icon: "caret-left" },
+        { type: "ease-out", label: "Ease Out", icon: "caret-right" },
+        { type: "ease-in-out", label: "Ease In Out", icon: "hourglass-half", className: "hourglass-sideways" },
+    ];
     readonly timePadding = 28;
     expandedLayerIds = new Set<string>();
     selectedRowKey?: string;
@@ -77,6 +83,40 @@ export class AnimationTimelineComponent {
         this.editor.selectedElement = element;
         this.editor.selectedPathAnchor = undefined;
         this.editor.selectedPathLine = undefined;
+    }
+
+    openRowContextMenu(row: TimelineRow, event: MouseEvent) {
+        if(row.type !== "layer") {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        this.selectLayer(row.element);
+
+        const motionPaths = this.availableMotionPaths(row.element);
+        if(motionPaths.length === 0 && !row.element.motion.pathId) {
+            return;
+        }
+
+        this.editor.openContextMenu(event.clientX, event.clientY, [
+            ...(motionPaths.length ? [{
+                label: "Attach Motion To",
+                children: motionPaths.map((path) => ({
+                    label: path.name,
+                    action: () => this.attachMotionPath(row.element, path),
+                })),
+            }] : []),
+            ...(row.element.motion.pathId ? [{
+                label: "Detach Motion Path",
+                action: () => this.detachMotionPath(row.element),
+            }] : []),
+        ]);
+        this.editor.contextMenu!.infoTitle = "Motion Path";
+        this.editor.contextMenu!.infoLines = [
+            "Keyframe Motion Progress after attaching.",
+            "Use Rotate To Path and Offset Angle to control orientation.",
+        ];
     }
 
     keyframes(row: TimelineRow): TimelineKeyframe[] {
@@ -199,6 +239,54 @@ export class AnimationTimelineComponent {
         }
 
         return this.selectedKeyframeIds.has(keyframe.id);
+    }
+
+    selectedEasingType(): EasingType | "mixed" | undefined {
+        const entries = this.selectedKeyframeEntries();
+        if(entries.length === 0) {
+            return undefined;
+        }
+
+        const types = new Set(entries.map((entry) => entry.keyframe.easing?.type ?? "linear"));
+        return types.size === 1 ? [...types][0] : "mixed";
+    }
+
+    setSelectedEasing(type: EasingType) {
+        const entries = this.selectedKeyframeEntries();
+        if(entries.length === 0) {
+            return;
+        }
+
+        entries.forEach((entry) => {
+            entry.keyframe.easing = { type };
+        });
+        this.animation.previewAt(this.animation.currentTime);
+        this.animationChange.emit();
+    }
+
+    keyframeEasingIcon(keyframe: TimelineKeyframe): string {
+        const type = this.timelineKeyframeEasingType(keyframe);
+        switch(type) {
+            case "ease-in":
+                return "caret-left";
+            case "ease-out":
+                return "caret-right";
+            case "ease-in-out":
+                return "hourglass-half";
+            case "hold":
+                return "pause";
+            case "linear":
+            default:
+                return "diamond";
+        }
+    }
+
+    keyframeEasingClass(keyframe: TimelineKeyframe): string {
+        const type = this.timelineKeyframeEasingType(keyframe);
+        if(type === "ease-in-out") {
+            return "hourglass-sideways";
+        }
+        return "";
     }
 
     beginKeyframeDrag(keyframe: TimelineKeyframe, event: PointerEvent) {
@@ -718,9 +806,58 @@ export class AnimationTimelineComponent {
         });
     }
 
+    private availableMotionPaths(element: AnyElement): Path[] {
+        const svg = this.editor.selectedSVG;
+        if(!svg) {
+            return [];
+        }
+
+        const paths: Path[] = [];
+        const collect = (elements: AnyElement[]) => {
+            elements.forEach((candidate) => {
+                if(candidate instanceof Path && candidate !== element && !this.elementContains(element, candidate)) {
+                    paths.push(candidate);
+                }
+
+                if(candidate instanceof Group) {
+                    collect(candidate.elements);
+                }
+            });
+        };
+
+        collect(svg.elements);
+        return paths;
+    }
+
+    private attachMotionPath(element: AnyElement, path: Path) {
+        element.motion.pathId = path.id;
+        element.motion.progress = 0;
+        element.motion.offsetX = 0;
+        element.motion.offsetY = 0;
+
+        this.animation.previewAt(this.animation.currentTime);
+        this.animationChange.emit();
+    }
+
+    private detachMotionPath(element: AnyElement) {
+        element.motion.pathId = null;
+        this.animation.previewAt(this.animation.currentTime);
+        this.animationChange.emit();
+    }
+
+    private elementContains(parent: AnyElement, child: AnyElement): boolean {
+        return parent instanceof Group && parent.elements.some((element) => {
+            return element === child || this.elementContains(element, child);
+        });
+    }
+
     private propertySupported(element: AnyElement, property: AnimatablePropertyDefinition): boolean {
         if(property.property === "path.drawProgress") {
             return element instanceof Path;
+        }
+
+        if(property.property.startsWith("motion.")) {
+            return !!element.motion.pathId;
         }
 
         if(property.property.startsWith("transform.") || property.property === "visible" || property.property === "opacity") {
@@ -743,6 +880,7 @@ export class AnimationTimelineComponent {
             }
 
             return property.property === "path.drawProgress"
+                || property.property === "motion.progress"
                 ? Math.max(0, Math.min(1, numeric))
                 : numeric;
         }
@@ -767,8 +905,13 @@ export class AnimationTimelineComponent {
             case "transform.scaleY":
             case "opacity":
             case "path.drawProgress":
+            case "motion.progress":
                 return 0.01;
             case "transform.rotation":
+            case "motion.offsetAngle":
+                return 1;
+            case "motion.offsetX":
+            case "motion.offsetY":
                 return 1;
             case "settings.stroke_width":
                 return 0.25;
@@ -779,7 +922,7 @@ export class AnimationTimelineComponent {
 
     private normalizeDraggedNumber(property: AnimatablePropertyDefinition, value: number): number {
         let normalized = value;
-        if(property.property === "opacity" || property.property === "path.drawProgress") {
+        if(property.property === "opacity" || property.property === "path.drawProgress" || property.property === "motion.progress") {
             normalized = Math.max(0, Math.min(1, normalized));
         }
         if(property.property === "settings.stroke_width") {
@@ -826,6 +969,26 @@ export class AnimationTimelineComponent {
                 .filter((keyframe) => this.selectedKeyframeIds.has(keyframe.id))
                 .map((keyframe) => ({ track, keyframe }));
         });
+    }
+
+    private timelineKeyframeEasingType(keyframe: TimelineKeyframe): EasingType | "mixed" {
+        if(!keyframe.groupedKeyframeIds?.length) {
+            return keyframe.easing?.type ?? "linear";
+        }
+
+        const svg = this.editor.selectedSVG;
+        if(!svg) {
+            return "linear";
+        }
+
+        const ids = new Set(keyframe.groupedKeyframeIds);
+        const types = new Set(svg.animation.tracks.flatMap((track) => {
+            return track.keyframes
+                .filter((candidate) => ids.has(candidate.id))
+                .map((candidate) => candidate.easing?.type ?? "linear");
+        }));
+
+        return types.size === 1 ? [...types][0] : "mixed";
     }
 
     private sortDraggedTracks() {
@@ -1097,4 +1260,11 @@ interface CopiedKeyframe {
     timeOffset: number;
     value: unknown;
     easing: Keyframe["easing"];
+}
+
+interface EasingToolbarOption {
+    type: EasingType;
+    label: string;
+    icon: string;
+    className?: string;
 }

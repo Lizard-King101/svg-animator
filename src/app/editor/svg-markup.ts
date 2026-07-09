@@ -2,7 +2,7 @@ import { Group } from "./objects/elements/group.object";
 import { Path } from "./objects/elements/path.object";
 import { Shape } from "./objects/elements/shape.object";
 import { TextElement } from "./objects/elements/text.object";
-import { ownMatrix } from "./objects/element-bounds";
+import { motionAdjustedMatrix } from "./objects/motion-path.object";
 import { AnyElement, SVG } from "./objects/svg.object";
 import { matrixToSvg } from "./objects/transform.object";
 
@@ -40,7 +40,7 @@ export function buildSVGMarkup(svg: SVG): string {
         const indent = '  '.repeat(depth);
         for(const element of elements) {
             if(!element.visible) continue;
-            const transform = matrixToSvg(ownMatrix(element));
+            const transform = matrixToSvg(motionAdjustedMatrix(svg, element));
 
             if(element instanceof Group) {
                 if(element.clipElement) {

@@ -291,6 +291,10 @@ export class EditorService {
     }
 
     runContextMenuItem(item: EditorContextMenuItem) {
+        if(!item.action) {
+            return;
+        }
+
         item.action();
         this.closeContextMenu();
     }
@@ -335,5 +339,6 @@ export interface EditorContextMenu {
 export interface EditorContextMenuItem {
     label: string;
     shortcut?: string;
-    action: () => void;
+    action?: () => void;
+    children?: EditorContextMenuItem[];
 }

@@ -7,9 +7,10 @@ import { Path } from "src/app/editor/objects/elements/path.object";
 import { Point } from "src/app/editor/objects/point.object";
 import { Shape } from "src/app/editor/objects/elements/shape.object";
 import { TextElement } from "src/app/editor/objects/elements/text.object";
-import { combinedMatrixFor, localBounds, resolvedOrigin, transformedElementBounds, ownMatrix } from "src/app/editor/objects/element-bounds";
+import { localBounds, resolvedOrigin } from "src/app/editor/objects/element-bounds";
+import { combinedMotionAdjustedMatrixFor, motionAdjustedMatrix } from "src/app/editor/objects/motion-path.object";
 import { AnyElement } from "src/app/editor/objects/svg.object";
-import { Bounds, applyMatrix, matrixToSvg } from "src/app/editor/objects/transform.object";
+import { Bounds, applyMatrix, matrixToSvg, transformedBounds } from "src/app/editor/objects/transform.object";
 
 @Component({
     standalone: true,
@@ -59,7 +60,7 @@ export class SVGDisplay implements AfterViewInit {
     }
 
     transformAttr(element: AnyElement): string | null {
-        return matrixToSvg(ownMatrix(element));
+        return matrixToSvg(motionAdjustedMatrix(this.editor.selectedSVG, element));
     }
 
     opacityAttr(element: AnyElement): number | null {
@@ -71,8 +72,9 @@ export class SVGDisplay implements AfterViewInit {
     }
 
     selectedOverlayTransformAttr(element: AnyElement): string | null {
-        const elements = this.editor.selectedSVG?.elements ?? [];
-        return matrixToSvg(combinedMatrixFor(elements, element));
+        return this.editor.selectedSVG
+            ? matrixToSvg(combinedMotionAdjustedMatrixFor(this.editor.selectedSVG, element))
+            : null;
     }
 
     selectionBox(element?: AnyElement): SelectionBox | null {
@@ -81,7 +83,7 @@ export class SVGDisplay implements AfterViewInit {
         }
 
         const bounds = localBounds(element);
-        const matrix = combinedMatrixFor(this.editor.selectedSVG.elements, element);
+        const matrix = combinedMotionAdjustedMatrixFor(this.editor.selectedSVG, element);
         const origin = resolvedOrigin(element);
         const corners = {
             nw: applyMatrix(matrix, bounds.x, bounds.y),
@@ -96,7 +98,7 @@ export class SVGDisplay implements AfterViewInit {
         const topCenter = corners.n;
         const rotate = applyMatrix(matrix, bounds.x + bounds.width / 2, bounds.y - 34);
         const pivot = applyMatrix(matrix, origin.x, origin.y);
-        const hitBounds = transformedElementBounds(this.editor.selectedSVG.elements, element);
+        const hitBounds = transformedBounds(bounds, matrix);
 
         return {
             points: `${corners.nw.x},${corners.nw.y} ${corners.ne.x},${corners.ne.y} ${corners.se.x},${corners.se.y} ${corners.sw.x},${corners.sw.y}`,

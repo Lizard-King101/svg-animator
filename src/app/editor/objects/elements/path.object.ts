@@ -2,6 +2,7 @@ import { EditorService } from "src/app/_services/editor.service";
 import { ElementAttribute, SettingsFromAttributes } from "./element";
 import { Color } from "../color.object";
 import { Line, LineSave } from "../line.object";
+import { defaultMotion, MotionSave, MotionState, restoreMotion, serializeMotion } from "../motion.object";
 import { Point, PointSave } from "../point.object";
 import { defaultTransform, restoreTransform, serializeTransform, TransformSave, TransformState } from "../transform.object";
 
@@ -14,6 +15,7 @@ export interface PathSave {
     opacity?: number;
     drawProgress?: number;
     transform?: TransformSave;
+    motion?: MotionSave;
     closed: boolean;
     settings: {
         stroke_width: number;
@@ -104,6 +106,7 @@ export class Path {
     opacity: number = 1;
     drawProgress: number = 1;
     transform: TransformState = defaultTransform();
+    motion: MotionState = defaultMotion();
     lines: Line[] = [];
     closed: boolean = false;
 
@@ -224,6 +227,7 @@ export class Path {
             opacity: this.opacity,
             drawProgress: this.drawProgress,
             transform: serializeTransform(this.transform),
+            motion: serializeMotion(this.motion),
             closed: this.closed,
             settings: {
                 stroke_width: this.settings.stroke_width,
@@ -246,6 +250,7 @@ export class Path {
         p.opacity = s.opacity ?? 1;
         p.drawProgress = clamp01(s.drawProgress ?? 1);
         p.transform = restoreTransform(s.transform);
+        p.motion = restoreMotion(s.motion);
         p.closed = s.closed;
         p.settings = {
             stroke_width: s.settings.stroke_width,

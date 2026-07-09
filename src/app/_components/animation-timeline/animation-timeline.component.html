@@ -43,6 +43,17 @@
     <button class="timeline-icon" (click)="zoomTimeline(20)" title="Zoom in">
       <fa-icon icon="plus"></fa-icon>
     </button>
+    <div class="timeline-toolbar-sep"></div>
+    <div class="easing-switch" title="Selected keyframe easing">
+      <button class="timeline-icon easing-button"
+              *ngFor="let option of easingOptions"
+              [disabled]="selectedKeyframeIds.size == 0"
+              [ngClass]="{'active': selectedEasingType() == option.type}"
+              (click)="setSelectedEasing(option.type)"
+              [title]="option.label">
+        <fa-icon [icon]="option.icon" [ngClass]="option.className"></fa-icon>
+      </button>
+    </div>
   </div>
 
   <div class="timeline-table">
@@ -65,7 +76,8 @@
       <div class="timeline-left-cell"
            [ngClass]="{'selected': editor.selectedElement == row.element, 'property': row.type == 'property'}"
            [style.padding-left.px]="10 + row.depth * 16"
-           (click)="selectLayer(row.element)">
+           (click)="selectLayer(row.element)"
+           (contextmenu)="openRowContextMenu(row, $event)">
         <button class="row-expander"
                 *ngIf="row.type == 'layer'"
                 (click)="$event.stopPropagation(); toggleLayer(row.element)">
@@ -157,6 +169,7 @@
                   (pointercancel)="endKeyframeDrag($event)"
                   (click)="$event.stopPropagation()"
                   [title]="keyframe.time.toFixed(2) + 's'">
+            <fa-icon [icon]="keyframeEasingIcon(keyframe)" [ngClass]="keyframeEasingClass(keyframe)"></fa-icon>
           </button>
         </div>
       </div>

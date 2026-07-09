@@ -70,6 +70,18 @@ export function readAnimationProperty(element: AnyElement, property: string): un
             return element.visible;
         case "path.drawProgress":
             return element instanceof Path ? clamp01(element.drawProgress) : undefined;
+        case "motion.pathId":
+            return element.motion.pathId ?? null;
+        case "motion.progress":
+            return clamp01(element.motion.progress);
+        case "motion.offsetX":
+            return element.motion.offsetX;
+        case "motion.offsetY":
+            return element.motion.offsetY;
+        case "motion.rotateToPath":
+            return element.motion.rotateToPath;
+        case "motion.offsetAngle":
+            return element.motion.offsetAngle;
         default:
             return undefined;
     }
@@ -117,6 +129,20 @@ export function writeAnimationProperty(element: AnyElement, property: string, va
                 return false;
             }
             return writeNumber(value, (numeric) => element.drawProgress = clamp01(numeric));
+        case "motion.pathId":
+            element.motion.pathId = typeof value === "string" && value ? value : null;
+            return true;
+        case "motion.progress":
+            return writeNumber(value, (numeric) => element.motion.progress = clamp01(numeric));
+        case "motion.offsetX":
+            return writeNumber(value, (numeric) => element.motion.offsetX = numeric);
+        case "motion.offsetY":
+            return writeNumber(value, (numeric) => element.motion.offsetY = numeric);
+        case "motion.rotateToPath":
+            element.motion.rotateToPath = Boolean(value);
+            return true;
+        case "motion.offsetAngle":
+            return writeNumber(value, (numeric) => element.motion.offsetAngle = numeric);
         default:
             return false;
     }
