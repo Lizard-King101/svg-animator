@@ -527,6 +527,7 @@ export class SelectTool extends Tool {
         if(overlayPoint) {
             if(this._editor.selectedElement) {
                 pinAncestorTransformOrigins(this.rootElements(), this._editor.selectedElement);
+                pinTransformOrigin(this._editor.selectedElement);
             }
             this.moveStart = this.canvasToSelectedLocal(canvasPoint);
             if(overlayPoint.role == 'anchor' && this._editor.keysDown['Alt'] && this._editor.selectedElement instanceof Path) {

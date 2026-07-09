@@ -26,7 +26,7 @@ import { AnyElement } from "./objects/svg.object";
 import { buildSVGMarkup } from "./svg-markup";
 import { pinTransformOrigin, resolvedOrigin } from "./objects/element-bounds";
 import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, createAnimationColorValue } from "./objects/animation.object";
-import { readAnimationProperty } from "./objects/animation-targets";
+import { pathPointAnimationProperty, readAnimationProperty } from "./objects/animation-targets";
 
 @Component({
     standalone: true,
@@ -59,6 +59,7 @@ export class EditorPage implements AfterViewInit {
     private pendingLayerDrag?: { element: AnyElement; pointerId: number; startX: number; startY: number; row: HTMLElement };
     private suppressLayerClick = false;
     private animationTransformDragStart?: AnimationTransformDragStart;
+    private animationPathPointDragStart?: AnimationPathPointDragStart;
     renamingLayer?: AnyElement;
     selectedLayers: AnyElement[] = [];
     private lastSelectedLayer?: AnyElement;
@@ -190,6 +191,7 @@ export class EditorPage implements AfterViewInit {
                         if (this.editor.selectedTool) {
                             this.editor.selectedTool.down(event);
                             this.captureAnimationTransformDragStart();
+                            this.captureAnimationPathPointDragStart();
                         }
                         break;
                     case 1:
@@ -207,6 +209,7 @@ export class EditorPage implements AfterViewInit {
             this.ngZone.run(() => {
                 if (this.editor.selectedTool) this.editor.selectedTool.up(event);
                 this.commitAnimationTransformDrag();
+                this.commitAnimationPathPointDrag();
                 this.movingView = false;
                 // Skip snapshot on right-click — contextmenu fires next and handles it
                 if (event.button !== 2) this.snapshotAndSave();
@@ -377,7 +380,9 @@ export class EditorPage implements AfterViewInit {
     exportSVG() {
         const svg = this.editor.selectedSVG;
         if(!svg) return;
-        const markup = this.animation.withBaseState(() => buildSVGMarkup(svg));
+        const markup = this.animation.mode === 'animate'
+            ? buildSVGMarkup(svg)
+            : this.animation.withBaseState(() => buildSVGMarkup(svg));
         const blob = new Blob([markup], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -618,6 +623,10 @@ export class EditorPage implements AfterViewInit {
     }
 
     private animationPropertySupported(element: AnyElement, definition: AnimatablePropertyDefinition): boolean {
+        if(definition.property === 'path.drawProgress') {
+            return element instanceof Path;
+        }
+
         if(definition.property.startsWith('transform.') || definition.property === 'visible' || definition.property === 'opacity') {
             return true;
         }
@@ -637,7 +646,13 @@ export class EditorPage implements AfterViewInit {
 
         if(definition.valueType === 'number') {
             const numeric = typeof value === 'number' ? value : Number(value);
-            return Number.isFinite(numeric) ? numeric : value;
+            if(!Number.isFinite(numeric)) {
+                return value;
+            }
+
+            return definition.property === 'path.drawProgress'
+                ? Math.max(0, Math.min(1, numeric))
+                : numeric;
         }
 
         return value;
@@ -662,6 +677,10 @@ export class EditorPage implements AfterViewInit {
             return;
         }
 
+        if(start.element instanceof Path && this.animationPathPointDragStart?.path === start.element && this.pathPointValuesChanged(this.animationPathPointDragStart)) {
+            return;
+        }
+
         const currentValues = this.transformAnimationValues(start.element);
         this.ANIMATABLE_PROPERTIES
             .filter((definition) => definition.property.startsWith('transform.'))
@@ -676,6 +695,57 @@ export class EditorPage implements AfterViewInit {
             });
     }
 
+    private captureAnimationPathPointDragStart() {
+        if(this.animation.mode !== 'animate' || !(this.editor.selectedElement instanceof Path)) {
+            this.animationPathPointDragStart = undefined;
+            return;
+        }
+
+        this.animationPathPointDragStart = {
+            path: this.editor.selectedElement,
+            values: this.pathPointAnimationValues(this.editor.selectedElement),
+        };
+    }
+
+    private commitAnimationPathPointDrag() {
+        const start = this.animationPathPointDragStart;
+        this.animationPathPointDragStart = undefined;
+        if(this.animation.mode !== 'animate' || !start || this.editor.selectedElement !== start.path) {
+            return;
+        }
+
+        const currentValues = this.pathPointAnimationValues(start.path);
+        const changed: Array<{ id: string; axis: 'x' | 'y'; value: number; baseline: number }> = [];
+        Object.entries(currentValues).forEach(([id, current]) => {
+            const baseline = start.values[id];
+            if(!baseline) {
+                return;
+            }
+
+            if(Math.abs(current.x - baseline.x) >= 0.0005) {
+                changed.push({ id, axis: 'x', value: current.x, baseline: baseline.x });
+            }
+
+            if(Math.abs(current.y - baseline.y) >= 0.0005) {
+                changed.push({ id, axis: 'y', value: current.y, baseline: baseline.y });
+            }
+        });
+
+        if(changed.length === 0) {
+            return;
+        }
+
+        changed.forEach((change) => {
+            this.animation.upsertKeyframe(
+                start.path,
+                pathPointAnimationProperty(change.id, change.axis),
+                'number',
+                change.value,
+                change.baseline
+            );
+        });
+    }
+
     private transformAnimationValues(element: AnyElement): Record<string, number> {
         const values: Record<string, number> = {};
         this.ANIMATABLE_PROPERTIES
@@ -685,7 +755,26 @@ export class EditorPage implements AfterViewInit {
                 if(typeof value === 'number' && Number.isFinite(value)) {
                     values[definition.property] = value;
                 }
-            });
+        });
+        return values;
+    }
+
+    private pathPointValuesChanged(start: AnimationPathPointDragStart): boolean {
+        const currentValues = this.pathPointAnimationValues(start.path);
+        return Object.entries(currentValues).some(([id, current]) => {
+            const baseline = start.values[id];
+            return !!baseline && (
+                Math.abs(current.x - baseline.x) >= 0.0005 ||
+                Math.abs(current.y - baseline.y) >= 0.0005
+            );
+        });
+    }
+
+    private pathPointAnimationValues(path: Path): Record<string, { x: number; y: number }> {
+        const values: Record<string, { x: number; y: number }> = {};
+        path.pathPoints().forEach((point) => {
+            values[point.id] = { x: point.x, y: point.y };
+        });
         return values;
     }
 
@@ -1448,4 +1537,9 @@ type ShapeFrameField = 'x' | 'y' | 'width' | 'height';
 interface AnimationTransformDragStart {
     element: AnyElement;
     values: Record<string, number>;
+}
+
+interface AnimationPathPointDragStart {
+    path: Path;
+    values: Record<string, { x: number; y: number }>;
 }

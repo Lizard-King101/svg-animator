@@ -6,10 +6,19 @@ import { AnimationPlaybackService } from "src/app/_services/animation-playback.s
 import { EditorService } from "src/app/_services/editor.service";
 import { ColorAttribute } from "../attributes/color/color.component";
 import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, AnimationTrack, Keyframe, makeAnimationId } from "src/app/editor/objects/animation.object";
-import { readAnimationProperty } from "src/app/editor/objects/animation-targets";
+import { parsePathPointProperty, pathPointAnimationProperty, readAnimationProperty } from "src/app/editor/objects/animation-targets";
 import { Color } from "src/app/editor/objects/color.object";
 import { Group } from "src/app/editor/objects/elements/group.object";
+import { Path } from "src/app/editor/objects/elements/path.object";
 import { AnyElement } from "src/app/editor/objects/svg.object";
+
+const PATH_SHAPE_PROPERTY: AnimatablePropertyDefinition = {
+    property: "path.shape",
+    label: "Path Shape",
+    valueType: "string",
+    group: "path",
+    mvp: true,
+};
 
 @Component({
     standalone: true,
@@ -70,8 +79,12 @@ export class AnimationTimelineComponent {
         this.editor.selectedPathLine = undefined;
     }
 
-    keyframes(row: TimelineRow) {
+    keyframes(row: TimelineRow): TimelineKeyframe[] {
         if(row.type === "property") {
+            if(this.isPathShapeRow(row)) {
+                return this.pathShapeKeyframes(row.element);
+            }
+
             return this.animation.trackFor(row.element, row.property.property)?.keyframes ?? [];
         }
 
@@ -163,33 +176,46 @@ export class AnimationTimelineComponent {
         }
 
         if(this.hasKeyAtTime(row)) {
-            this.animation.removeKeyframeAtCurrentTime(row.element, row.property.property);
+            if(this.isPathShapeRow(row)) {
+                this.removePathShapeKeyframesAtCurrentTime(row.element);
+            } else {
+                this.animation.removeKeyframeAtCurrentTime(row.element, row.property.property);
+            }
             this.pruneKeyframeSelection();
         } else {
-            this.animation.upsertKeyframe(row.element, row.property.property, row.property.valueType);
+            if(this.isPathShapeRow(row)) {
+                this.addPathShapeKeyframesAtCurrentTime(row.element);
+            } else {
+                this.animation.upsertKeyframe(row.element, row.property.property, row.property.valueType);
+            }
         }
 
         this.animationChange.emit();
     }
 
-    isKeyframeSelected(keyframe: Keyframe): boolean {
+    isKeyframeSelected(keyframe: TimelineKeyframe): boolean {
+        if(keyframe.groupedKeyframeIds?.length) {
+            return keyframe.groupedKeyframeIds.some((id) => this.selectedKeyframeIds.has(id));
+        }
+
         return this.selectedKeyframeIds.has(keyframe.id);
     }
 
-    beginKeyframeDrag(keyframe: Keyframe, event: PointerEvent) {
+    beginKeyframeDrag(keyframe: TimelineKeyframe, event: PointerEvent) {
         event.preventDefault();
         event.stopPropagation();
         this.scrubbing = false;
+        const ids = keyframe.groupedKeyframeIds?.length ? keyframe.groupedKeyframeIds : [keyframe.id];
 
         if(event.shiftKey) {
-            if(this.selectedKeyframeIds.has(keyframe.id)) {
-                this.selectedKeyframeIds.delete(keyframe.id);
+            if(ids.some((id) => this.selectedKeyframeIds.has(id))) {
+                ids.forEach((id) => this.selectedKeyframeIds.delete(id));
             } else {
-                this.selectedKeyframeIds.add(keyframe.id);
+                ids.forEach((id) => this.selectedKeyframeIds.add(id));
             }
-        } else if(!this.selectedKeyframeIds.has(keyframe.id)) {
+        } else if(!ids.some((id) => this.selectedKeyframeIds.has(id))) {
             this.selectedKeyframeIds.clear();
-            this.selectedKeyframeIds.add(keyframe.id);
+            ids.forEach((id) => this.selectedKeyframeIds.add(id));
         }
 
         const entries = this.selectedKeyframeEntries();
@@ -321,9 +347,15 @@ export class AnimationTimelineComponent {
     }
 
     hasKeyAtTime(row: TimelineRow): boolean {
-        return row.type === "property"
-            ? this.animation.hasKeyframeAtCurrentTime(row.element, row.property.property)
-            : false;
+        if(row.type !== "property") {
+            return false;
+        }
+
+        if(this.isPathShapeRow(row)) {
+            return this.pathShapeKeyframes(row.element).some((keyframe) => this.timesMatch(keyframe.time, this.animation.currentTime));
+        }
+
+        return this.animation.hasKeyframeAtCurrentTime(row.element, row.property.property);
     }
 
     previousKeyframeTime(row: TimelineRow): number | undefined {
@@ -364,6 +396,10 @@ export class AnimationTimelineComponent {
     }
 
     propertyValue(row: TimelineRow): unknown {
+        if(row.type === "property" && this.isPathShapeRow(row)) {
+            return `${this.pathShapeAnimatedPointCount(row.element)} pts`;
+        }
+
         return row.type === "property"
             ? readAnimationProperty(row.element, row.property.property)
             : undefined;
@@ -672,6 +708,9 @@ export class AnimationTimelineComponent {
                 this.properties
                     .filter((property) => this.propertySupported(element, property))
                     .forEach((property) => rows.push({ type: "property", element, depth: depth + 1, property }));
+                if(element instanceof Path) {
+                    rows.push({ type: "property", element, depth: depth + 1, property: PATH_SHAPE_PROPERTY });
+                }
             }
             if(element instanceof Group) {
                 this.addRows(element.elements, rows, depth + 1);
@@ -680,6 +719,10 @@ export class AnimationTimelineComponent {
     }
 
     private propertySupported(element: AnyElement, property: AnimatablePropertyDefinition): boolean {
+        if(property.property === "path.drawProgress") {
+            return element instanceof Path;
+        }
+
         if(property.property.startsWith("transform.") || property.property === "visible" || property.property === "opacity") {
             return true;
         }
@@ -695,7 +738,13 @@ export class AnimationTimelineComponent {
     private normalizeValue(property: AnimatablePropertyDefinition, value: unknown): unknown {
         if(property.valueType === "number") {
             const numeric = typeof value === "number" ? value : Number(value);
-            return Number.isFinite(numeric) ? numeric : value;
+            if(!Number.isFinite(numeric)) {
+                return value;
+            }
+
+            return property.property === "path.drawProgress"
+                ? Math.max(0, Math.min(1, numeric))
+                : numeric;
         }
 
         return value;
@@ -717,6 +766,7 @@ export class AnimationTimelineComponent {
             case "transform.scaleX":
             case "transform.scaleY":
             case "opacity":
+            case "path.drawProgress":
                 return 0.01;
             case "transform.rotation":
                 return 1;
@@ -729,7 +779,7 @@ export class AnimationTimelineComponent {
 
     private normalizeDraggedNumber(property: AnimatablePropertyDefinition, value: number): number {
         let normalized = value;
-        if(property.property === "opacity") {
+        if(property.property === "opacity" || property.property === "path.drawProgress") {
             normalized = Math.max(0, Math.min(1, normalized));
         }
         if(property.property === "settings.stroke_width") {
@@ -818,14 +868,93 @@ export class AnimationTimelineComponent {
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
             if(centerX >= left && centerX <= right && centerY >= top && centerY <= bottom) {
-                const id = diamond.dataset["keyframeId"];
-                if(id) {
-                    nextSelection.add(id);
-                }
+                const ids = (diamond.dataset["keyframeIds"] ?? diamond.dataset["keyframeId"] ?? "")
+                    .split(",")
+                    .filter(Boolean);
+                ids.forEach((id) => nextSelection.add(id));
             }
         });
 
         this.selectedKeyframeIds = nextSelection;
+    }
+
+    private isPathShapeRow(row: TimelineRow): row is PropertyTimelineRow & { element: Path } {
+        return row.type === "property" && row.element instanceof Path && row.property.property === PATH_SHAPE_PROPERTY.property;
+    }
+
+    private pathPointTracks(path: Path): AnimationTrack[] {
+        const svg = this.editor.selectedSVG;
+        if(!svg) {
+            return [];
+        }
+
+        return svg.animation.tracks.filter((track) => {
+            return track.targetId === path.id && !!parsePathPointProperty(track.property);
+        });
+    }
+
+    private pathShapeKeyframes(element: AnyElement): TimelineKeyframe[] {
+        if(!(element instanceof Path)) {
+            return [];
+        }
+
+        const groups: TimelineKeyframe[] = [];
+        this.pathPointTracks(element).forEach((track) => {
+            track.keyframes.forEach((keyframe) => {
+                let group = groups.find((candidate) => this.timesMatch(candidate.time, keyframe.time));
+                if(!group) {
+                    group = {
+                        id: `path-shape-${element.id}-${keyframe.time}`,
+                        time: keyframe.time,
+                        value: "Path Shape",
+                        easing: keyframe.easing,
+                        groupedKeyframeIds: [],
+                    };
+                    groups.push(group);
+                }
+                group.groupedKeyframeIds!.push(keyframe.id);
+            });
+        });
+
+        return groups.sort((a, b) => a.time - b.time);
+    }
+
+    private pathShapeAnimatedPointCount(element: AnyElement): number {
+        if(!(element instanceof Path)) {
+            return 0;
+        }
+
+        const pointIds = new Set<string>();
+        this.pathPointTracks(element).forEach((track) => {
+            const parsed = parsePathPointProperty(track.property);
+            if(parsed) {
+                pointIds.add(parsed.pointId);
+            }
+        });
+        return pointIds.size;
+    }
+
+    private removePathShapeKeyframesAtCurrentTime(path: Path) {
+        this.pathPointTracks(path).forEach((track) => {
+            track.keyframes = track.keyframes.filter((keyframe) => !this.timesMatch(keyframe.time, this.animation.currentTime));
+        });
+
+        if(this.editor.selectedSVG) {
+            this.editor.selectedSVG.animation.tracks = this.editor.selectedSVG.animation.tracks.filter((track) => track.keyframes.length > 0);
+        }
+
+        this.animation.previewAt(this.animation.currentTime);
+    }
+
+    private addPathShapeKeyframesAtCurrentTime(path: Path) {
+        const selected = this.editor.selectedPathAnchor && path.findPointById(this.editor.selectedPathAnchor.id)
+            ? [this.editor.selectedPathAnchor]
+            : path.pathPoints();
+
+        selected.forEach((point) => {
+            this.animation.upsertKeyframe(path, pathPointAnimationProperty(point.id, "x"), "number", point.x, point.x);
+            this.animation.upsertKeyframe(path, pathPointAnimationProperty(point.id, "y"), "number", point.y, point.y);
+        });
     }
 
     private ensureTimelineTrack(targetId: string, property: string, valueType: AnimationTrack["valueType"]): AnimationTrack {
@@ -923,6 +1052,10 @@ interface TimelineRulerMark {
 interface KeyframeEntry {
     track: AnimationTrack;
     keyframe: Keyframe;
+}
+
+interface TimelineKeyframe extends Keyframe {
+    groupedKeyframeIds?: string[];
 }
 
 interface KeyframeDragEntry extends KeyframeEntry {

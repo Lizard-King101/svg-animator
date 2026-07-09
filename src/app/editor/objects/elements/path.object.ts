@@ -12,6 +12,7 @@ export interface PathSave {
     visible: boolean;
     locked: boolean;
     opacity?: number;
+    drawProgress?: number;
     transform?: TransformSave;
     closed: boolean;
     settings: {
@@ -101,6 +102,7 @@ export class Path {
     visible: boolean = true;
     locked: boolean = false;
     opacity: number = 1;
+    drawProgress: number = 1;
     transform: TransformState = defaultTransform();
     lines: Line[] = [];
     closed: boolean = false;
@@ -186,6 +188,27 @@ export class Path {
         });
     }
 
+    pathPoints(): Point[] {
+        const points: Point[] = [];
+        const add = (point?: Point) => {
+            if(point && !points.some((candidate) => candidate.id === point.id)) {
+                points.push(point);
+            }
+        };
+
+        this.lines.forEach((line) => {
+            line.points.forEach(add);
+            add(line.controlStart);
+            add(line.controlEnd);
+        });
+
+        return points;
+    }
+
+    findPointById(id: string): Point | undefined {
+        return this.pathPoints().find((point) => point.id === id);
+    }
+
     destroy() {
         this.lines = [];
         this._editor.removeElement(this.id);
@@ -199,6 +222,7 @@ export class Path {
             visible: this.visible,
             locked: this.locked,
             opacity: this.opacity,
+            drawProgress: this.drawProgress,
             transform: serializeTransform(this.transform),
             closed: this.closed,
             settings: {
@@ -220,6 +244,7 @@ export class Path {
         p.visible = s.visible;
         p.locked = s.locked;
         p.opacity = s.opacity ?? 1;
+        p.drawProgress = clamp01(s.drawProgress ?? 1);
         p.transform = restoreTransform(s.transform);
         p.closed = s.closed;
         p.settings = {
@@ -248,4 +273,9 @@ export class Path {
         p.lines = s.lines.map((ls) => Line.fromSave(ls, editor, resolve));
         return p;
     }
+}
+
+function clamp01(value: unknown): number {
+    const numeric = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(numeric) ? Math.max(0, Math.min(1, numeric)) : 1;
 }

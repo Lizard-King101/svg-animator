@@ -27,6 +27,10 @@ function opacityAttr(value: number): number | null {
     return value === 1 ? null : value;
 }
 
+function drawOffsetAttr(path: Path): number {
+    return 1 - Math.max(0, Math.min(1, path.drawProgress));
+}
+
 export function buildSVGMarkup(svg: SVG): string {
     const lines: string[] = [
         `<svg xmlns="http://www.w3.org/2000/svg" width="${escapeXmlAttribute(svg.width)}" height="${escapeXmlAttribute(svg.height)}" viewBox="0 0 ${escapeXmlAttribute(svg.width)} ${escapeXmlAttribute(svg.height)}">`
@@ -62,6 +66,9 @@ export function buildSVGMarkup(svg: SVG): string {
                     attr('stroke-width', s.stroke_width ?? null) +
                     attr('stroke-linecap', s.line_cap ?? null) +
                     attr('stroke-linejoin', s.line_join ?? null) +
+                    attr('pathLength', 1) +
+                    attr('stroke-dasharray', 1) +
+                    attr('stroke-dashoffset', drawOffsetAttr(element)) +
                     `/>`
                 );
             } else if(element instanceof TextElement) {

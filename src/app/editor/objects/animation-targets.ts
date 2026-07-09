@@ -1,6 +1,7 @@
 import { Color } from "./color.object";
 import { resolvedOrigin } from "./element-bounds";
 import { Group } from "./elements/group.object";
+import { Path } from "./elements/path.object";
 import { AnyElement } from "./svg.object";
 import { AnimationColorValue } from "./animation.object";
 
@@ -36,6 +37,12 @@ export function findAnimationTarget(elements: AnyElement[], id: string): AnyElem
 }
 
 export function readAnimationProperty(element: AnyElement, property: string): unknown {
+    const pathPoint = parsePathPointProperty(property);
+    if(pathPoint && element instanceof Path) {
+        const point = element.findPointById(pathPoint.pointId);
+        return point?.[pathPoint.axis];
+    }
+
     switch(property) {
         case "transform.translateX":
             return element.transform.translateX;
@@ -61,12 +68,24 @@ export function readAnimationProperty(element: AnyElement, property: string): un
             return (element.settings as Record<string, unknown>)["stroke_width"];
         case "visible":
             return element.visible;
+        case "path.drawProgress":
+            return element instanceof Path ? clamp01(element.drawProgress) : undefined;
         default:
             return undefined;
     }
 }
 
 export function writeAnimationProperty(element: AnyElement, property: string, value: unknown): boolean {
+    const pathPoint = parsePathPointProperty(property);
+    if(pathPoint && element instanceof Path) {
+        const point = element.findPointById(pathPoint.pointId);
+        if(!point) {
+            return false;
+        }
+
+        return writeNumber(value, (numeric) => point[pathPoint.axis] = numeric);
+    }
+
     switch(property) {
         case "transform.translateX":
             return writeNumber(value, (numeric) => element.transform.translateX = numeric);
@@ -93,9 +112,30 @@ export function writeAnimationProperty(element: AnyElement, property: string, va
         case "visible":
             element.visible = Boolean(value);
             return true;
+        case "path.drawProgress":
+            if(!(element instanceof Path)) {
+                return false;
+            }
+            return writeNumber(value, (numeric) => element.drawProgress = clamp01(numeric));
         default:
             return false;
     }
+}
+
+export function pathPointAnimationProperty(pointId: string, axis: "x" | "y"): string {
+    return `path.points.${pointId}.${axis}`;
+}
+
+export function parsePathPointProperty(property: string): { pointId: string; axis: "x" | "y" } | undefined {
+    const match = /^path\.points\.([^.]+)\.(x|y)$/.exec(property);
+    if(!match) {
+        return undefined;
+    }
+
+    return {
+        pointId: match[1],
+        axis: match[2] as "x" | "y",
+    };
 }
 
 function writeNumber(value: unknown, write: (value: number) => void): boolean {
@@ -106,6 +146,10 @@ function writeNumber(value: unknown, write: (value: number) => void): boolean {
 
     write(numeric);
     return true;
+}
+
+function clamp01(value: number): number {
+    return Math.max(0, Math.min(1, value));
 }
 
 function writeColor(element: AnyElement, key: "fill" | "stroke", value: unknown): boolean {

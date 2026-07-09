@@ -21,6 +21,9 @@
         [attr.stroke-width]="path.settings.stroke_width"
         [attr.stroke-linecap]="path.settings.line_cap"
         [attr.stroke-linejoin]="path.settings.line_join"
+        pathLength="1"
+        stroke-dasharray="1"
+        [attr.stroke-dashoffset]="drawOffsetAttr(path)"
         />
     </ng-container>
     <ng-container *ngIf="element.visible && asShape(element) as shape">
@@ -169,6 +172,49 @@
             stroke-dasharray="3 3"
             vector-effect="non-scaling-stroke"
             />
+        </ng-container>
+    </svg:g>
+</ng-container>
+
+<ng-container *ngIf="selectionBox(editor.selectedElement) as box">
+    <svg:circle
+    data-transform-handle="rotate"
+    [attr.cx]="box.rotate.x"
+    [attr.cy]="box.rotate.y"
+    r="6"
+    fill="#ffffff"
+    stroke="#2dd4bf"
+    stroke-width="1.5"
+    vector-effect="non-scaling-stroke"
+    />
+    <svg:circle
+    data-transform-handle="origin"
+    [attr.cx]="box.pivot.x"
+    [attr.cy]="box.pivot.y"
+    r="5"
+    fill="#2dd4bf"
+    stroke="#14141a"
+    stroke-width="1.5"
+    vector-effect="non-scaling-stroke"
+    />
+    <ng-container *ngFor="let handle of box.handles">
+        <svg:rect
+        [attr.data-transform-handle]="handle.role"
+        [attr.x]="handle.x - 4"
+        [attr.y]="handle.y - 4"
+        width="8"
+        height="8"
+        fill="#ffffff"
+        stroke="#2dd4bf"
+        stroke-width="1.25"
+        vector-effect="non-scaling-stroke"
+        />
+    </ng-container>
+</ng-container>
+
+<ng-container *ngIf="editor.selectedElement?.visible && !editor.selectedElement?.locked && asPath(editor.selectedElement) as selectedPath">
+    <svg:g [attr.transform]="selectedOverlayTransformAttr(selectedPath)">
+        <ng-container *ngFor="let segment of bezierSegments(selectedPath)">
             <svg:circle
             [attr.data-point-role]="'control-start'"
             [attr.data-point-id]="segment.controlStart?.id"
@@ -209,40 +255,4 @@
             />
         </ng-container>
     </svg:g>
-</ng-container>
-
-<ng-container *ngIf="selectionBox(editor.selectedElement) as box">
-    <svg:circle
-    data-transform-handle="rotate"
-    [attr.cx]="box.rotate.x"
-    [attr.cy]="box.rotate.y"
-    r="6"
-    fill="#ffffff"
-    stroke="#2dd4bf"
-    stroke-width="1.5"
-    vector-effect="non-scaling-stroke"
-    />
-    <svg:circle
-    data-transform-handle="origin"
-    [attr.cx]="box.pivot.x"
-    [attr.cy]="box.pivot.y"
-    r="5"
-    fill="#2dd4bf"
-    stroke="#14141a"
-    stroke-width="1.5"
-    vector-effect="non-scaling-stroke"
-    />
-    <ng-container *ngFor="let handle of box.handles">
-        <svg:rect
-        [attr.data-transform-handle]="handle.role"
-        [attr.x]="handle.x - 4"
-        [attr.y]="handle.y - 4"
-        width="8"
-        height="8"
-        fill="#ffffff"
-        stroke="#2dd4bf"
-        stroke-width="1.25"
-        vector-effect="non-scaling-stroke"
-        />
-    </ng-container>
 </ng-container>

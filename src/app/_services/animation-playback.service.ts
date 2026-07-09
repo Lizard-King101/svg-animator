@@ -108,6 +108,9 @@ export class AnimationPlaybackService implements OnDestroy {
         const existingTrack = this.trackFor(element, property);
         const rawBaseValue = baselineValue ?? readAnimationProperty(element, property);
         this.restorePreview();
+        if(!existingTrack && baselineValue !== undefined) {
+            writeAnimationProperty(element, property, baselineValue);
+        }
         const baseValue = valueType === "color"
             ? createAnimationColorValue(rawBaseValue, colorValueSpace(keyValue))
             : rawBaseValue;
@@ -285,12 +288,13 @@ export class AnimationPlaybackService implements OnDestroy {
     private evaluateTrack(svg: SVG, track: AnimationTrack, time: number): AppliedAnimationValue {
         const target = findAnimationTarget(svg.elements, track.targetId);
         const value = evaluateTrack(track, time);
+        const readable = target ? readAnimationProperty(target, track.property) !== undefined : false;
 
         return {
             targetId: track.targetId,
             property: track.property,
             value,
-            applied: !!target && value !== undefined,
+            applied: !!target && readable && value !== undefined,
         };
     }
 
