@@ -4,10 +4,10 @@ The product direction is a **motion SVG studio**. Milestones are dependency-orde
 
 ## 1. Import and publish
 
-1. Add a versioned document migration layer before expanding persisted saves.
-2. Build a `DOMParser`-based SVG importer backed by conformance fixtures.
-3. Sanitize the render representation and preserve unsupported safe content as opaque source nodes. Scripts, event attributes, and unsafe external resources never execute.
-4. Ingest line, cubic, quadratic, arc, close, relative, and shorthand path commands.
+1. ✅ Add a versioned document migration layer before expanding persisted saves.
+2. ✅ Build a `DOMParser`-based SVG importer backed by conformance fixtures.
+3. ✅ Sanitize the render representation and preserve unsupported safe content as opaque source nodes. Scripts, event attributes, and unsafe external resources never execute.
+4. ✅ Ingest line, cubic, quadratic, arc, close, relative, and shorthand path commands.
 5. Publish embedded animation JSON, external JSON, and a lightweight runtime.
 6. Add a Font Awesome project preset and icon export with stroke-to-shape validation, naming, sizing, variants, and metadata.
 

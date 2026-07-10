@@ -1,33 +1,33 @@
 # SVG Compatibility Matrix
 
-Legend: **Native** = editable model; **Render/export** = generated correctly from native state; **Preserve** = planned opaque round-trip for imported unsupported content.
+Legend: **Native** = editable model (including import normalization); **Render/export** = generated correctly from native state; **Preserve** = sanitized source survives import/save/reload/export when it cannot be made native.
 
 | SVG family | Native | Render/export | Preserve on import | Notes |
 |---|---:|---:|---:|---|
-| `svg`, `viewBox` | Partial | Yes | Planned | One document root; nested SVG planned |
-| `g` | Yes | Yes | Planned | Nested groups and transforms |
-| `defs` | Partial | Yes | Planned | Generated for clipping; general defs planned |
-| `path` (`M/L/C/Z`) | Yes | Yes | Planned | Straight/cubic editing and compound contours |
-| Path `H/V/Q/T/S/A`, relative commands | No | No | Planned | Import normalization planned |
-| `rect`, `ellipse` | Yes | Yes | Planned | Rectangle radii supported |
-| `circle` | Via ellipse | Via ellipse | Planned | No distinct native type |
-| `line`, `polyline`, `polygon` | No | No | Planned | Roadmap milestone 2 |
-| `text`, basic multiline `tspan` | Yes | Yes | Planned | Rich tspans/text path planned |
-| `symbol`, `use` | No | No | Planned | Reusable-symbol milestone |
-| Clipping paths | Yes | Yes | Planned | One clipping element per group |
-| Masks | No | No | Planned | Distinct from clipping |
-| Solid fill/stroke | Yes | Yes | Planned | Caps, joins, width supported |
-| Gradients/patterns | No | No | Planned | Paint-server milestone |
-| Dashes/markers/vector effects | No | No | Planned | Style-depth milestone |
-| Images | No | No | Planned | Unsafe external loads must be blocked |
-| Filters/blend modes | No | No | Planned | Sanitized rendering required |
-| Metadata/accessibility | No | No | Planned | Includes title/desc/ARIA metadata |
-| SMIL/CSS/script animation | No | No | Planned opaque only | Active content never executes in-editor |
+| `svg`, `viewBox` | Partial | Yes | Yes | Root viewBox and non-zero origins normalize; nested SVG is preserved |
+| `g` | Yes | Yes | Yes | Nested groups and decomposable transforms |
+| `defs` | Partial | Yes | Yes | Generated clipping is native; general definitions remain source |
+| `path` (`M/L/C/Z`) | Yes | Yes | Yes | Straight/cubic editing and compound contours |
+| Path `H/V/Q/T/S/A`, relative commands | Via normalization | Yes | Yes | Converts to native line/cubic contours |
+| `rect`, `ellipse` | Yes | Yes | Yes | Rectangle radii supported |
+| `circle` | Via ellipse | Via ellipse | Yes | No distinct native type |
+| `line`, `polyline`, `polygon` | Via path | Yes | Yes | Converts to editable path segments |
+| `text`, basic `tspan` | Partial | Yes | Yes | Plain text imports; rich layout remains source |
+| `symbol`, `use` | No | Source | Yes | Reusable-symbol editing remains planned |
+| Clipping paths | Yes | Yes | Yes | Existing native clips; imported clip constructs remain source |
+| Masks | No | Source | Yes | Distinct from clipping |
+| Solid fill/stroke | Yes | Yes | Yes | Hex, RGB, and browser-recognized solid colors |
+| Gradients/patterns | No | Source | Yes | Paint-server editing remains planned |
+| Dashes/markers/vector effects | No | Source | Yes | Style-depth milestone |
+| Images | No | Source | Yes | External references are stripped; safe embedded raster data is retained |
+| Filters/blend modes | No | Source | Yes | Sanitized before rendering |
+| Metadata/accessibility | Partial | Partial | Partial | Title can name a document; richer metadata remains planned |
+| SMIL/CSS/script animation | No | No | Rejected | Active elements and stylesheets are removed before persistence |
 | Editor animation JSON/runtime | Native model | Static SVG only | N/A | Publish formats are roadmap milestone 1 |
 
 ## Import safety policy
 
-The future importer parses text with `DOMParser`; imported nodes are never inserted as live, unsanitized DOM. Scripts, event-handler attributes, unsafe URLs, and active external resources are rejected. Unsupported safe content may retain opaque source for round-trip while a sanitized representation is used for rendering.
+The importer parses text with `DOMParser`; imported nodes are never inserted as live, unsanitized DOM. Scripts, event-handler attributes, stylesheets, SVG animation elements, foreign content, unsafe URLs, and active external resources are rejected. Unsupported safe content retains sanitized source while the same sanitized representation is used for rendering.
 
 ## Fixture requirements
 
