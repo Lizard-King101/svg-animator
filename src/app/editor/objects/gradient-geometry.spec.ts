@@ -1,5 +1,5 @@
 import { GradientPaint } from "./paint.object";
-import { gradientGeometry, moveGradientHandle } from "./gradient-geometry";
+import { convertGradientUnits, gradientGeometry, moveGradientHandle } from "./gradient-geometry";
 import { AnyElement } from "./svg.object";
 import { Shape } from "./elements/shape.object";
 import { Point } from "./point.object";
@@ -29,6 +29,37 @@ describe("gradient viewport geometry", () => {
         expect(paint.coordinates.fy).toBeCloseTo(0.5, 5);
         moveGradientHandle(element, paint, "radius", { x: 170, y: 80 });
         expect(paint.coordinates.r).toBeCloseTo(0.2, 5);
+    });
+
+    it("preserves linear handle positions while converting gradient units", () => {
+        const paint = gradient("linear-gradient", { x1: 0, y1: 0, x2: 1, y2: 1 });
+        const element = elementDouble(paint);
+
+        expect(convertGradientUnits(element, paint, "userSpaceOnUse")).toBeTrue();
+        expect(paint.coordinates).toEqual({ x1: 10, y1: 20, x2: 210, y2: 120 });
+        expect(gradientGeometry(element)!.start).toEqual({ x: 10, y: 20 });
+        expect(gradientGeometry(element)!.end).toEqual({ x: 210, y: 120 });
+
+        expect(convertGradientUnits(element, paint, "objectBoundingBox")).toBeTrue();
+        expect(paint.coordinates.x1).toBeCloseTo(0, 5);
+        expect(paint.coordinates.y1).toBeCloseTo(0, 5);
+        expect(paint.coordinates.x2).toBeCloseTo(1, 5);
+        expect(paint.coordinates.y2).toBeCloseTo(1, 5);
+    });
+
+    it("preserves radial handles while converting gradient units", () => {
+        const paint = gradient("radial-gradient", { cx: 0.5, cy: 0.5, r: 0.25, fx: 0.4, fy: 0.3 });
+        const element = elementDouble(paint);
+        const before = gradientGeometry(element)!;
+
+        convertGradientUnits(element, paint, "userSpaceOnUse");
+        const after = gradientGeometry(element)!;
+        expect(after.center!.x).toBeCloseTo(before.center!.x, 5);
+        expect(after.center!.y).toBeCloseTo(before.center!.y, 5);
+        expect(after.focal!.x).toBeCloseTo(before.focal!.x, 5);
+        expect(after.focal!.y).toBeCloseTo(before.focal!.y, 5);
+        expect(after.radius!.x).toBeCloseTo(before.radius!.x, 5);
+        expect(after.radius!.y).toBeCloseTo(before.radius!.y, 5);
     });
 });
 

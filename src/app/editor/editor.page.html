@@ -348,7 +348,7 @@
                   <label>
                     <span>Units</span>
                     <select [ngModel]="gradient.units"
-                            (ngModelChange)="setGradientMeta(gradient, 'units', $event)">
+                            (ngModelChange)="setGradientUnits(editor.inspectedElement, gradient, $event)">
                       <option value="objectBoundingBox">Object box</option>
                       <option value="userSpaceOnUse">User space</option>
                     </select>
@@ -371,6 +371,7 @@
                   </button>
                 <div class="gradient-stops gradient-stops-popover"
                      *ngIf="gradientStopsPopoverOpen(editor.inspectedElement, attr.output)"
+                     [ngStyle]="gradientStopsPopoverStyle()"
                      (click)="$event.stopPropagation()" (pointerdown)="$event.stopPropagation()">
                   <div class="gradient-stop" *ngFor="let stop of gradient.stops; let stopIndex = index">
                     <div class="gradient-stop-title">

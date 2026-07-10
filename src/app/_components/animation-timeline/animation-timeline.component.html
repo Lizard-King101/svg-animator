@@ -90,8 +90,11 @@
           <span class="row-value" *ngIf="row.property.valueType != 'color' && !isGradientStopsRow(row)">{{ propertyDisplayValue(row) }}</span>
           <div class="gradient-stops-control" *ngIf="isGradientStopsRow(row) && gradientForRow(row) as gradient"
                (click)="$event.stopPropagation()" (pointerdown)="$event.stopPropagation()">
-            <button class="gradient-stops-trigger" (click)="toggleColorEditor(row, $event)">{{ gradient.stops.length }} stops</button>
-            <div class="gradient-stops-popover" *ngIf="colorEditorOpen(row)"
+            <button class="gradient-stops-trigger" (click)="toggleColorEditor(row, $event)"
+                    title="Edit gradient stops" aria-label="Edit gradient stops">
+              <span class="gradient-paint-preview" [style.background]="gradientPreview(gradient)"></span>
+            </button>
+            <div class="gradient-stops-popover" *ngIf="colorEditorOpen(row)" [ngStyle]="paintPopoverStyle()"
                  (click)="$event.stopPropagation()" (pointerdown)="$event.stopPropagation()">
               <div class="gradient-stop-popover-row" *ngFor="let stop of gradient.stops; let stopIndex = index">
                 <strong>Stop {{ stopIndex + 1 }}</strong>
@@ -133,6 +136,7 @@
             </button>
             <div class="color-popover"
                  *ngIf="colorEditorOpen(row)"
+                 [ngStyle]="paintPopoverStyle()"
                  (click)="$event.stopPropagation()"
                  (pointerdown)="$event.stopPropagation()">
               <color [ngModel]="colorValue(row)"

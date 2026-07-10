@@ -34,6 +34,7 @@ import { canConvertStrokeToPath, StrokeToPathProfile } from "./objects/stroke-ou
 import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, createAnimationColorValue } from "./objects/animation.object";
 import { pathPointAnimationProperty, readAnimationProperty } from "./objects/animation-targets";
 import { createDefaultGradient, GradientKind, GradientPaint, GradientStop, gradientAnimationProperties, isGradientPaint } from "./objects/paint.object";
+import { convertGradientUnits } from "./objects/gradient-geometry";
 
 @Component({
     standalone: true,
@@ -75,6 +76,7 @@ export class EditorPage implements AfterViewInit {
     private animationPathPointDragStart?: AnimationPathPointDragStart;
     private animationGradientDragStart?: AnimationGradientDragStart;
     openGradientStopsKey?: string;
+    gradientStopsPopoverPosition?: { left: number; top: number };
     renamingLayer?: AnyElement;
     selectedLayers: AnyElement[] = [];
     private lastSelectedLayer?: AnyElement;
@@ -194,6 +196,7 @@ export class EditorPage implements AfterViewInit {
 
     @HostListener('document:click') closeGradientStopsPopover() {
         this.openGradientStopsKey = undefined;
+        this.gradientStopsPopoverPosition = undefined;
     }
 
     constructor(
@@ -983,11 +986,22 @@ export class EditorPage implements AfterViewInit {
         event.stopPropagation();
         if(!element) return;
         const rowKey = `${element.id}:${key}`;
-        this.openGradientStopsKey = this.openGradientStopsKey === rowKey ? undefined : rowKey;
+        if(this.openGradientStopsKey === rowKey) {
+            this.closeGradientStopsPopover();
+            return;
+        }
+        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        this.gradientStopsPopoverPosition = this.popoverPosition(rect, 286, 440);
+        this.openGradientStopsKey = rowKey;
     }
 
     gradientStopsPopoverOpen(element: AnyElement | undefined, key: string): boolean {
         return !!element && this.openGradientStopsKey === `${element.id}:${key}`;
+    }
+
+    gradientStopsPopoverStyle(): Record<string, string> {
+        const position = this.gradientStopsPopoverPosition;
+        return position ? { left: `${position.left}px`, top: `${position.top}px` } : {};
     }
 
     selectGradientPaint(key: string) {
@@ -1027,11 +1041,26 @@ export class EditorPage implements AfterViewInit {
         this.scheduleAttributeSnapshot();
     }
 
-    setGradientMeta(gradient: GradientPaint, field: "units" | "spreadMethod", value: GradientPaint["units"] | GradientPaint["spreadMethod"]) {
+    setGradientUnits(element: AnyElement | undefined, gradient: GradientPaint, units: GradientPaint["units"]) {
+        if(!element || this.animation.mode === "animate") return;
+        if(convertGradientUnits(element, gradient, units)) this.scheduleAttributeSnapshot();
+    }
+
+    setGradientMeta(gradient: GradientPaint, field: "spreadMethod", value: GradientPaint["spreadMethod"]) {
         if(this.animation.mode === "animate") return;
-        if(field === "units" && (value === "objectBoundingBox" || value === "userSpaceOnUse")) gradient.units = value;
         if(field === "spreadMethod" && (value === "pad" || value === "reflect" || value === "repeat")) gradient.spreadMethod = value;
         this.scheduleAttributeSnapshot();
+    }
+
+    private popoverPosition(rect: DOMRect, width: number, preferredHeight: number): { left: number; top: number } {
+        const margin = 8;
+        const height = Math.min(preferredHeight, window.innerHeight - margin * 2);
+        const left = Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin));
+        const below = rect.bottom + 4;
+        const top = below + height <= window.innerHeight - margin
+            ? below
+            : Math.max(margin, rect.top - height - 4);
+        return { left, top };
     }
 
     setGradientStopValue(element: AnyElement | undefined, key: string, stop: GradientStop, field: "offset" | "opacity" | "color", value: unknown) {

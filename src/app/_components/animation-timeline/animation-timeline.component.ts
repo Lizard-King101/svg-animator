@@ -63,6 +63,7 @@ export class AnimationTimelineComponent {
     get selectedKeyframeIds(): Set<string> { return this.editing.selectedKeyframeIds; }
     set selectedKeyframeIds(value: Set<string>) { this.editing.selectedKeyframeIds = value; }
     openColorEditorKey?: string;
+    paintPopoverPosition?: { left: number; top: number };
     pixelsPerSecond = 120;
     private scrubbing = false;
     private resizeStartY = 0;
@@ -536,7 +537,14 @@ export class AnimationTimelineComponent {
     toggleColorEditor(row: TimelineRow, event: MouseEvent | PointerEvent) {
         event.stopPropagation();
         const key = this.colorRowKey(row);
-        this.openColorEditorKey = this.openColorEditorKey === key ? undefined : key;
+        if(this.openColorEditorKey === key) {
+            this.closeColorEditor();
+            return;
+        }
+        const gradient = this.isGradientStopsRow(row);
+        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        this.paintPopoverPosition = this.popoverPosition(rect, gradient ? 270 : 244, gradient ? 420 : 360);
+        this.openColorEditorKey = key;
     }
 
     colorEditorOpen(row: TimelineRow): boolean {
@@ -556,6 +564,21 @@ export class AnimationTimelineComponent {
         const match = /^settings\.(fill|stroke)\.gradient\./.exec(row.property.property);
         const paint = match ? (row.element.settings as Record<string, unknown>)[match[1]] : undefined;
         return isGradientPaint(paint) ? paint : undefined;
+    }
+
+    gradientPreview(gradient: GradientPaint): string {
+        const stops = [...gradient.stops]
+            .sort((a, b) => a.offset - b.offset)
+            .map((stop) => `${stop.color.serialized} ${Math.max(0, Math.min(1, stop.offset)) * 100}%`)
+            .join(", ");
+        return gradient.type === "radial-gradient"
+            ? `radial-gradient(circle, ${stops})`
+            : `linear-gradient(90deg, ${stops})`;
+    }
+
+    paintPopoverStyle(): Record<string, string> {
+        const position = this.paintPopoverPosition;
+        return position ? { left: `${position.left}px`, top: `${position.top}px` } : {};
     }
 
     setTimelineGradientStop(row: TimelineRow, stop: GradientStop, field: "offset" | "color", value: unknown) {
@@ -780,6 +803,7 @@ export class AnimationTimelineComponent {
     @HostListener("document:click")
     closeColorEditor() {
         this.openColorEditorKey = undefined;
+        this.paintPopoverPosition = undefined;
     }
 
     @HostListener("document:keydown", ["$event"])
@@ -1197,6 +1221,17 @@ export class AnimationTimelineComponent {
 
     private cloneValue<T>(value: T): T {
         return value == null ? value : JSON.parse(JSON.stringify(value));
+    }
+
+    private popoverPosition(rect: DOMRect, width: number, preferredHeight: number): { left: number; top: number } {
+        const margin = 8;
+        const height = Math.min(preferredHeight, window.innerHeight - margin * 2);
+        const left = Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin));
+        const below = rect.bottom + 4;
+        const top = below + height <= window.innerHeight - margin
+            ? below
+            : Math.max(margin, rect.top - height - 4);
+        return { left, top };
     }
 
     private timesMatch(a: number, b: number): boolean {

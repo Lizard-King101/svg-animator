@@ -389,11 +389,11 @@
 }
 
 .color-popover {
-  position: absolute;
-  top: 28px;
-  right: 0;
-  z-index: 20;
+  position: fixed;
+  z-index: 1000;
   width: 244px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   background: var(--bg-surface);
   border: 1px solid var(--border-bright);
   border-radius: var(--radius-sm);
@@ -415,15 +415,21 @@
   color: var(--text-secondary);
   font-size: 10px;
   cursor: pointer;
+  padding: 3px;
+}
+
+.gradient-paint-preview {
+  display: block;
+  width: 100%;
+  height: 16px;
+  border-radius: 2px;
 }
 
 .gradient-stops-popover {
-  position: absolute;
-  top: 28px;
-  right: 0;
-  z-index: 30;
+  position: fixed;
+  z-index: 1000;
   width: 270px;
-  max-height: 420px;
+  max-height: min(420px, calc(100vh - 16px));
   overflow-y: auto;
   padding: 8px;
   background: var(--bg-surface);

@@ -93,6 +93,32 @@ export function moveGradientHandle(element: AnyElement, paint: GradientPaint, ha
     return false;
 }
 
+/** Change gradient units without changing the gradient's element-local handle positions. */
+export function convertGradientUnits(element: AnyElement, paint: GradientPaint, units: GradientPaint["units"]): boolean {
+    if(paint.units === units) return false;
+
+    if(paint.type === "linear-gradient") {
+        const start = gradientPoint(element, paint, paint.coordinates.x1 ?? 0, paint.coordinates.y1 ?? 0);
+        const end = gradientPoint(element, paint, paint.coordinates.x2 ?? 1, paint.coordinates.y2 ?? 0);
+        paint.units = units;
+        moveGradientHandle(element, paint, "start", start);
+        moveGradientHandle(element, paint, "end", end);
+        return true;
+    }
+
+    const cx = paint.coordinates.cx ?? 0.5;
+    const cy = paint.coordinates.cy ?? 0.5;
+    const radius = paint.coordinates.r ?? 0.5;
+    const center = gradientPoint(element, paint, cx, cy);
+    const focal = gradientPoint(element, paint, paint.coordinates.fx ?? cx, paint.coordinates.fy ?? cy);
+    const radiusPoint = gradientPoint(element, paint, cx + radius, cy);
+    paint.units = units;
+    moveGradientHandle(element, paint, "center", center);
+    moveGradientHandle(element, paint, "focal", focal);
+    moveGradientHandle(element, paint, "radius", radiusPoint);
+    return true;
+}
+
 function gradientPoint(element: AnyElement, paint: GradientPaint, x: number, y: number): { x: number; y: number } {
     const bounds = localBounds(element);
     const unitPoint = paint.units === "objectBoundingBox"
