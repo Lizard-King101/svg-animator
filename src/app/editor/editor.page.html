@@ -8,10 +8,10 @@
         <span>New</span>
       </button>
       <div class="function-bar-sep"></div>
-      <button class="btn-icon" (click)="history.undo(editor)" [disabled]="!history.canUndo" title="Undo (Ctrl+Z)">
+      <button class="btn-icon" (click)="mutations.undo()" [disabled]="!editor.selectedSVG?.canUndo" title="Undo (Ctrl+Z)">
         <fa-icon icon="rotate-left"></fa-icon>
       </button>
-      <button class="btn-icon" (click)="history.redo(editor)" [disabled]="!history.canRedo" title="Redo (Ctrl+Y)">
+      <button class="btn-icon" (click)="mutations.redo()" [disabled]="!editor.selectedSVG?.canRedo" title="Redo (Ctrl+Y)">
         <fa-icon icon="rotate-right"></fa-icon>
       </button>
       <div class="function-bar-spacer"></div>

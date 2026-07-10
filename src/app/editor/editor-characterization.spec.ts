@@ -1,4 +1,10 @@
 import { EditorService } from "../_services/editor.service";
+import { AnimationPlaybackService } from "../_services/animation-playback.service";
+import { DocumentMutationService } from "../_services/document-mutation.service";
+import { ElementFactory } from "../_services/element-factory.service";
+import { HistoryService } from "../_services/history.service";
+import { LayerOperationsService } from "../_services/layer-operations.service";
+import { ProjectService } from "../_services/project.service";
 import { evaluateTrack } from "./objects/animation.object";
 import { Color } from "./objects/color.object";
 import { Group } from "./objects/elements/group.object";
@@ -186,5 +192,75 @@ describe("editor model characterization", () => {
         expect(outline!.settings.stroke).toBeNull();
         expect(outline!.settings.stroke_width).toBe(0);
         expect(outline!.contours.every((contour) => contour.closed)).toBeTrue();
+    });
+});
+
+describe("editor topology boundaries", () => {
+    it("clones compound groups without sharing mutable geometry and remaps clipping IDs", () => {
+        const editor = editorDouble();
+        const factory = new ElementFactory(editor);
+        const path = new Path(editor);
+        const shared = new Point(10, 0);
+        path.lines = [
+            line(editor, new Point(0, 0), shared),
+            line(editor, shared, new Point(10, 10)),
+        ];
+        const group = new Group(editor);
+        group.elements = [path];
+        group.clipElementId = path.id;
+
+        const clone = factory.clone(group) as Group;
+        const clonedPath = clone.elements[0] as Path;
+
+        expect(clone.id).not.toBe(group.id);
+        expect(clone.clipElementId).toBe(clonedPath.id);
+        expect(clonedPath.lines[0].points[1]).toBe(clonedPath.lines[1].points[0]);
+        expect(clonedPath.lines[0].points[1]).not.toBe(shared);
+    });
+
+    it("performs grouping, ordering, duplication, clipping, and motion attachment outside the page", () => {
+        const editor = editorDouble();
+        const svg = new SVG(editor, { width: 100, height: 100, pos: new Point(0, 0) });
+        (editor as any).selectedSVG = svg;
+        const first = new Shape(editor, { type: "rectangle", position: new Point(0, 0) });
+        const second = new Shape(editor, { type: "ellipse", position: new Point(20, 20) });
+        const motionPath = new Path(editor);
+        svg.elements = [first, second, motionPath];
+        const operations = new LayerOperationsService(editor, new ElementFactory(editor));
+
+        expect(operations.moveBackward(second)).toBeTrue();
+        expect(svg.elements).toEqual([second, first, motionPath]);
+        const duplicate = operations.duplicate(first)!;
+        expect(svg.elements).toEqual([second, first, duplicate, motionPath]);
+        const group = operations.group([second, first])!;
+        expect(group.elements).toEqual([second, first]);
+        expect(svg.elements[0]).toBe(group);
+        expect(operations.useAsClippingMask(first)).toBeTrue();
+        expect(group.clipElementId).toBe(first.id);
+        expect(operations.attachMotionPath(duplicate, motionPath)).toBeTrue();
+        expect(duplicate.motion.pathId).toBe(motionPath.id);
+    });
+
+    it("creates one history snapshot and autosave for a change and neither for a no-op", () => {
+        const { editor, svg, path } = documentWithPath();
+        (editor as any).selectedSVG = svg;
+        const animation = {
+            withBaseState: <T>(callback: () => T) => callback(),
+        } as AnimationPlaybackService;
+        const history = new HistoryService();
+        const projects = {
+            upsert: jasmine.createSpy("upsert"),
+        } as unknown as ProjectService;
+        spyOn(history, "snapshot").and.callThrough();
+        const mutations = new DocumentMutationService(editor, animation, history, projects);
+        mutations.resetBaseline();
+
+        mutations.mutate(() => { path.opacity = 0.5; });
+        expect(history.snapshot).toHaveBeenCalledTimes(1);
+        expect(projects.upsert).toHaveBeenCalledTimes(1);
+
+        mutations.mutate(() => undefined);
+        expect(history.snapshot).toHaveBeenCalledTimes(1);
+        expect(projects.upsert).toHaveBeenCalledTimes(1);
     });
 });

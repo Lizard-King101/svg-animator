@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, HostListener, NgZone, ViewChild } from "@angular/core";
+import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, HostListener, NgZone, OnDestroy, ViewChild } from "@angular/core";
 import { NgClass, NgFor, NgIf, NgStyle, NgTemplateOutlet } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute } from "@angular/router";
@@ -7,6 +7,9 @@ import { EditorContextMenuItem, EditorService } from "../_services/editor.servic
 import { AnimationPlaybackService } from "../_services/animation-playback.service";
 import { HistoryService } from "../_services/history.service";
 import { ProjectService } from "../_services/project.service";
+import { DocumentMutationService } from "../_services/document-mutation.service";
+import { ElementFactory } from "../_services/element-factory.service";
+import { LayerContext, LayerOperationsService } from "../_services/layer-operations.service";
 import { SVGDisplay } from "../_components/svg-display/svg-display.component";
 import { AnimationTimelineComponent } from "../_components/animation-timeline/animation-timeline.component";
 import { BoolAttribute } from "../_components/attributes/bool/bool.component";
@@ -17,16 +20,14 @@ import { TextAttribute } from "../_components/attributes/text/text.component";
 import { Color } from "./objects/color.object";
 import { Group } from "./objects/elements/group.object";
 import { ElementAttribute } from "./objects/elements/element";
-import { Line } from "./objects/line.object";
 import { Path } from "./objects/elements/path.object";
 import { Point } from "./objects/point.object";
 import { Shape } from "./objects/elements/shape.object";
 import { TextElement } from "./objects/elements/text.object";
 import { AnyElement, CanvasGuide } from "./objects/svg.object";
 import { buildSVGMarkup } from "./svg-markup";
-import { combinedMatrixFor, pinTransformOrigin, resolvedOrigin } from "./objects/element-bounds";
-import { applyMatrix, invertMatrix, multiplyMatrix } from "./objects/transform.object";
-import { canConvertStrokeToPath, convertStrokeToPath, StrokeToPathProfile } from "./objects/stroke-outline.object";
+import { pinTransformOrigin, resolvedOrigin } from "./objects/element-bounds";
+import { canConvertStrokeToPath, StrokeToPathProfile } from "./objects/stroke-outline.object";
 import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, createAnimationColorValue } from "./objects/animation.object";
 import { pathPointAnimationProperty, readAnimationProperty } from "./objects/animation-targets";
 
@@ -44,17 +45,23 @@ import { pathPointAnimationProperty, readAnimationProperty } from "./objects/ani
         TextAttribute,
         AnimationTimelineComponent
     ],
-    providers: [EditorService, HistoryService, AnimationPlaybackService],
+    providers: [
+        EditorService,
+        HistoryService,
+        AnimationPlaybackService,
+        DocumentMutationService,
+        ElementFactory,
+        LayerOperationsService,
+    ],
     templateUrl: 'editor.page.html',
     styleUrls: ['editor.page.scss']
 })
-export class EditorPage implements AfterViewInit {
+export class EditorPage implements AfterViewInit, OnDestroy {
     scale: number = 1;
 
     movingView: boolean = false;
     moveStart: Point;
-    private attributeSaveTimer?: ReturnType<typeof setTimeout>;
-    private saveRevision = 0;
+    private readonly viewportListeners = new AbortController();
     draggingLayer?: AnyElement;
     dragTargetLayer?: AnyElement;
     dragTargetPosition?: 'before' | 'after' | 'inside';
@@ -116,12 +123,12 @@ export class EditorPage implements AfterViewInit {
         if((event.ctrlKey || event.metaKey) && !this.renamingLayer) {
             if(event.key.toLowerCase() == 'z' && !event.shiftKey) {
                 event.preventDefault();
-                this.history.undo(this.editor);
+                this.mutations.undo();
                 return;
             }
             if(event.key.toLowerCase() == 'y' || (event.key.toLowerCase() == 'z' && event.shiftKey)) {
                 event.preventDefault();
-                this.history.redo(this.editor);
+                this.mutations.redo();
                 return;
             }
             if(event.key.toLowerCase() == 'g' && this.canGroupSelectedLayers()) {
@@ -182,14 +189,18 @@ export class EditorPage implements AfterViewInit {
     constructor(
         public editor: EditorService,
         public animation: AnimationPlaybackService,
-        public history: HistoryService,
+        public mutations: DocumentMutationService,
         public projectService: ProjectService,
+        private layerOperations: LayerOperationsService,
         private route: ActivatedRoute,
         private ngZone: NgZone,
         private cdr: ChangeDetectorRef
     ) {
         this.moveStart = new Point(0, 0);
-        this.history.init(editor);
+    }
+
+    ngOnDestroy(): void {
+        this.viewportListeners.abort();
     }
 
     ngAfterViewInit() {
@@ -216,7 +227,7 @@ export class EditorPage implements AfterViewInit {
                         break;
                 }
             });
-        });
+        }, { signal: this.viewportListeners.signal });
 
         viewport.addEventListener('mouseup', (event: MouseEvent) => {
             this.ngZone.run(() => {
@@ -231,7 +242,7 @@ export class EditorPage implements AfterViewInit {
                 // Skip snapshot on right-click — contextmenu fires next and handles it
                 if (event.button !== 2) this.snapshotAndSave();
             });
-        });
+        }, { signal: this.viewportListeners.signal });
 
         viewport.addEventListener('wheel', (event: WheelEvent) => {
             this.ngZone.run(() => {
@@ -261,7 +272,7 @@ export class EditorPage implements AfterViewInit {
                     this.editor.setZoom(svg, newZoom);
                 }
             });
-        }, { passive: true });
+        }, { passive: true, signal: this.viewportListeners.signal });
 
         viewport.addEventListener('contextmenu', (event: MouseEvent) => {
             this.ngZone.run(() => {
@@ -269,7 +280,7 @@ export class EditorPage implements AfterViewInit {
                 if (this.editor.selectedTool) this.editor.selectedTool.contextMenu(event);
                 this.snapshotAndSave();
             });
-        });
+        }, { signal: this.viewportListeners.signal });
 
         viewport.addEventListener('mousemove', (event: MouseEvent) => {
             this.ngZone.run(() => {
@@ -281,7 +292,7 @@ export class EditorPage implements AfterViewInit {
                 }
                 if (this.editor.selectedTool) this.editor.selectedTool.drag(event);
             });
-        });
+        }, { signal: this.viewportListeners.signal });
 
         viewport.addEventListener('click', (event: MouseEvent) => {
             this.ngZone.run(() => {
@@ -291,7 +302,7 @@ export class EditorPage implements AfterViewInit {
                     this.snapshotAndSave();
                 }
             });
-        });
+        }, { signal: this.viewportListeners.signal });
 
         viewport.addEventListener('dblclick', (event: MouseEvent) => {
             this.ngZone.run(() => {
@@ -301,14 +312,14 @@ export class EditorPage implements AfterViewInit {
                     this.snapshotAndSave();
                 }
             });
-        });
+        }, { signal: this.viewportListeners.signal });
 
         viewport.addEventListener('mouseleave', (event: MouseEvent) => {
             if(this.movingView && this.editor.selectedSVG) {
                 this.editor.rememberCanvasView(this.editor.selectedSVG);
             }
             this.movingView = false;
-        })
+        }, { signal: this.viewportListeners.signal });
 
         this.editor.setViewPort(viewport);
 
@@ -320,6 +331,7 @@ export class EditorPage implements AfterViewInit {
             if (record) {
                 this.editor.loadSVG(record.svgData);
                 this.restoreAnimationPreview();
+                this.mutations.resetBaseline();
             }
         } else {
             this.openNewDialog();
@@ -340,7 +352,8 @@ export class EditorPage implements AfterViewInit {
         this.editor.newSVG(this.newWidth, this.newHeight, name);
         this.restoreAnimationPreview();
         this.showNewDialog = false;
-        this.autoSave();
+        this.mutations.resetBaseline();
+        this.mutations.save();
     }
 
     cancelNewSVG() {
@@ -881,37 +894,19 @@ export class EditorPage implements AfterViewInit {
     // ── Auto-save ────────────────────────────────────────────────────
 
     autoSave() {
-        const svg = this.editor.selectedSVG;
-        if(!svg) return;
-        this.animation.withBaseState(() => {
-            const thumbnail = buildSVGMarkup(svg);
-            this.projectService.upsert(svg.save(), thumbnail);
-        });
+        this.mutations.save();
     }
 
     private snapshotAndSave() {
-        this.animation.withBaseState(() => {
-            this.history.snapshot(this.editor);
-        });
-        this.autoSave();
-        this.saveRevision++;
+        this.mutations.commit();
     }
 
     private currentElementsState(): string | undefined {
-        const svg = this.editor.selectedSVG;
-        return svg ? this.animation.withBaseState(() => {
-            const save = svg.save();
-            return JSON.stringify({
-                elements: save.elements,
-                animation: save.animation,
-                guides: save.guides,
-                guidesLocked: save.guidesLocked,
-            });
-        }) : undefined;
+        return this.mutations.captureState();
     }
 
-    private snapshotAndSaveIfChanged(beforeState?: string, beforeRevision = this.saveRevision) {
-        if(this.saveRevision !== beforeRevision) {
+    private snapshotAndSaveIfChanged(beforeState?: string, beforeRevision = this.mutations.revision) {
+        if(this.mutations.revision !== beforeRevision) {
             return;
         }
 
@@ -922,18 +917,11 @@ export class EditorPage implements AfterViewInit {
     }
 
     scheduleAttributeSnapshot() {
-        if(this.attributeSaveTimer) {
-            clearTimeout(this.attributeSaveTimer);
-        }
-
-        this.attributeSaveTimer = setTimeout(() => {
-            this.attributeSaveTimer = undefined;
-            this.snapshotAndSave();
-        }, 250);
+        this.mutations.schedule();
     }
 
     runContextMenuItem(item: EditorContextMenuItem) {
-        const beforeRevision = this.saveRevision;
+        const beforeRevision = this.mutations.revision;
         const beforeState = this.currentElementsState();
         this.editor.runContextMenuItem(item);
         this.snapshotAndSaveIfChanged(beforeState, beforeRevision);
@@ -1010,6 +998,7 @@ export class EditorPage implements AfterViewInit {
         if(this.animation.mode === 'animate') {
             this.animation.seek(0);
         }
+        this.mutations.resetBaseline();
     }
 
     closeSVGTab(id: string) {
@@ -1019,6 +1008,7 @@ export class EditorPage implements AfterViewInit {
         if(this.animation.mode === 'animate') {
             this.animation.seek(0);
         }
+        this.mutations.resetBaseline();
     }
 
     get layers() {
@@ -1483,144 +1473,8 @@ export class EditorPage implements AfterViewInit {
         this.editor.selectedPathLines = [];
     }
 
-    private clonePoint(point: Point, pointMap: Map<string, Point>) {
-        let cloned = pointMap.get(point.id);
-        if(!cloned) {
-            cloned = new Point(point.x, point.y);
-            cloned.cornerRadius = point.cornerRadius;
-            pointMap.set(point.id, cloned);
-        }
-        return cloned;
-    }
-
-    private cloneColor(value: any) {
-        return value instanceof Color ? new Color(value.hex) : value;
-    }
-
-    private clonePath(path: Path) {
-        const clone = new Path(this.editor);
-        const pointMap = new Map<string, Point>();
-
-        clone.name = `${path.name} Copy`;
-        clone.visible = path.visible;
-        clone.locked = false;
-        clone.opacity = path.opacity;
-        clone.closed = path.closed;
-        clone.fillRule = path.fillRule;
-        clone.transform = { ...path.transform };
-        clone.motion = { ...path.motion };
-        clone.settings = {
-            ...path.settings,
-            stroke: this.cloneColor(path.settings.stroke),
-            fill: this.cloneColor(path.settings.fill),
-        };
-        clone.contours = path.contours.map((contour) => clone.createContour(
-            contour.lines.map((line) => {
-                return new Line(this.editor, {
-                    type: line.type,
-                    points: line.points.map((point) => this.clonePoint(point, pointMap)),
-                    controlStart: line.controlStart ? this.clonePoint(line.controlStart, pointMap) : undefined,
-                    controlEnd: line.controlEnd ? this.clonePoint(line.controlEnd, pointMap) : undefined,
-                });
-            }),
-            contour.closed
-        ));
-        return clone;
-    }
-
-    private cloneShape(shape: Shape) {
-        const clone = new Shape(this.editor, {
-            type: shape.type,
-            position: new Point(shape.position.x, shape.position.y),
-            width: shape.width,
-            height: shape.height,
-        });
-
-        clone.name = `${shape.name} Copy`;
-        clone.visible = shape.visible;
-        clone.locked = false;
-        clone.opacity = shape.opacity;
-        clone.transform = { ...shape.transform };
-        clone.motion = { ...shape.motion };
-        clone.settings = {
-            ...shape.settings,
-            stroke: this.cloneColor(shape.settings.stroke),
-            fill: this.cloneColor(shape.settings.fill),
-        };
-        return clone;
-    }
-
-    private cloneText(text: TextElement) {
-        const clone = new TextElement(this.editor, new Point(text.position.x, text.position.y));
-        clone.name = `${text.name} Copy`;
-        clone.visible = text.visible;
-        clone.locked = false;
-        clone.opacity = text.opacity;
-        clone.transform = { ...text.transform };
-        clone.motion = { ...text.motion };
-        clone.settings = {
-            ...text.settings,
-            color: text.settings.color ? new Color(text.settings.color.hex) : null,
-        };
-        return clone;
-    }
-
-    private cloneGroup(group: Group) {
-        const clone = new Group(this.editor);
-        clone.name = `${group.name} Copy`;
-        clone.visible = group.visible;
-        clone.locked = false;
-        clone.opacity = group.opacity;
-        clone.transform = { ...group.transform };
-        clone.motion = { ...group.motion };
-        const clonedElements = group.elements.map((element) => {
-            return {
-                original: element,
-                clone: this.cloneElement(element),
-            };
-        });
-        clone.elements = clonedElements.map((entry) => entry.clone);
-        clone.clipElementId = clonedElements.find((entry) => entry.original.id === group.clipElementId)?.clone.id ?? null;
-        return clone;
-    }
-
-    private cloneElement(element: AnyElement): AnyElement {
-        if(element instanceof Path) return this.clonePath(element);
-        if(element instanceof Shape) return this.cloneShape(element);
-        if(element instanceof TextElement) return this.cloneText(element);
-        return this.cloneGroup(element);
-    }
-
-    private setElementOrder(elements: AnyElement[]) {
-        if(this.editor.selectedSVG) {
-            this.editor.selectedSVG.elements = elements;
-        }
-    }
-
     private layerContext(element: AnyElement): LayerContext | undefined {
-        if(!this.editor.selectedSVG) {
-            return undefined;
-        }
-
-        return this.findLayerContext(this.editor.selectedSVG.elements, element);
-    }
-
-    private findLayerContext(elements: AnyElement[], element: AnyElement, parent?: Group): LayerContext | undefined {
-        const index = elements.indexOf(element);
-        if(index >= 0) {
-            return { element, elements, index, parent };
-        }
-
-        for(const candidate of elements) {
-            if(candidate instanceof Group) {
-                const found = this.findLayerContext(candidate.elements, element, candidate);
-                if(found) {
-                    return found;
-                }
-            }
-        }
-
-        return undefined;
+        return this.layerOperations.context(element);
     }
 
     private canGroupWithBelow(element: AnyElement): boolean {
@@ -1633,137 +1487,34 @@ export class EditorPage implements AfterViewInit {
     }
 
     private selectedLayerContexts(): LayerContext[] {
-        return this.selectedLayers
-            .map((layer) => this.layerContext(layer))
-            .filter((context): context is LayerContext => !!context);
+        return this.layerOperations.contexts(this.selectedLayers);
     }
 
     canGroupSelectedLayers(): boolean {
-        if(this.selectedLayers.length < 2) {
-            return false;
-        }
-
-        const contexts = this.selectedLayerContexts();
-        if(contexts.length !== this.selectedLayers.length) {
-            return false;
-        }
-
-        const parentElements = contexts[0].elements;
-        return contexts.every((context) => context.elements === parentElements);
+        return this.layerOperations.canGroup(this.selectedLayers);
     }
 
     canCombineSelectedPaths(target: AnyElement): target is Path {
-        if(!(target instanceof Path) || this.selectedLayers.length < 2 || !this.selectedLayers.includes(target)) {
-            return false;
-        }
-
-        if(!this.selectedLayers.every((element) => element instanceof Path)) {
-            return false;
-        }
-
-        const contexts = this.selectedLayerContexts();
-        if(contexts.length !== this.selectedLayers.length) {
-            return false;
-        }
-
-        const parentElements = contexts[0].elements;
-        return contexts.every((context) => context.elements === parentElements);
+        return this.layerOperations.canCombine(this.selectedLayers, target);
     }
 
     combineSelectedPaths(target: Path) {
-        if(!this.canCombineSelectedPaths(target) || !this.editor.selectedSVG) {
-            return;
+        if(this.layerOperations.combine(this.selectedLayers, target)) {
+            this.selectLayer(target);
+            this.snapshotAndSave();
         }
-
-        const contexts = this.selectedLayerContexts();
-        const targetContext = contexts.find((context) => context.element === target);
-        if(!targetContext) {
-            return;
-        }
-
-        const sources = contexts
-            .filter((context) => context.element !== target && context.element instanceof Path)
-            .sort((a, b) => a.index - b.index);
-
-        sources.forEach((context) => {
-            this.appendPathContours(target, context.element as Path);
-        });
-
-        [...sources]
-            .sort((a, b) => b.index - a.index)
-            .forEach((context) => {
-                context.elements.splice(context.index, 1);
-            });
-
-        target.fillRule = 'evenodd';
-        this.selectLayer(target);
-        this.snapshotAndSave();
-    }
-
-    private appendPathContours(target: Path, source: Path) {
-        if(!this.editor.selectedSVG) {
-            return;
-        }
-
-        const targetInverse = invertMatrix(combinedMatrixFor(this.editor.selectedSVG.elements, target));
-        const sourceMatrix = combinedMatrixFor(this.editor.selectedSVG.elements, source);
-        const sourceToTarget = multiplyMatrix(targetInverse, sourceMatrix);
-
-        source.contours.forEach((contour) => {
-            const pointMap = new Map<string, Point>();
-            const clonePoint = (point: Point) => {
-                let cloned = pointMap.get(point.id);
-                if(!cloned) {
-                    const transformed = applyMatrix(sourceToTarget, point.x, point.y);
-                    cloned = new Point(transformed.x, transformed.y);
-                    cloned.cornerRadius = point.cornerRadius;
-                    pointMap.set(point.id, cloned);
-                }
-                return cloned;
-            };
-
-            target.contours.push(target.createContour(
-                contour.lines.map((line) => new Line(this.editor, {
-                    type: line.type,
-                    points: line.points.map(clonePoint),
-                    controlStart: line.controlStart ? clonePoint(line.controlStart) : undefined,
-                    controlEnd: line.controlEnd ? clonePoint(line.controlEnd) : undefined,
-                })),
-                contour.closed
-            ));
-        });
     }
 
     groupSelectedLayers() {
-        if(!this.canGroupSelectedLayers()) {
-            return;
+        const group = this.layerOperations.group(this.selectedLayers);
+        if(group) {
+            this.selectLayer(group);
+            this.snapshotAndSave();
         }
-
-        const contexts = this.selectedLayerContexts();
-        const elements = contexts[0].elements;
-        const selected = new Set(this.selectedLayers);
-        const selectedInDrawOrder = elements.filter((element) => selected.has(element));
-        const firstIndex = elements.findIndex((element) => selected.has(element));
-
-        const group = new Group(this.editor);
-        group.name = `Group ${selectedInDrawOrder.length} Layers`;
-        group.elements = selectedInDrawOrder;
-
-        selectedInDrawOrder.forEach((element) => {
-            const index = elements.indexOf(element);
-            if(index >= 0) {
-                elements.splice(index, 1);
-            }
-        });
-        elements.splice(firstIndex, 0, group);
-        this.selectLayer(group);
-        this.snapshotAndSave();
     }
 
     private elementContains(parent: AnyElement, child: AnyElement): boolean {
-        return parent instanceof Group && parent.elements.some((element) => {
-            return element === child || this.elementContains(element, child);
-        });
+        return this.layerOperations.contains(parent, child);
     }
 
     private removeLayerFromSelection(element: AnyElement) {
@@ -1790,42 +1541,23 @@ export class EditorPage implements AfterViewInit {
     }
 
     duplicateLayer(element: AnyElement) {
-        if(!this.editor.selectedSVG) {
-            return;
+        const duplicate = this.layerOperations.duplicate(element);
+        if(duplicate) {
+            this.selectLayer(duplicate);
+            this.snapshotAndSave();
         }
-
-        const context = this.layerContext(element);
-        if(!context) {
-            return;
-        }
-
-        const duplicate = this.cloneElement(element);
-        context.elements.splice(context.index + 1, 0, duplicate);
-        this.selectLayer(duplicate);
-        this.snapshotAndSave();
     }
 
     convertLayerStrokeToPath(path: Path, profile: StrokeToPathProfile) {
-        const context = this.layerContext(path);
-        if(!context) {
-            return;
+        const converted = this.layerOperations.convertStroke(path, profile);
+        if(converted) {
+            this.selectLayer(converted);
+            this.snapshotAndSave();
         }
-
-        const converted = convertStrokeToPath(path, this.editor, profile);
-        if(!converted) {
-            return;
-        }
-
-        context.elements.splice(context.index, 1, converted);
-        this.selectLayer(converted);
-        this.snapshotAndSave();
     }
 
     deleteLayer(element: AnyElement) {
-        if(!this.editor.selectedSVG) return;
-        const context = this.layerContext(element);
-        if(!context) return;
-        context.elements.splice(context.index, 1);
+        if(!this.layerOperations.delete(element)) return;
         if(this.editor.selectedElement === element || (this.editor.selectedElement && this.elementContains(element, this.editor.selectedElement))) {
             this.editor.selectedElement = undefined;
             this.editor.selectedPathAnchor = undefined;
@@ -1841,16 +1573,7 @@ export class EditorPage implements AfterViewInit {
             return;
         }
 
-        const selected = [...this.selectedLayers].filter((layer) => {
-            return !this.selectedLayers.some((candidate) => candidate !== layer && this.elementContains(candidate, layer));
-        });
-
-        selected.forEach((layer) => {
-            const context = this.layerContext(layer);
-            if(context) {
-                context.elements.splice(context.index, 1);
-            }
-        });
+        if(!this.layerOperations.deleteMany(this.selectedLayers)) return;
 
         this.selectedLayers = [];
         this.lastSelectedLayer = undefined;
@@ -1862,80 +1585,32 @@ export class EditorPage implements AfterViewInit {
     }
 
     moveLayerBackward(element: AnyElement) {
-        if(!this.editor.selectedSVG) {
-            return;
-        }
-
-        const context = this.layerContext(element);
-        if(!context || context.index <= 0) {
-            return;
-        }
-
-        // elements.splice(index, 1);
-        // elements.splice(index - 1, 0, element);
-        // this.setElementOrder(elements);
-        this.snapshotAndSave();
-        context.elements.splice(context.index, 1);
-        context.elements.splice(context.index - 1, 0, element);
+        if(this.layerOperations.moveBackward(element)) this.snapshotAndSave();
     }
 
     moveLayerForward(element: AnyElement) {
-        if(!this.editor.selectedSVG) {
-            return;
-        }
-
-        const context = this.layerContext(element);
-        if(!context || context.index >= context.elements.length - 1) {
-            return;
-        }
-
-        context.elements.splice(context.index, 1);
-        context.elements.splice(context.index + 1, 0, element);
+        if(this.layerOperations.moveForward(element)) this.snapshotAndSave();
     }
 
     groupLayerWithBelow(element: AnyElement) {
-        const context = this.layerContext(element);
-        if(!context || context.index <= 0) {
-            return;
+        const group = this.layerOperations.groupWithBelow(element);
+        if(group) {
+            this.selectLayer(group);
+            this.snapshotAndSave();
         }
-
-        const below = context.elements[context.index - 1];
-        const group = new Group(this.editor);
-        group.name = `Group ${below.name}, ${element.name}`;
-        group.elements = [below, element];
-        context.elements.splice(context.index - 1, 2, group);
-        this.selectLayer(group);
-        this.snapshotAndSave();
     }
 
     clipLayerWithBelow(element: AnyElement) {
-        const context = this.layerContext(element);
-        if(!context || context.index <= 0) {
-            return;
+        if(this.layerOperations.groupWithBelow(element, true)) {
+            this.selectLayer(element);
+            this.snapshotAndSave();
         }
-
-        const below = context.elements[context.index - 1];
-        const group = new Group(this.editor);
-        group.name = `Clip ${below.name} With ${element.name}`;
-        element.visible = true;
-        group.elements = [below, element];
-        group.clipElementId = element.id;
-        context.elements.splice(context.index - 1, 2, group);
-        this.selectLayer(element);
-        this.snapshotAndSave();
     }
 
     ungroupLayer(group: Group) {
-        const context = this.layerContext(group);
-        if(!context) {
-            return;
-        }
-
-        // elements.splice(index, 1);
-        // elements.splice(index + 1, 0, element);
-        // this.setElementOrder(elements);
-        context.elements.splice(context.index, 1, ...group.elements);
-        this.selectedLayers = [...group.elements];
+        const elements = this.layerOperations.ungroup(group);
+        if(!elements) return;
+        this.selectedLayers = elements;
         this.lastSelectedLayer = this.selectedLayers[this.selectedLayers.length - 1];
         if(this.editor.selectedElement === group) {
             this.editor.selectedElement = undefined;
@@ -1952,55 +1627,23 @@ export class EditorPage implements AfterViewInit {
     }
 
     useLayerAsClippingMask(element: AnyElement) {
-        const context = this.layerContext(element);
-        if(!context?.parent) {
-            return;
-        }
-
-        element.visible = true;
-        context.parent.clipElementId = element.id;
-        this.snapshotAndSave();
+        if(this.layerOperations.useAsClippingMask(element)) this.snapshotAndSave();
     }
 
     releaseClippingMask(group: Group) {
-        group.clipElementId = null;
-        this.snapshotAndSave();
+        if(this.layerOperations.releaseClippingMask(group)) this.snapshotAndSave();
     }
 
     availableMotionPaths(element: AnyElement): Path[] {
-        const svg = this.editor.selectedSVG;
-        if(!svg) {
-            return [];
-        }
-
-        const paths: Path[] = [];
-        const collect = (elements: AnyElement[]) => {
-            elements.forEach((candidate) => {
-                if(candidate instanceof Path && candidate !== element && !this.elementContains(element, candidate)) {
-                    paths.push(candidate);
-                }
-
-                if(candidate instanceof Group) {
-                    collect(candidate.elements);
-                }
-            });
-        };
-
-        collect(svg.elements);
-        return paths;
+        return this.layerOperations.availableMotionPaths(element);
     }
 
     attachMotionPath(element: AnyElement, path: Path) {
-        element.motion.pathId = path.id;
-        element.motion.progress = 0;
-        element.motion.offsetX = 0;
-        element.motion.offsetY = 0;
-        this.snapshotAndSave();
+        if(this.layerOperations.attachMotionPath(element, path)) this.snapshotAndSave();
     }
 
     detachMotionPath(element: AnyElement) {
-        element.motion.pathId = null;
-        this.snapshotAndSave();
+        if(this.layerOperations.detachMotionPath(element)) this.snapshotAndSave();
     }
 
     openLayerContextMenu(event: MouseEvent, element: AnyElement) {
@@ -2149,7 +1792,7 @@ export class EditorPage implements AfterViewInit {
 
     toggleLayerVisibility(event: MouseEvent, element: AnyElement) {
         event.stopPropagation();
-        element.visible = !element.visible;
+        this.layerOperations.toggleVisibility(element);
         if(!element.visible && this.editor.selectedElement && (this.editor.selectedElement == element || this.elementContains(element, this.editor.selectedElement))) {
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
@@ -2160,7 +1803,7 @@ export class EditorPage implements AfterViewInit {
 
     toggleLayerLock(event: MouseEvent, element: AnyElement) {
         event.stopPropagation();
-        element.locked = !element.locked;
+        this.layerOperations.toggleLock(element);
         if(element.locked && this.editor.selectedElement && (this.editor.selectedElement == element || this.elementContains(element, this.editor.selectedElement))) {
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
@@ -2377,13 +2020,6 @@ export class EditorPage implements AfterViewInit {
 interface LayerRow {
     element: AnyElement;
     depth: number;
-    parent?: Group;
-}
-
-interface LayerContext {
-    element: AnyElement;
-    elements: AnyElement[];
-    index: number;
     parent?: Group;
 }
 
