@@ -51,10 +51,11 @@ export class HomePage implements OnInit {
             this.projects = this.projectService.list();
             const details = [
                 `${result.nativeElementCount} editable element${result.nativeElementCount === 1 ? '' : 's'}`,
-                `${result.preservedNodeCount} preserved source node${result.preservedNodeCount === 1 ? '' : 's'}`,
+                `${result.preservedNodeCount} non-editable preserved node${result.preservedNodeCount === 1 ? '' : 's'}`,
                 `${result.removedUnsafeCount} unsafe item${result.removedUnsafeCount === 1 ? '' : 's'} removed`,
             ];
-            this.importMessage = `Imported “${result.document.name}”: ${details.join(', ')}.`;
+            const quality = result.editability === "native" ? "Fully editable import" : "Partial import";
+            this.importMessage = `${quality} “${result.document.name}”: ${details.join(', ')}.`;
         } catch(error) {
             this.importError = error instanceof Error ? error.message : 'Unable to import this SVG.';
         } finally {

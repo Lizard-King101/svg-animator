@@ -8,15 +8,16 @@ The product direction is a **motion SVG studio**. Milestones are dependency-orde
 2. ✅ Build a `DOMParser`-based SVG importer backed by conformance fixtures.
 3. ✅ Sanitize the render representation and preserve unsupported safe content as opaque source nodes. Scripts, event attributes, and unsafe external resources never execute.
 4. ✅ Ingest line, cubic, quadratic, arc, close, relative, and shorthand path commands.
-5. Publish embedded animation JSON, external JSON, and a lightweight runtime.
-6. Add a Font Awesome project preset and icon export with stroke-to-shape validation, naming, sizing, variants, and metadata.
+5. 🔄 Convert preserved constructs found by the real-world corpus into native editable model coverage. Preservation remains a safety/round-trip fallback and is reported as partial import, not feature support.
+6. Publish embedded animation JSON, external JSON, and a lightweight runtime.
+7. Add a Font Awesome project preset and icon export with stroke-to-shape validation, naming, sizing, variants, and metadata.
 
 References: [SVG paths](https://www.w3.org/TR/SVG/paths.html).
 
 ## 2. Drawing and SVG coverage
 
 1. Canvas marquee selection, multi-object transforms, align/distribute, clipboard, and reusable symbols.
-2. `line`, `polyline`, `polygon`, nested `svg`/`viewBox`, `defs`, `symbol`, and `use`.
+2. `line`, `polyline`, `polygon`, nested `svg`/`viewBox`, `defs`, `symbol`, and reusable `use` semantics. Local `use` references to editable geometry already normalize to independent editable groups.
 3. Full boolean operations and primitive/path conversion.
 4. Alpha, fill/stroke opacity, dashes, markers, vector effects, and paint order.
 5. Editable linear/radial gradients and patterns.

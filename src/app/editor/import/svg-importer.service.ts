@@ -13,11 +13,16 @@ const UNSUPPORTED_NATIVE_ATTRIBUTES = [
     "stroke-dasharray", "stroke-dashoffset", "vector-effect", "paint-order",
 ];
 
+const EDITABLE_DEFINITION_TAGS = new Set([
+    "clippath", "g", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "use",
+]);
+
 export interface SVGImportOptions { name?: string; }
 
 export interface SVGImportResult {
     document: SVGSave;
     sanitizedMarkup: string;
+    editability: "native" | "partial";
     warnings: string[];
     nativeElementCount: number;
     preservedNodeCount: number;
@@ -52,6 +57,7 @@ export class SVGImporterService {
         return {
             document,
             sanitizedMarkup: sanitized.markup,
+            editability: context.sourceNodes.length === 0 ? "native" : "partial",
             warnings: [...sanitized.warnings, ...context.warnings],
             nativeElementCount: countElements(elements),
             preservedNodeCount: context.sourceNodes.length,
@@ -66,6 +72,8 @@ class ImportContext {
     readonly documentId: string;
     readonly documentName: string;
     private readonly ids = new Set<string>();
+    private readonly definitions = new Map<string, Element>();
+    private readonly resolvingDefinitions = new Set<string>();
     private counter = 0;
 
     constructor(root: SVGSVGElement, requestedName?: string) {
@@ -74,6 +82,10 @@ class ImportContext {
             || root.querySelector(":scope > title")?.textContent?.trim()
             || root.getAttribute("aria-label")?.trim()
             || this.documentId;
+        Array.from(root.querySelectorAll("[id]")).forEach((element) => {
+            const id = element.getAttribute("id")?.trim();
+            if(id && !this.definitions.has(id)) this.definitions.set(id, element);
+        });
     }
 
     importChildren(parent: Element, parentId: string | null): ElementSave[] {
@@ -106,27 +118,162 @@ class ImportContext {
     }
 
     private importElement(element: Element, parentId: string | null): ElementSave | undefined {
-        const tag = element.localName.toLowerCase();
         try {
-            switch(tag) {
-                case "g": return this.importGroup(element);
-                case "path": return this.importPath(element);
-                case "rect": return this.importRect(element);
-                case "circle": return this.importEllipse(element, true);
-                case "ellipse": return this.importEllipse(element, false);
-                case "line": return this.importLine(element);
-                case "polyline": return this.importPoly(element, false);
-                case "polygon": return this.importPoly(element, true);
-                case "text": return this.importText(element);
-                default:
-                    this.preserve(element, parentId, `Preserved unsupported <${tag}> source.`);
-                    return undefined;
-            }
+            return this.importResolvedElement(element, parentId);
         } catch(error) {
             const message = error instanceof Error ? error.message : String(error);
-            this.preserve(element, parentId, `Preserved <${tag}> as source: ${message}`);
+            this.preserve(element, parentId, `Preserved <${element.localName.toLowerCase()}> as source: ${message}`);
             return undefined;
         }
+    }
+
+    private importResolvedElement(element: Element, parentId: string | null): ElementSave | undefined {
+        const tag = element.localName.toLowerCase();
+        if(tag === "defs") {
+            this.importDefinitions(element, parentId);
+            return undefined;
+        }
+
+        const clipReference = localUrlReference(styleValue(element, "clip-path"));
+        if(styleValue(element, "clip-path") != null && styleValue(element, "clip-path") !== "none") {
+            if(!clipReference) throw new SVGImportError("Only local clip-path references can be edited.");
+            return this.importClippedElement(element, clipReference);
+        }
+
+        switch(tag) {
+            case "g": return this.importGroup(element);
+            case "path": return this.importPath(element);
+            case "rect": return this.importRect(element);
+            case "circle": return this.importEllipse(element, true);
+            case "ellipse": return this.importEllipse(element, false);
+            case "line": return this.importLine(element);
+            case "polyline": return this.importPoly(element, false);
+            case "polygon": return this.importPoly(element, true);
+            case "text": return this.importText(element);
+            case "use": return this.importUse(element);
+            default: throw new SVGImportError(`Unsupported <${tag}> element.`);
+        }
+    }
+
+    private importDefinitions(element: Element, parentId: string | null): void {
+        const containsOpaqueDefinitions = Array.from(element.children)
+            .some((child) => !canNormalizeDefinition(child));
+        if(containsOpaqueDefinitions) {
+            // Keep the complete definition scope so preserved resources can still
+            // reference editable definitions (for example filter + clip-path).
+            Array.from(element.querySelectorAll("[id]")).forEach((definition) => {
+                const id = definition.getAttribute("id")?.trim();
+                if(id) this.ids.add(id);
+            });
+            this.preserve(element, parentId, "Preserved definitions that are not editable yet.");
+        }
+    }
+
+    private importClippedElement(element: Element, referenceId: string): GroupSave {
+        const unclipped = withoutStyleProperty(element, "clip-path");
+        const artwork = this.importResolvedElement(unclipped, null);
+        if(!artwork) throw new SVGImportError("Clipped artwork is not editable yet.");
+        const clipElement = this.importClipPath(referenceId);
+        const id = this.id(undefined, "clip-group");
+        const state = commonState(element, id, `Clip ${artwork.name}`, this.transform(element));
+        // The referencing element's transform and opacity affect its clip as a unit.
+        // Hoist them to the native clipping group instead of applying them twice.
+        artwork.transform = undefined;
+        artwork.opacity = 1;
+        artwork.visible = true;
+        return {
+            type: "group",
+            ...state,
+            name: `Clip ${artwork.name}`,
+            elements: [artwork, clipElement],
+            clipElementId: clipElement.id,
+        };
+    }
+
+    private importClipPath(referenceId: string): ElementSave {
+        const definition = this.definitions.get(referenceId);
+        if(!definition || definition.localName.toLowerCase() !== "clippath") {
+            throw new SVGImportError(`Clip path #${referenceId} was not found.`);
+        }
+        if(this.resolvingDefinitions.has(referenceId)) {
+            throw new SVGImportError(`Clip path #${referenceId} contains a reference cycle.`);
+        }
+        const units = definition.getAttribute("clipPathUnits")?.trim() || "userSpaceOnUse";
+        if(units !== "userSpaceOnUse") {
+            throw new SVGImportError(`Clip path #${referenceId} uses unsupported ${units} units.`);
+        }
+
+        this.resolvingDefinitions.add(referenceId);
+        try {
+            const children = Array.from(definition.children).map((child) => {
+                const imported = this.importResolvedElement(child.cloneNode(true) as Element, null);
+                if(!imported) throw new SVGImportError(`Clip path #${referenceId} contains unsupported geometry.`);
+                return imported;
+            });
+            if(children.length === 0) throw new SVGImportError(`Clip path #${referenceId} is empty.`);
+
+            let geometry: ElementSave;
+            if(children.length === 1 && !definition.getAttribute("transform")) {
+                geometry = children[0];
+            } else {
+                geometry = this.definitionGroup(definition, children, "clip-shapes");
+            }
+
+            const nestedReference = localUrlReference(styleValue(definition, "clip-path"));
+            if(!nestedReference) return geometry;
+            const nestedClip = this.importClipPath(nestedReference);
+            const intersection = this.definitionGroup(definition, [geometry, nestedClip], "clip-intersection");
+            intersection.clipElementId = nestedClip.id;
+            return intersection;
+        } finally {
+            this.resolvingDefinitions.delete(referenceId);
+        }
+    }
+
+    private importUse(element: Element): GroupSave {
+        const referenceId = localFragmentReference(element.getAttribute("href") ?? element.getAttribute("xlink:href"));
+        if(!referenceId) throw new SVGImportError("Only local use references can be expanded for editing.");
+        const definition = this.definitions.get(referenceId);
+        if(!definition) throw new SVGImportError(`Referenced element #${referenceId} was not found.`);
+        if(this.resolvingDefinitions.has(referenceId)) throw new SVGImportError(`Use reference #${referenceId} contains a cycle.`);
+
+        this.resolvingDefinitions.add(referenceId);
+        try {
+            const expanded = this.importResolvedElement(definition.cloneNode(true) as Element, null);
+            if(!expanded) throw new SVGImportError(`Referenced element #${referenceId} is not editable yet.`);
+            const id = this.id(element.getAttribute("id"), "use");
+            return {
+                type: "group",
+                ...commonState(element, id, `Use ${expanded.name}`, this.useTransform(element)),
+                elements: [expanded],
+                clipElementId: null,
+            };
+        } finally {
+            this.resolvingDefinitions.delete(referenceId);
+        }
+    }
+
+    private useTransform(element: Element): TransformSave | undefined {
+        const source = element.getAttribute("transform")?.trim();
+        const transform = source ? parseTransform(source) : identityMatrix();
+        if(!transform) throw new SVGImportError("Use transform contains skew or unsupported syntax.");
+        const positioned = multiplyMatrix(
+            transform,
+            translationMatrix(numberAttribute(element, "x", 0), numberAttribute(element, "y", 0)),
+        );
+        const decomposed = decomposeTransform(positioned);
+        if(!decomposed) throw new SVGImportError("Use position cannot be represented natively.");
+        return decomposed;
+    }
+
+    private definitionGroup(definition: Element, elements: ElementSave[], prefix: string): GroupSave {
+        const id = this.id(definition.getAttribute("id"), prefix);
+        return {
+            type: "group",
+            ...commonState(definition, id, "Clip Path", this.transform(definition)),
+            elements,
+            clipElementId: null,
+        };
     }
 
     private importGroup(element: Element): GroupSave {
@@ -311,6 +458,43 @@ class ImportContext {
         this.ids.add(generated);
         return generated;
     }
+}
+
+function localUrlReference(value?: string): string | undefined {
+    if(!value) return undefined;
+    const match = /^url\(\s*(['"]?)#([^)'"\s]+)\1\s*\)$/i.exec(value.trim());
+    return match?.[2];
+}
+
+function canNormalizeDefinition(element: Element): boolean {
+    const tag = element.localName.toLowerCase();
+    if(!EDITABLE_DEFINITION_TAGS.has(tag)) return false;
+    if(tag === "clippath") {
+        const units = element.getAttribute("clipPathUnits")?.trim() || "userSpaceOnUse";
+        if(units !== "userSpaceOnUse") return false;
+    }
+    if(tag === "clippath" || tag === "g") {
+        return Array.from(element.children).every(canNormalizeDefinition);
+    }
+    return true;
+}
+
+function localFragmentReference(value: string | null): string | undefined {
+    const match = /^#([^\s]+)$/.exec(value?.trim() ?? "");
+    return match?.[1];
+}
+
+function withoutStyleProperty(element: Element, property: string): Element {
+    const clone = element.cloneNode(true) as Element;
+    clone.removeAttribute(property);
+    const declarations = (clone.getAttribute("style") ?? "").split(";").filter((entry) => {
+        const separator = entry.indexOf(":");
+        return separator < 0 || entry.slice(0, separator).trim().toLowerCase() !== property;
+    });
+    const style = declarations.map((entry) => entry.trim()).filter(Boolean).join("; ");
+    if(style) clone.setAttribute("style", style);
+    else clone.removeAttribute("style");
+    return clone;
 }
 
 function commonState(element: Element, id: string, fallbackName: string, transform?: TransformSave) {

@@ -1,6 +1,6 @@
 # SVG Compatibility Matrix
 
-Legend: **Native** = editable model (including import normalization); **Render/export** = generated correctly from native state; **Preserve** = sanitized source survives import/save/reload/export when it cannot be made native.
+Legend: **Native** = editable model (including import normalization); **Render/export** = generated correctly from native state; **Preserve** = sanitized source survives import/save/reload/export when it cannot be made native. Preservation is a compatibility fallback and is reported as a **partial import**, not native support.
 
 | SVG family | Native | Render/export | Preserve on import | Notes |
 |---|---:|---:|---:|---|
@@ -13,8 +13,8 @@ Legend: **Native** = editable model (including import normalization); **Render/e
 | `circle` | Via ellipse | Via ellipse | Yes | No distinct native type |
 | `line`, `polyline`, `polygon` | Via path | Yes | Yes | Converts to editable path segments |
 | `text`, basic `tspan` | Partial | Yes | Yes | Plain text imports; rich layout remains source |
-| `symbol`, `use` | No | Source | Yes | Reusable-symbol editing remains planned |
-| Clipping paths | Yes | Yes | Yes | Existing native clips; imported clip constructs remain source |
+| `symbol`, `use` | Partial | Yes | Yes | Local `use` of editable geometry expands to editable groups; reusable symbol semantics remain planned |
+| Clipping paths | Yes | Yes | Yes | Local `clipPath` geometry, compound unions, and nested intersections normalize to editable clipping groups |
 | Masks | No | Source | Yes | Distinct from clipping |
 | Solid fill/stroke | Yes | Yes | Yes | Hex, RGB, and browser-recognized solid colors |
 | Gradients/patterns | No | Source | Yes | Paint-server editing remains planned |
@@ -27,10 +27,10 @@ Legend: **Native** = editable model (including import normalization); **Render/e
 
 ## Import safety policy
 
-The importer parses text with `DOMParser`; imported nodes are never inserted as live, unsanitized DOM. Scripts, event-handler attributes, stylesheets, SVG animation elements, foreign content, unsafe URLs, and active external resources are rejected. Unsupported safe content retains sanitized source while the same sanitized representation is used for rendering.
+The importer parses text with `DOMParser`; imported nodes are never inserted as live, unsanitized DOM. Scripts, event-handler attributes, stylesheets, SVG animation elements, foreign content, unsafe URLs, and active external resources are rejected. Unsupported safe content retains sanitized source while the same sanitized representation is used for rendering. Any retained source node makes the result a partial import because that node cannot yet be edited through the native model.
 
 ## Fixture requirements
 
-Each supported family needs fixtures for native editing, save/reload, exported markup, and representative visual output. Unsupported families need opaque-preservation and sanitizer fixtures before they can be advertised as preserved.
+Each supported family needs fixtures for native editing, save/reload, exported markup, and representative visual output. Unsupported families need opaque-preservation and sanitizer fixtures, and every preserved real-world construct is treated as input to the native-coverage backlog.
 
 The maintained real-world corpus and current diagnostic baseline are documented in [SVG_IMPORT_CORPUS.md](SVG_IMPORT_CORPUS.md).

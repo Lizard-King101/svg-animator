@@ -1,12 +1,12 @@
 import { SVGImporterService } from "./svg-importer.service";
 import { EditorService } from "../../_services/editor.service";
-import { SVG } from "../objects/svg.object";
+import { ElementSave, SVG } from "../objects/svg.object";
 import { buildSVGMarkup } from "../svg-markup";
 
 const SAMPLES: SampleExpectation[] = [
     { file: "alphachannel.svg", minNative: 3 },
     { file: "bzr.svg", minNative: 4 },
-    { file: "clippath.svg", minNative: 2, minPreserved: 4 },
+    { file: "clippath.svg", minNative: 15, minPreserved: 2 },
     { file: "samples-svgrepo-com.svg", minNative: 14 },
     { file: "snake.svg", minNative: 15, minRemoved: 2 },
     { file: "photos.svg", minNative: 1, minRemoved: 2 },
@@ -37,6 +37,11 @@ describe("real-world SVG import corpus", () => {
             if(result.preservedNodeCount > 0) {
                 expect(exported).withContext(sample.file).toContain(result.document.importedSourceNodes![0].tagName);
             }
+
+            if(sample.file === "clippath.svg") {
+                expect(result.document.importedSourceNodes?.map((node) => node.tagName)).toEqual(["defs", "rect"]);
+                expect(countClippingGroups(result.document.elements)).toBeGreaterThanOrEqual(3);
+            }
         });
     }
 });
@@ -46,6 +51,12 @@ interface SampleExpectation {
     minNative: number;
     minRemoved?: number;
     minPreserved?: number;
+}
+
+function countClippingGroups(elements: ElementSave[]): number {
+    return elements.reduce((count, element) => count
+        + (element.type === "group" && element.clipElementId ? 1 : 0)
+        + (element.type === "group" ? countClippingGroups(element.elements) : 0), 0);
 }
 
 function editorDouble(): EditorService {
