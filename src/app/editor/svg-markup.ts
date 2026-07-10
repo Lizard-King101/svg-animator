@@ -5,6 +5,7 @@ import { TextElement } from "./objects/elements/text.object";
 import { motionAdjustedMatrix } from "./objects/motion-path.object";
 import { AnyElement, ImportedSourceNode, SVG } from "./objects/svg.object";
 import { matrixToSvg } from "./objects/transform.object";
+import { GradientPaint, gradientTransformValue, isGradientPaint, paintSVGValue } from "./objects/paint.object";
 
 export function escapeXmlText(value: unknown): string {
     return String(value)
@@ -49,6 +50,12 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
     const lines: string[] = [
         `<svg xmlns="http://www.w3.org/2000/svg" width="${escapeXmlAttribute(svg.width)}" height="${escapeXmlAttribute(svg.height)}" viewBox="0 0 ${escapeXmlAttribute(svg.width)} ${escapeXmlAttribute(svg.height)}">`
     ];
+    const gradients = collectGradients(svg.elements);
+    if(gradients.length > 0) {
+        lines.push("  <defs>");
+        gradients.forEach((gradient) => appendGradient(gradient, lines, 2));
+        lines.push("  </defs>");
+    }
 
     const appendElements = (elements: AnyElement[], depth: number, parentId: string | null | undefined) => {
         const indent = '  '.repeat(depth);
@@ -75,9 +82,9 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                     attr('d', bakeRoundedCorners ? element.raw : element.rawUnrounded) +
                     attr('transform', transform) +
                     attr('opacity', opacityAttr(element.opacity)) +
-                    attr('fill', s.fill_enabled && s.fill ? s.fill.hex : 'none') +
+                    attr('fill', s.fill_enabled ? paintSVGValue(s.fill) ?? 'none' : 'none') +
                     attr('fill-rule', element.fillRule) +
-                    attr('stroke', s.stroke?.hex ?? null) +
+                    attr('stroke', paintSVGValue(s.stroke)) +
                     attr('stroke-width', s.stroke_width ?? null) +
                     attr('stroke-linecap', s.line_cap ?? null) +
                     attr('stroke-linejoin', s.line_join ?? null) +
@@ -109,8 +116,8 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                 );
             } else if(element instanceof Shape) {
                 const s = element.settings;
-                const fillAttr = attr('fill', s.fill?.hex ?? 'none');
-                const strokeAttr = attr('stroke', s.stroke?.hex ?? null);
+                const fillAttr = attr('fill', paintSVGValue(s.fill) ?? 'none');
+                const strokeAttr = attr('stroke', paintSVGValue(s.stroke));
                 const swAttr = attr('stroke-width', s.stroke_width ?? null);
                 if(element.type === 'rectangle') {
                     const cr = s.corner_radius || null;
@@ -156,6 +163,31 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
 
     lines.push('</svg>');
     return lines.join('\n');
+}
+
+function collectGradients(elements: AnyElement[]): GradientPaint[] {
+    const gradients = new Map<string, GradientPaint>();
+    const visit = (element: AnyElement) => {
+        const settings = element.settings as Record<string, unknown>;
+        [settings["fill"], settings["stroke"]].forEach((paint) => {
+            if(isGradientPaint(paint)) gradients.set(paint.id, paint);
+        });
+        if(element instanceof Group) element.elements.forEach(visit);
+    };
+    elements.forEach(visit);
+    return [...gradients.values()];
+}
+
+function appendGradient(gradient: GradientPaint, lines: string[], depth: number): void {
+    const indent = "  ".repeat(depth);
+    const tag = gradient.type === "linear-gradient" ? "linearGradient" : "radialGradient";
+    const coordinateAttrs = Object.entries(gradient.coordinates)
+        .map(([name, value]) => attr(name, value)).join("");
+    lines.push(`${indent}<${tag}${attr("id", gradient.id)}${attr("gradientUnits", gradient.units)}${attr("spreadMethod", gradient.spreadMethod)}${attr("gradientTransform", gradientTransformValue(gradient))}${coordinateAttrs}>`);
+    gradient.stops.forEach((stop) => lines.push(
+        `${indent}  <stop${attr("id", stop.id)}${attr("offset", stop.offset)}${attr("stop-color", stop.color.hex)}${attr("stop-opacity", stop.opacity === 1 ? null : stop.opacity)}/>`
+    ));
+    lines.push(`${indent}</${tag}>`);
 }
 
 function appendImportedSource(node: ImportedSourceNode, lines: string[], depth: number): void {

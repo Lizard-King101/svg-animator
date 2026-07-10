@@ -5,6 +5,7 @@ import { Line, LineSave } from "../line.object";
 import { defaultMotion, MotionSave, MotionState, restoreMotion, serializeMotion } from "../motion.object";
 import { Point, PointSave } from "../point.object";
 import { defaultTransform, restoreTransform, serializeTransform, TransformSave, TransformState } from "../transform.object";
+import { PaintSave, restorePaint, serializePaint } from "../paint.object";
 
 export interface PathSave {
     type: 'path';
@@ -21,8 +22,8 @@ export interface PathSave {
     settings: {
         stroke_width: number;
         fill_enabled: boolean;
-        fill: string | null;
-        stroke: string | null;
+        fill: PaintSave;
+        stroke: PaintSave;
         line_cap: string | null;
         line_join: string | null;
     };
@@ -54,7 +55,7 @@ const PathAttributes = [
     {
         label: 'Stroke Color',
         name: 'stroke',
-        input: 'color',
+        input: 'paint',
         output: 'stroke',
     },
     {
@@ -66,7 +67,7 @@ const PathAttributes = [
     {
         label: 'Fill Color',
         name: 'fill',
-        input: 'color',
+        input: 'paint',
         output: 'fill',
     },
     {
@@ -256,8 +257,8 @@ export class Path {
             settings: {
                 stroke_width: this.settings.stroke_width,
                 fill_enabled: this.settings.fill_enabled,
-                fill: this.settings.fill?.hex ?? null,
-                stroke: this.settings.stroke?.hex ?? null,
+                fill: serializePaint(this.settings.fill),
+                stroke: serializePaint(this.settings.stroke),
                 line_cap: this.settings.line_cap ?? null,
                 line_join: this.settings.line_join ?? null,
             },
@@ -285,8 +286,8 @@ export class Path {
             stroke_width: s.settings.stroke_width,
             // backward compat: old saves without fill_enabled default to false
             fill_enabled: s.settings.fill_enabled ?? false,
-            fill: s.settings.fill ? new Color(s.settings.fill) : null,
-            stroke: s.settings.stroke ? new Color(s.settings.stroke) : null,
+            fill: restorePaint(s.settings.fill),
+            stroke: restorePaint(s.settings.stroke),
             line_cap: s.settings.line_cap as any,
             line_join: s.settings.line_join as any,
         };

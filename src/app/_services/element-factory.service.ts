@@ -8,6 +8,7 @@ import { Line } from "../editor/objects/line.object";
 import { Point } from "../editor/objects/point.object";
 import { AnyElement } from "../editor/objects/svg.object";
 import { EditorService } from "./editor.service";
+import { clonePaint } from "../editor/objects/paint.object";
 
 /**
  * Constructs editor elements while the persisted model still requires an
@@ -57,8 +58,8 @@ export class ElementFactory {
         clone.motion = { ...path.motion };
         clone.settings = {
             ...path.settings,
-            stroke: this.cloneColor(path.settings.stroke) as Color | null,
-            fill: this.cloneColor(path.settings.fill) as Color | null,
+            stroke: clonePaint(path.settings.stroke, this.editor.ID),
+            fill: clonePaint(path.settings.fill, this.editor.ID),
         };
         clone.contours = path.contours.map((contour) => clone.createContour(
             contour.lines.map((line) => new Line(this.editor, {
@@ -88,8 +89,8 @@ export class ElementFactory {
         clone.motion = { ...shape.motion };
         clone.settings = {
             ...shape.settings,
-            stroke: this.cloneColor(shape.settings.stroke) as Color | null,
-            fill: this.cloneColor(shape.settings.fill) as Color | null,
+            stroke: clonePaint(shape.settings.stroke, this.editor.ID),
+            fill: clonePaint(shape.settings.fill, this.editor.ID),
         };
         return clone;
     }

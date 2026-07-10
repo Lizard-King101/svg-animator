@@ -33,6 +33,7 @@ import { pinTransformOrigin, resolvedOrigin } from "./objects/element-bounds";
 import { canConvertStrokeToPath, StrokeToPathProfile } from "./objects/stroke-outline.object";
 import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, createAnimationColorValue } from "./objects/animation.object";
 import { pathPointAnimationProperty, readAnimationProperty } from "./objects/animation-targets";
+import { GradientPaint, gradientAnimationProperties, isGradientPaint } from "./objects/paint.object";
 
 @Component({
     standalone: true,
@@ -966,6 +967,10 @@ export class EditorPage implements AfterViewInit {
         return (element?.settings ?? {}) as Record<string, any>;
     }
 
+    asGradientPaint(value: unknown): GradientPaint | null {
+        return isGradientPaint(value) ? value : null;
+    }
+
     handleAttributeChange(element: AnyElement | undefined, attr: ElementAttribute, value: unknown) {
         if(!element) {
             return;
@@ -1136,7 +1141,10 @@ export class EditorPage implements AfterViewInit {
             return [];
         }
 
-        return this.ANIMATABLE_PROPERTIES.filter((definition) => this.animationPropertySupported(element, definition));
+        return [
+            ...this.ANIMATABLE_PROPERTIES.filter((definition) => this.animationPropertySupported(element, definition)),
+            ...gradientAnimationProperties(element.settings as Record<string, unknown>),
+        ];
     }
 
     addOrUpdateAnimationKey(element: AnyElement, definition: AnimatablePropertyDefinition) {
@@ -1180,6 +1188,9 @@ export class EditorPage implements AfterViewInit {
         }
 
         if(definition.property.startsWith('settings.')) {
+            if(definition.property === 'settings.fill' || definition.property === 'settings.stroke' || definition.property.includes('.gradient.')) {
+                return readAnimationProperty(element, definition.property) !== undefined;
+            }
             const key = definition.property.slice('settings.'.length);
             return key in (element.settings as Record<string, unknown>);
         }

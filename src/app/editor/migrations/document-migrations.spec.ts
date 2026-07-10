@@ -49,7 +49,7 @@ describe("document migrations", () => {
         expect(storeRuntimeProjects(runtimeProjects(result.value))).toEqual(result.value);
     });
 
-    it("sequentially migrates a version-1 document envelope to version 2", () => {
+    it("sequentially migrates a version-1 document envelope to the current version", () => {
         const result = migrateDocument({
             kind: DOCUMENT_ENVELOPE_KIND,
             version: 1,
@@ -59,8 +59,27 @@ describe("document migrations", () => {
         expect(result.status).toBe("ok");
         if(result.status !== "ok") return;
         expect(result.migrated).toBeTrue();
-        expect(result.value.version).toBe(2);
+        expect(result.value.version).toBe(3);
         expect(result.value.data.importedSourceNodes).toEqual([]);
+    });
+
+    it("migrates version 2 documents without changing solid paint or animation tracks", () => {
+        const data = {
+            ...legacyProjects[0].svgData,
+            importedSourceNodes: [],
+            animation: {
+                version: 1 as const,
+                duration: 2,
+                tracks: [{ id: "fill-track", targetId: "shape", property: "settings.fill", valueType: "color" as const, keyframes: [] }],
+                markers: [],
+            },
+        };
+        const result = migrateDocument({ kind: DOCUMENT_ENVELOPE_KIND, version: 2, data });
+
+        expect(result.status).toBe("ok");
+        if(result.status !== "ok") return;
+        expect(result.value.version).toBe(3);
+        expect(result.value.data).toEqual(data as any);
     });
 
     it("isolates invalid records while retaining valid projects", () => {

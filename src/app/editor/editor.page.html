@@ -320,6 +320,10 @@
                            [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
                            (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
                            [label]="attr.label"></color>
+              <color       *ngIf="attr.input == 'paint' && !asGradientPaint(settingsOf(editor.inspectedElement)[attr.output])"
+                           [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
+                           (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
+                           [label]="attr.label"></color>
               <range       *ngIf="attr.input == 'range'"
                            [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
                            (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"

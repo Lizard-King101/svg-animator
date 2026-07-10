@@ -833,6 +833,12 @@ export class AnimationTimelineComponent {
         }
 
         if(property.property.startsWith("settings.")) {
+            if(property.property === "settings.fill" || property.property === "settings.stroke") {
+                return readAnimationProperty(element, property.property) !== undefined;
+            }
+            if(property.property.includes(".gradient.")) {
+                return readAnimationProperty(element, property.property) !== undefined;
+            }
             const key = property.property.slice("settings.".length);
             return key in (element.settings as Record<string, unknown>);
         }

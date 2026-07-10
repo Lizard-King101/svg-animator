@@ -17,6 +17,7 @@ import { SVG } from "./objects/svg.object";
 import { buildSVGMarkup } from "./svg-markup";
 import { deletePathAnchor, insertPathPoint, togglePathLineType } from "../_services/tools/path-edit.helpers";
 import { snapTimelineTime, TimelineEditingService, timelineTimeToX, timelineXToTime } from "../_services/timeline-editing.service";
+import { paintSVGValue } from "./objects/paint.object";
 
 function editorDouble(): EditorService {
     let id = 0;
@@ -190,7 +191,7 @@ describe("editor model characterization", () => {
         const outline = convertStrokeToPath(path, editor, "precise");
 
         expect(outline).not.toBeNull();
-        expect(outline!.settings.fill?.hex).toBe("#abcdef");
+        expect(paintSVGValue(outline!.settings.fill)).toBe("#abcdef");
         expect(outline!.settings.stroke).toBeNull();
         expect(outline!.settings.stroke_width).toBe(0);
         expect(outline!.contours.every((contour) => contour.closed)).toBeTrue();

@@ -10,6 +10,7 @@ import { AnyElement, ImportedSourceNode } from "src/app/editor/objects/svg.objec
 import { matrixToSvg } from "src/app/editor/objects/transform.object";
 import { SVGEditorOverlayComponent } from "../svg-editor-overlay/svg-editor-overlay.component";
 import { ImportedSVGSourceDirective } from "./imported-svg-source.directive";
+import { GradientPaint, gradientTransformValue, isGradientPaint, Paint, paintSVGValue } from "src/app/editor/objects/paint.object";
 
 @Component({
     standalone: true,
@@ -90,5 +91,21 @@ export class SVGDisplay implements AfterViewInit {
     textTspans(text: TextElement): Array<{ text: string; dy: number }> {
         return text.lines.map((line, i) => ({ text: line, dy: i === 0 ? 0 : text.lineHeight }));
     }
+
+    gradients(): GradientPaint[] {
+        const gradients = new Map<string, GradientPaint>();
+        const visit = (elements: AnyElement[]) => elements.forEach((element) => {
+            const settings = element.settings as Record<string, unknown>;
+            [settings["fill"], settings["stroke"]].forEach((paint) => {
+                if(isGradientPaint(paint)) gradients.set(paint.id, paint);
+            });
+            if(element instanceof Group) visit(element.elements);
+        });
+        visit(this.editor.selectedSVG?.elements ?? []);
+        return [...gradients.values()];
+    }
+
+    paintValue(paint: Paint | null | undefined): string | null { return paintSVGValue(paint); }
+    gradientTransform(gradient: GradientPaint): string | null { return gradientTransformValue(gradient); }
 
 }

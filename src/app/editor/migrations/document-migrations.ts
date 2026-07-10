@@ -2,7 +2,7 @@ import { SVGSave } from "../objects/svg.object";
 
 export const DOCUMENT_ENVELOPE_KIND = "svg-animator/document" as const;
 export const PROJECT_DATABASE_KIND = "svg-animator/project-database" as const;
-export const CURRENT_DOCUMENT_VERSION = 2 as const;
+export const CURRENT_DOCUMENT_VERSION = 3 as const;
 export const CURRENT_PROJECT_DATABASE_VERSION = 1 as const;
 
 export interface DocumentEnvelopeV1 {
@@ -12,6 +12,12 @@ export interface DocumentEnvelopeV1 {
 }
 
 export interface DocumentEnvelopeV2 {
+    kind: typeof DOCUMENT_ENVELOPE_KIND;
+    version: 2;
+    data: SVGSave;
+}
+
+export interface DocumentEnvelopeV3 {
     kind: typeof DOCUMENT_ENVELOPE_KIND;
     version: typeof CURRENT_DOCUMENT_VERSION;
     data: SVGSave;
@@ -23,7 +29,7 @@ export interface StoredProjectV1 {
     thumbnail: string;
     createdAt: number;
     updatedAt: number;
-    document: DocumentEnvelopeV2;
+    document: DocumentEnvelopeV3;
 }
 
 export interface ProjectDatabaseV1 {
@@ -56,7 +62,7 @@ export interface MigrationFailure {
     version?: number;
 }
 
-export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV2 {
+export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV3 {
     return {
         kind: DOCUMENT_ENVELOPE_KIND,
         version: CURRENT_DOCUMENT_VERSION,
@@ -65,22 +71,26 @@ export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV2 {
 }
 
 /** Migrates one persisted document without constructing editor model objects. */
-export function migrateDocument(input: unknown): MigrationResult<DocumentEnvelopeV2> {
+export function migrateDocument(input: unknown): MigrationResult<DocumentEnvelopeV3> {
     if(isRecord(input) && input["kind"] === DOCUMENT_ENVELOPE_KIND) {
         const version = numericVersion(input["version"]);
         if(version === 1) {
             if(!isSVGSave(input["data"])) return invalid("Document v1 contains an invalid SVG payload.");
-            return success(createDocumentEnvelope(withImportedSourceNodes(input["data"])), true, ["Migrated document version 1 to version 2."]);
+            return success(createDocumentEnvelope(withImportedSourceNodes(input["data"])), true, ["Migrated document version 1 to version 3."]);
+        }
+        if(version === 2) {
+            if(!isSVGSave(input["data"])) return invalid("Document v2 contains an invalid SVG payload.");
+            return success(createDocumentEnvelope(input["data"]), true, ["Migrated document version 2 to version 3 for native paint values."]);
         }
         if(version !== CURRENT_DOCUMENT_VERSION) return unsupported("document", version);
         if(!isSVGSave(input["data"])) {
-            return invalid("Document v2 contains an invalid SVG payload.");
+            return invalid("Document v3 contains an invalid SVG payload.");
         }
-        return success(input as unknown as DocumentEnvelopeV2, false);
+        return success(input as unknown as DocumentEnvelopeV3, false);
     }
 
     if(isSVGSave(input)) {
-        return success(createDocumentEnvelope(withImportedSourceNodes(input)), true, ["Migrated an unversioned document to version 2."]);
+        return success(createDocumentEnvelope(withImportedSourceNodes(input)), true, ["Migrated an unversioned document to version 3."]);
     }
 
     return invalid("Value is neither a legacy SVG document nor a supported document envelope.");

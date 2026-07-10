@@ -4,6 +4,7 @@ import { Group } from "./elements/group.object";
 import { Path } from "./elements/path.object";
 import { AnyElement } from "./svg.object";
 import { AnimationColorValue } from "./animation.object";
+import { GradientCoordinateKey, isGradientPaint } from "./paint.object";
 
 export interface AnimationPropertySnapshot {
     targetId: string;
@@ -42,6 +43,8 @@ export function readAnimationProperty(element: AnyElement, property: string): un
         const point = element.findPointById(pathPoint.pointId);
         return point?.[pathPoint.axis];
     }
+    const gradient = parseGradientProperty(property);
+    if(gradient) return readGradientProperty(element, gradient);
 
     switch(property) {
         case "transform.translateX":
@@ -61,9 +64,9 @@ export function readAnimationProperty(element: AnyElement, property: string): un
         case "opacity":
             return element.opacity;
         case "settings.fill":
-            return colorHex((element.settings as Record<string, unknown>)["fill"]);
+            return solidColorHex((element.settings as Record<string, unknown>)["fill"]);
         case "settings.stroke":
-            return colorHex((element.settings as Record<string, unknown>)["stroke"]);
+            return solidColorHex((element.settings as Record<string, unknown>)["stroke"]);
         case "settings.stroke_width":
             return (element.settings as Record<string, unknown>)["stroke_width"];
         case "visible":
@@ -97,6 +100,8 @@ export function writeAnimationProperty(element: AnyElement, property: string, va
 
         return writeNumber(value, (numeric) => point[pathPoint.axis] = numeric);
     }
+    const gradient = parseGradientProperty(property);
+    if(gradient) return writeGradientProperty(element, gradient, value);
 
     switch(property) {
         case "transform.translateX":
@@ -197,12 +202,57 @@ function writeColor(element: AnyElement, key: "fill" | "stroke", value: unknown)
     return true;
 }
 
-function colorHex(value: unknown): string | null | undefined {
+function solidColorHex(value: unknown): string | null | undefined {
     if(value == null) {
         return value as null | undefined;
     }
 
-    return value instanceof Color ? value.hex : String(value);
+    return value instanceof Color ? value.hex : undefined;
+}
+
+interface ParsedGradientProperty {
+    paintKey: "fill" | "stroke";
+    coordinate?: GradientCoordinateKey;
+    stopId?: string;
+    stopField?: "offset" | "color" | "opacity";
+}
+
+function parseGradientProperty(property: string): ParsedGradientProperty | undefined {
+    const coordinate = /^settings\.(fill|stroke)\.gradient\.(x1|y1|x2|y2|cx|cy|r|fx|fy)$/.exec(property);
+    if(coordinate) return { paintKey: coordinate[1] as "fill" | "stroke", coordinate: coordinate[2] as GradientCoordinateKey };
+    const stop = /^settings\.(fill|stroke)\.gradient\.stops\.(.+)\.(offset|color|opacity)$/.exec(property);
+    if(stop) return {
+        paintKey: stop[1] as "fill" | "stroke",
+        stopId: stop[2],
+        stopField: stop[3] as "offset" | "color" | "opacity",
+    };
+    return undefined;
+}
+
+function readGradientProperty(element: AnyElement, property: ParsedGradientProperty): unknown {
+    const paint = (element.settings as Record<string, unknown>)[property.paintKey];
+    if(!isGradientPaint(paint)) return undefined;
+    if(property.coordinate) return paint.coordinates[property.coordinate];
+    const stop = paint.stops.find((candidate) => candidate.id === property.stopId);
+    if(!stop || !property.stopField) return undefined;
+    return property.stopField === "color" ? stop.color.hex : stop[property.stopField];
+}
+
+function writeGradientProperty(element: AnyElement, property: ParsedGradientProperty, value: unknown): boolean {
+    const paint = (element.settings as Record<string, unknown>)[property.paintKey];
+    if(!isGradientPaint(paint)) return false;
+    if(property.coordinate) {
+        return writeNumber(value, (numeric) => paint.coordinates[property.coordinate!] = numeric);
+    }
+    const stop = paint.stops.find((candidate) => candidate.id === property.stopId);
+    if(!stop || !property.stopField) return false;
+    if(property.stopField === "color") {
+        if(isAnimationColorValue(value)) stop.color = new Color(value.hex);
+        else if(typeof value === "string") stop.color = new Color(value);
+        else return false;
+        return true;
+    }
+    return writeNumber(value, (numeric) => stop[property.stopField as "offset" | "opacity"] = Math.max(0, Math.min(1, numeric)));
 }
 
 function isAnimationColorValue(value: unknown): value is AnimationColorValue {

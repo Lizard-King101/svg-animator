@@ -4,6 +4,7 @@ import { Color } from "../color.object";
 import { defaultMotion, MotionSave, MotionState, restoreMotion, serializeMotion } from "../motion.object";
 import { Point, PointSave } from "../point.object";
 import { defaultTransform, restoreTransform, serializeTransform, TransformSave, TransformState } from "../transform.object";
+import { PaintSave, restorePaint, serializePaint } from "../paint.object";
 
 export interface ShapeSave {
     type: 'shape';
@@ -20,8 +21,8 @@ export interface ShapeSave {
         width: number;
         height: number;
         stroke_width: number;
-        stroke: string | null;
-        fill: string | null;
+        stroke: PaintSave;
+        fill: PaintSave;
         corner_radius?: number;
     };
 }
@@ -57,13 +58,13 @@ const ShapeBaseAttributes = [
     {
         label: 'Stroke Color',
         name: 'stroke',
-        input: 'color',
+        input: 'paint',
         output: 'stroke',
     },
     {
         label: 'Fill Color',
         name: 'fill',
-        input: 'color',
+        input: 'paint',
         output: 'fill',
     }
 ] as const satisfies readonly ElementAttribute[];
@@ -176,8 +177,8 @@ export class Shape {
                 width: this.settings.width,
                 height: this.settings.height,
                 stroke_width: this.settings.stroke_width,
-                stroke: this.settings.stroke?.hex ?? null,
-                fill: this.settings.fill?.hex ?? null,
+                stroke: serializePaint(this.settings.stroke),
+                fill: serializePaint(this.settings.fill),
                 corner_radius: this.settings.corner_radius,
             },
         };
@@ -201,8 +202,8 @@ export class Shape {
             width: s.settings.width,
             height: s.settings.height,
             stroke_width: s.settings.stroke_width,
-            stroke: s.settings.stroke ? new Color(s.settings.stroke) : null,
-            fill: s.settings.fill ? new Color(s.settings.fill) : null,
+            stroke: restorePaint(s.settings.stroke),
+            fill: restorePaint(s.settings.fill),
             corner_radius: s.settings.corner_radius ?? 0,
         };
         return shape;

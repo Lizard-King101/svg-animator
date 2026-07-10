@@ -4,6 +4,7 @@ import { Path, PathContour, RoundedCorner } from "./elements/path.object";
 import { Line } from "./line.object";
 import { unionFilledPathContours } from "./path-boolean.object";
 import { Point } from "./point.object";
+import { clonePaint } from "./paint.object";
 
 interface Vec {
     x: number;
@@ -71,7 +72,7 @@ export function convertStrokeToPath(path: Path, editor: EditorService, profile: 
     converted.settings = {
         ...path.settings,
         fill_enabled: true,
-        fill: new Color(path.settings.stroke.hex),
+        fill: clonePaint(path.settings.stroke),
         stroke: null,
         stroke_width: 0,
         line_cap: null,

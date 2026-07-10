@@ -1,4 +1,5 @@
 import { Color } from "../color.object";
+import { Paint } from "../paint.object";
 
 export interface AttributeSelectOption<T = unknown> {
   label: string;
@@ -19,7 +20,8 @@ interface AttributeInputTypeMap {
   number: number;
   text: string;
   range: number;
-  color: Color | null;
+  color: Paint | null;
+  paint: Paint | null;
   select: unknown;
   bool: boolean;
 }
@@ -39,6 +41,9 @@ export interface AttributeRange<TOutput extends string = string>
 export interface AttributeColor<TOutput extends string = string>
   extends AttributeBase<"color", TOutput> {}
 
+export interface AttributePaint<TOutput extends string = string>
+  extends AttributeBase<"paint", TOutput> {}
+
 export interface AttributeSelect<
   TOutput extends string = string,
   TValue = unknown
@@ -54,6 +59,7 @@ export type ElementAttribute =
   | AttributeText
   | AttributeRange
   | AttributeColor
+  | AttributePaint
   | AttributeSelect
   | AttributeBool;
 
@@ -62,6 +68,7 @@ type AttributeValue<T extends ElementAttribute> =
   T extends { input: "text" } ? string :
   T extends { input: "range" } ? number :
   T extends { input: "color" } ? Color | null :
+  T extends { input: "paint" } ? Paint | null :
   T extends { input: "bool" } ? boolean :
   T extends { input: "select"; options: readonly (infer O)[] }
     ? O extends { value: infer V }

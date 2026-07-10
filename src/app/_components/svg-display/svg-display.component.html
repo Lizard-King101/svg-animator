@@ -1,3 +1,24 @@
+<svg:defs *ngIf="gradients().length">
+    <ng-container *ngFor="let gradient of gradients()">
+        <svg:linearGradient *ngIf="gradient.type == 'linear-gradient'"
+            [id]="gradient.id" [attr.gradientUnits]="gradient.units" [attr.spreadMethod]="gradient.spreadMethod"
+            [attr.gradientTransform]="gradientTransform(gradient)"
+            [attr.x1]="gradient.coordinates.x1" [attr.y1]="gradient.coordinates.y1"
+            [attr.x2]="gradient.coordinates.x2" [attr.y2]="gradient.coordinates.y2">
+            <svg:stop *ngFor="let stop of gradient.stops" [id]="stop.id" [attr.offset]="stop.offset"
+                [attr.stop-color]="stop.color.hex" [attr.stop-opacity]="stop.opacity" />
+        </svg:linearGradient>
+        <svg:radialGradient *ngIf="gradient.type == 'radial-gradient'"
+            [id]="gradient.id" [attr.gradientUnits]="gradient.units" [attr.spreadMethod]="gradient.spreadMethod"
+            [attr.gradientTransform]="gradientTransform(gradient)"
+            [attr.cx]="gradient.coordinates.cx" [attr.cy]="gradient.coordinates.cy" [attr.r]="gradient.coordinates.r"
+            [attr.fx]="gradient.coordinates.fx" [attr.fy]="gradient.coordinates.fy">
+            <svg:stop *ngFor="let stop of gradient.stops" [id]="stop.id" [attr.offset]="stop.offset"
+                [attr.stop-color]="stop.color.hex" [attr.stop-opacity]="stop.opacity" />
+        </svg:radialGradient>
+    </ng-container>
+</svg:defs>
+
 <ng-template #renderElements let-elements let-parentId="parentId" let-includeSource="includeSource">
 <ng-container *ngFor="let element of elements">
     <ng-container *ngIf="element.visible && asGroup(element) as group">
@@ -16,9 +37,9 @@
         [attr.d]="path.raw"
         [attr.transform]="transformAttr(path)"
         [attr.opacity]="opacityAttr(path)"
-        [attr.fill]="path.settings.fill_enabled && path.settings.fill ? path.settings.fill.hex : 'none'"
+        [attr.fill]="path.settings.fill_enabled ? (paintValue(path.settings.fill) ?? 'none') : 'none'"
         [attr.fill-rule]="path.fillRule"
-        [attr.stroke]="path.settings.stroke?.hex"
+        [attr.stroke]="paintValue(path.settings.stroke)"
         [attr.stroke-width]="path.settings.stroke_width"
         [attr.stroke-linecap]="path.settings.line_cap"
         [attr.stroke-linejoin]="path.settings.line_join"
@@ -39,8 +60,8 @@
         [attr.height]="shape.height"
         [attr.rx]="shape.settings.corner_radius || null"
         [attr.ry]="shape.settings.corner_radius || null"
-        [attr.fill]="shape.settings.fill?.hex ?? 'none'"
-        [attr.stroke]="shape.settings.stroke?.hex"
+        [attr.fill]="paintValue(shape.settings.fill) ?? 'none'"
+        [attr.stroke]="paintValue(shape.settings.stroke)"
         [attr.stroke-width]="shape.settings.stroke_width"
         />
         <svg:ellipse
@@ -52,8 +73,8 @@
         [attr.cy]="shape.centerY"
         [attr.rx]="shape.radiusX"
         [attr.ry]="shape.radiusY"
-        [attr.fill]="shape.settings.fill?.hex ?? 'none'"
-        [attr.stroke]="shape.settings.stroke?.hex"
+        [attr.fill]="paintValue(shape.settings.fill) ?? 'none'"
+        [attr.stroke]="paintValue(shape.settings.stroke)"
         [attr.stroke-width]="shape.settings.stroke_width"
         />
     </ng-container>
@@ -101,8 +122,8 @@
         [attr.y]="shape.y"
         [attr.width]="shape.width"
         [attr.height]="shape.height"
-        [attr.fill]="shape.settings.fill?.hex ?? 'none'"
-        [attr.stroke]="shape.settings.stroke?.hex"
+        [attr.fill]="paintValue(shape.settings.fill) ?? 'none'"
+        [attr.stroke]="paintValue(shape.settings.stroke)"
         [attr.stroke-width]="shape.settings.stroke_width"
         />
         <svg:ellipse
@@ -114,8 +135,8 @@
         [attr.cy]="shape.centerY"
         [attr.rx]="shape.radiusX"
         [attr.ry]="shape.radiusY"
-        [attr.fill]="shape.settings.fill?.hex ?? 'none'"
-        [attr.stroke]="shape.settings.stroke?.hex"
+        [attr.fill]="paintValue(shape.settings.fill) ?? 'none'"
+        [attr.stroke]="paintValue(shape.settings.stroke)"
         [attr.stroke-width]="shape.settings.stroke_width"
         />
     </ng-container>
