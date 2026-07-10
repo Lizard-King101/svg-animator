@@ -1,0 +1,32 @@
+{
+  "kind": "svg-animator/project-database",
+  "version": 1,
+  "projects": [
+    {
+      "id": "broken",
+      "name": "Broken",
+      "thumbnail": "",
+      "createdAt": 1,
+      "updatedAt": 2,
+      "document": { "unexpected": true }
+    },
+    {
+      "id": "survivor",
+      "name": "Survivor",
+      "thumbnail": "<svg></svg>",
+      "createdAt": 3,
+      "updatedAt": 4,
+      "document": {
+        "kind": "svg-animator/document",
+        "version": 1,
+        "data": {
+          "id": "survivor",
+          "name": "Survivor",
+          "width": 10,
+          "height": 10,
+          "elements": []
+        }
+      }
+    }
+  ]
+}

@@ -5,7 +5,7 @@ SVG Animator is a motion SVG studio: a browser-based drawing, editing, and keyfr
 ## Documents and persistence
 
 - Multi-document tabs with per-document undo/redo history (50 snapshots).
-- Local project gallery, thumbnails, autosave, dimension presets, and backward-compatible `localStorage` saves.
+- Local project gallery, thumbnails, autosave, dimension presets, and versioned, backward-compatible `localStorage` saves.
 - Clean static SVG export with an option to bake rounded path corners.
 - Canvas pan/zoom, rulers, draggable numeric guides, guide expressions, and guide locking.
 

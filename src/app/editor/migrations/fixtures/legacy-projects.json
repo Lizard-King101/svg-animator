@@ -1,0 +1,43 @@
+[
+  {
+    "id": "legacy-doc",
+    "name": "Legacy document",
+    "thumbnail": "<svg viewBox=\"0 0 64 64\"></svg>",
+    "createdAt": 100,
+    "updatedAt": 200,
+    "svgData": {
+      "id": "legacy-doc",
+      "name": "Legacy document",
+      "width": 64,
+      "height": 64,
+      "elements": [
+        {
+          "type": "path",
+          "id": "path-1",
+          "name": "Legacy path",
+          "visible": true,
+          "locked": false,
+          "closed": false,
+          "settings": {
+            "stroke_width": 2,
+            "fill_enabled": false,
+            "fill": null,
+            "stroke": "#112233",
+            "line_cap": null,
+            "line_join": null
+          },
+          "lines": [
+            {
+              "id": "line-1",
+              "type": "line",
+              "points": [
+                { "id": "point-a", "x": 1, "y": 2 },
+                { "id": "point-b", "x": 30, "y": 40 }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

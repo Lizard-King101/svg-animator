@@ -27,7 +27,7 @@ Viewport position, zoom, current time, tool choice, expanded rows, dialogs, and 
 
 This cleanup intentionally retains the current constructors and serialized schema. Model constructors still accept `EditorService`; new construction must go through `ElementFactory` so a later schema-focused pass can remove that dependency without another UI-wide rewrite.
 
-Changes to `SVGSave`, element saves, or animation versions require a document migration layer first. Existing IDs, shared `Point` identity, compound contours, clipping references, transforms, motion paths, and animation track targets are compatibility constraints.
+Persisted projects use versioned project-database and document envelopes. Historic raw project arrays migrate to version 1 on read without changing their `SVGSave` payloads. Unsupported future versions are read-only to older clients and are never overwritten. Changes to `SVGSave`, element saves, or animation versions must add a sequential migrator and fixtures first. Existing IDs, shared `Point` identity, compound contours, clipping references, transforms, motion paths, and animation track targets are compatibility constraints.
 
 ## Rendering boundary
 
