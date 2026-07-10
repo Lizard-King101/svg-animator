@@ -89,6 +89,17 @@ describe("SVGImporterService", () => {
         expect(preserved).not.toContain("evil.example");
     });
 
+    it("normalizes non-zero viewBox origins without changing artwork coordinates", () => {
+        const result = importer.import('<svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -20 50 40"><rect x="-10" y="-20" width="50" height="40"/></svg>');
+        const viewBoxGroup = result.document.elements[0] as GroupSave;
+
+        expect(result.document.width).toBe(50);
+        expect(result.document.height).toBe(40);
+        expect(viewBoxGroup.name).toBe("ViewBox");
+        expect(viewBoxGroup.transform?.translateX).toBe(10);
+        expect(viewBoxGroup.transform?.translateY).toBe(20);
+    });
+
     it("preserves a supported element as opaque when its geometry cannot be ingested", () => {
         const result = importer.import(malformedFixture.source, { name: malformedFixture.name });
 

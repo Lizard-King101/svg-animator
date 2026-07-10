@@ -38,8 +38,8 @@ export class SVGImporterService {
         }
 
         const context = new ImportContext(sanitized.root, options.name);
-        const elements = context.importChildren(sanitized.root, null);
         const dimensions = rootDimensions(sanitized.root);
+        const elements = context.normalizeViewBox(context.importChildren(sanitized.root, null), dimensions.minX, dimensions.minY);
         const document: SVGSave = {
             id: context.documentId,
             name: context.documentName,
@@ -84,6 +84,25 @@ class ImportContext {
             if(imported) elements.push(imported);
         });
         return elements;
+    }
+
+    normalizeViewBox(elements: ElementSave[], minX: number, minY: number): ElementSave[] {
+        if(Math.abs(minX) < 0.000001 && Math.abs(minY) < 0.000001) return elements;
+        const id = this.id(undefined, "viewbox");
+        this.sourceNodes.forEach((node) => {
+            if(node.parentId === null) node.parentId = id;
+        });
+        return [{
+            type: "group",
+            id,
+            name: "ViewBox",
+            visible: true,
+            locked: false,
+            opacity: 1,
+            transform: { translateX: -minX, translateY: -minY, scaleX: 1, scaleY: 1, rotation: 0, originX: 0, originY: 0 },
+            clipElementId: null,
+            elements,
+        }];
     }
 
     private importElement(element: Element, parentId: string | null): ElementSave | undefined {
@@ -368,12 +387,14 @@ function colorValue(input: string): string | null | undefined {
     return undefined;
 }
 
-function rootDimensions(root: Element): { width: number; height: number } {
+function rootDimensions(root: Element): { minX: number; minY: number; width: number; height: number } {
     const viewBox = root.getAttribute("viewBox")?.trim().split(/[\s,]+/).map(Number);
     if(viewBox?.length === 4 && viewBox.every(Number.isFinite) && viewBox[2] > 0 && viewBox[3] > 0) {
-        return { width: viewBox[2], height: viewBox[3] };
+        return { minX: viewBox[0], minY: viewBox[1], width: viewBox[2], height: viewBox[3] };
     }
     return {
+        minX: 0,
+        minY: 0,
         width: Math.max(1, firstNumber(root.getAttribute("width") ?? undefined, 300)),
         height: Math.max(1, firstNumber(root.getAttribute("height") ?? undefined, 150)),
     };

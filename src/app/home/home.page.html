@@ -5,13 +5,31 @@
       <fa-icon icon="pen-fancy"></fa-icon>
       <span>SVG Editor</span>
     </div>
-    <button class="btn-new" (click)="newProject()">
-      <fa-icon icon="plus"></fa-icon>
-      New Project
-    </button>
+    <div class="header-actions">
+      <input #svgFileInput class="file-input" type="file" accept=".svg,image/svg+xml" (change)="importSVG($event)" />
+      <button class="btn-import" (click)="svgFileInput.click()" [disabled]="importing">
+        <fa-icon [icon]="importing ? 'spinner' : 'file-import'" [animation]="importing ? 'spin' : undefined"></fa-icon>
+        {{ importing ? 'Importing…' : 'Import SVG' }}
+      </button>
+      <button class="btn-new" (click)="newProject()">
+        <fa-icon icon="plus"></fa-icon>
+        New Project
+      </button>
+    </div>
   </div>
 
   <div class="gallery-section">
+
+    <div class="import-notice success" *ngIf="importMessage">
+      <fa-icon icon="circle-check"></fa-icon>
+      <span>{{ importMessage }}</span>
+      <button (click)="importMessage = undefined" title="Dismiss"><fa-icon icon="times"></fa-icon></button>
+    </div>
+    <div class="import-notice error" *ngIf="importError">
+      <fa-icon icon="triangle-exclamation"></fa-icon>
+      <span>{{ importError }}</span>
+      <button (click)="importError = undefined" title="Dismiss"><fa-icon icon="times"></fa-icon></button>
+    </div>
 
     <div class="gallery-empty" *ngIf="projects.length === 0">
       <fa-icon icon="pen-fancy"></fa-icon>
