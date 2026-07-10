@@ -1,0 +1,4 @@
+{
+  "name": "unsafe-and-opaque.svg",
+  "source": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 100 100\" onload=\"alert(1)\"><script>alert('no')</script><style>@import url(https://evil.example/x.css); path { fill: red; }</style><foreignObject><iframe src=\"https://evil.example\"></iframe></foreignObject><defs><linearGradient id=\"gradient\"><stop offset=\"0\" stop-color=\"#fff\"/><stop offset=\"1\" stop-color=\"#000\"/></linearGradient></defs><image id=\"external-image\" href=\"https://evil.example/image.png\" width=\"20\" height=\"20\"/><path id=\"gradient-path\" d=\"M0 0 L50 0 L50 50 Z\" fill=\"url(#gradient)\" onclick=\"alert(2)\"/><path id=\"safe-path\" d=\"M60 60 L90 90\" fill=\"none\" stroke=\"#00ff00\"/></svg>"
+}

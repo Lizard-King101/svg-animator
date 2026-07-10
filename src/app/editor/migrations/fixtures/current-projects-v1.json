@@ -10,7 +10,7 @@
       "updatedAt": 400,
       "document": {
         "kind": "svg-animator/document",
-        "version": 1,
+        "version": 2,
         "data": {
           "id": "current-doc",
           "name": "Current document",
@@ -27,7 +27,8 @@
             "variables": []
           },
           "guides": [],
-          "guidesLocked": false
+          "guidesLocked": false,
+          "importedSourceNodes": []
         }
       }
     }

@@ -15,6 +15,14 @@ export interface CanvasGuide {
     value: number;
 }
 
+/** Sanitized, inert source retained for SVG nodes outside the native model. */
+export interface ImportedSourceNode {
+    id: string;
+    parentId: string | null;
+    tagName: string;
+    markup: string;
+}
+
 export interface SVGSave {
     id: string;
     name: string;
@@ -22,6 +30,7 @@ export interface SVGSave {
     animation?: AnimationSave;
     guides?: CanvasGuide[];
     guidesLocked?: boolean;
+    importedSourceNodes?: ImportedSourceNode[];
     width: number;
     height: number;
 }
@@ -34,6 +43,7 @@ export class SVG {
     animation: AnimationDocument;
     guides: CanvasGuide[] = [];
     guidesLocked = false;
+    importedSourceNodes: ImportedSourceNode[] = [];
     width: number;
     height: number;
     zoom: number;
@@ -74,6 +84,7 @@ export class SVG {
             ? save.guides.map(restoreGuide).filter((guide): guide is CanvasGuide => !!guide)
             : [];
         svg.guidesLocked = !!save.guidesLocked;
+        svg.importedSourceNodes = restoreImportedSourceNodes(save.importedSourceNodes);
         (svg as any)._past = [svg.save()];
         (svg as any)._future = [];
         return svg;
@@ -93,6 +104,7 @@ export class SVG {
                 value: round(guide.value),
             })),
             guidesLocked: this.guidesLocked,
+            importedSourceNodes: this.importedSourceNodes.map((node) => ({ ...node })),
             width: this.width,
             height: this.height,
         };
@@ -116,6 +128,7 @@ export class SVG {
             ? snap.guides.map(restoreGuide).filter((guide): guide is CanvasGuide => !!guide)
             : [];
         this.guidesLocked = !!snap.guidesLocked;
+        this.importedSourceNodes = restoreImportedSourceNodes(snap.importedSourceNodes);
     }
 
     // ── History ────────────────────────────────────────────────────
@@ -127,6 +140,7 @@ export class SVG {
             if (JSON.stringify(last.elements) === JSON.stringify(snap.elements)
                 && JSON.stringify(last.animation) === JSON.stringify(snap.animation)
                 && JSON.stringify(last.guides ?? []) === JSON.stringify(snap.guides ?? [])
+                && JSON.stringify(last.importedSourceNodes ?? []) === JSON.stringify(snap.importedSourceNodes ?? [])
                 && !!last.guidesLocked === !!snap.guidesLocked) return;
         }
         this._past.push(snap);
@@ -147,6 +161,17 @@ export class SVG {
         this._past.push(this.save());
         this.restore(snap);
     }
+}
+
+function restoreImportedSourceNodes(input: unknown): ImportedSourceNode[] {
+    if(!Array.isArray(input)) return [];
+    return input.filter((node): node is ImportedSourceNode => {
+        return !!node
+            && typeof node.id === "string"
+            && (typeof node.parentId === "string" || node.parentId === null)
+            && typeof node.tagName === "string"
+            && typeof node.markup === "string";
+    }).map((node) => ({ ...node }));
 }
 
 function restoreGuide(save: Partial<CanvasGuide>): CanvasGuide | undefined {

@@ -3,7 +3,7 @@ import { Path } from "./objects/elements/path.object";
 import { Shape } from "./objects/elements/shape.object";
 import { TextElement } from "./objects/elements/text.object";
 import { motionAdjustedMatrix } from "./objects/motion-path.object";
-import { AnyElement, SVG } from "./objects/svg.object";
+import { AnyElement, ImportedSourceNode, SVG } from "./objects/svg.object";
 import { matrixToSvg } from "./objects/transform.object";
 
 export function escapeXmlText(value: unknown): string {
@@ -50,7 +50,7 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
         `<svg xmlns="http://www.w3.org/2000/svg" width="${escapeXmlAttribute(svg.width)}" height="${escapeXmlAttribute(svg.height)}" viewBox="0 0 ${escapeXmlAttribute(svg.width)} ${escapeXmlAttribute(svg.height)}">`
     ];
 
-    const appendElements = (elements: AnyElement[], depth: number) => {
+    const appendElements = (elements: AnyElement[], depth: number, parentId: string | null | undefined) => {
         const indent = '  '.repeat(depth);
         for(const element of elements) {
             if(!element.visible) continue;
@@ -60,12 +60,12 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                 if(element.clipElement) {
                     lines.push(`${indent}<defs>`);
                     lines.push(`${indent}  <clipPath${attr('id', element.clipPathId)}>`);
-                    appendElements([element.clipElement] as AnyElement[], depth + 2);
+                    appendElements([element.clipElement] as AnyElement[], depth + 2, undefined);
                     lines.push(`${indent}  </clipPath>`);
                     lines.push(`${indent}</defs>`);
                 }
                 lines.push(`${indent}<g${attr('id', element.id)}${attr('transform', transform)}${attr('opacity', opacityAttr(element.opacity))}${attr('clip-path', element.clipElement ? `url(#${element.clipPathId})` : null)}>`);
-                appendElements(element.renderedElements as AnyElement[], depth + 1);
+                appendElements(element.renderedElements as AnyElement[], depth + 1, element.id);
                 lines.push(`${indent}</g>`);
             } else if(element instanceof Path) {
                 const s = element.settings;
@@ -144,10 +144,21 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                 }
             }
         }
+
+        if(parentId !== undefined) {
+            svg.importedSourceNodes
+                .filter((node) => node.parentId === parentId)
+                .forEach((node) => appendImportedSource(node, lines, depth));
+        }
     };
 
-    appendElements(svg.elements, 1);
+    appendElements(svg.elements, 1, null);
 
     lines.push('</svg>');
     return lines.join('\n');
+}
+
+function appendImportedSource(node: ImportedSourceNode, lines: string[], depth: number): void {
+    const indent = "  ".repeat(depth);
+    node.markup.split("\n").forEach((line) => lines.push(`${indent}${line}`));
 }

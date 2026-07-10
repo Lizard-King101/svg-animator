@@ -6,7 +6,7 @@ import { Path } from "src/app/editor/objects/elements/path.object";
 import { Shape } from "src/app/editor/objects/elements/shape.object";
 import { TextElement } from "src/app/editor/objects/elements/text.object";
 import { motionAdjustedMatrix } from "src/app/editor/objects/motion-path.object";
-import { AnyElement } from "src/app/editor/objects/svg.object";
+import { AnyElement, ImportedSourceNode } from "src/app/editor/objects/svg.object";
 import { matrixToSvg } from "src/app/editor/objects/transform.object";
 import { SVGEditorOverlayComponent } from "../svg-editor-overlay/svg-editor-overlay.component";
 
@@ -55,6 +55,10 @@ export class SVGDisplay implements AfterViewInit {
 
     clipElementList(group: Group): Array<Group['elements'][number]> {
         return group.clipElement ? [group.clipElement] : [];
+    }
+
+    sourceNodesFor(parentId: string | null): ImportedSourceNode[] {
+        return this.editor.selectedSVG?.importedSourceNodes.filter((node) => node.parentId === parentId) ?? [];
     }
 
     transformAttr(element: AnyElement): string | null {

@@ -2,10 +2,16 @@ import { SVGSave } from "../objects/svg.object";
 
 export const DOCUMENT_ENVELOPE_KIND = "svg-animator/document" as const;
 export const PROJECT_DATABASE_KIND = "svg-animator/project-database" as const;
-export const CURRENT_DOCUMENT_VERSION = 1 as const;
+export const CURRENT_DOCUMENT_VERSION = 2 as const;
 export const CURRENT_PROJECT_DATABASE_VERSION = 1 as const;
 
 export interface DocumentEnvelopeV1 {
+    kind: typeof DOCUMENT_ENVELOPE_KIND;
+    version: 1;
+    data: SVGSave;
+}
+
+export interface DocumentEnvelopeV2 {
     kind: typeof DOCUMENT_ENVELOPE_KIND;
     version: typeof CURRENT_DOCUMENT_VERSION;
     data: SVGSave;
@@ -17,7 +23,7 @@ export interface StoredProjectV1 {
     thumbnail: string;
     createdAt: number;
     updatedAt: number;
-    document: DocumentEnvelopeV1;
+    document: DocumentEnvelopeV2;
 }
 
 export interface ProjectDatabaseV1 {
@@ -50,7 +56,7 @@ export interface MigrationFailure {
     version?: number;
 }
 
-export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV1 {
+export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV2 {
     return {
         kind: DOCUMENT_ENVELOPE_KIND,
         version: CURRENT_DOCUMENT_VERSION,
@@ -59,23 +65,32 @@ export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV1 {
 }
 
 /** Migrates one persisted document without constructing editor model objects. */
-export function migrateDocument(input: unknown): MigrationResult<DocumentEnvelopeV1> {
+export function migrateDocument(input: unknown): MigrationResult<DocumentEnvelopeV2> {
     if(isRecord(input) && input["kind"] === DOCUMENT_ENVELOPE_KIND) {
         const version = numericVersion(input["version"]);
-        if(version !== CURRENT_DOCUMENT_VERSION) {
-            return unsupported("document", version);
+        if(version === 1) {
+            if(!isSVGSave(input["data"])) return invalid("Document v1 contains an invalid SVG payload.");
+            return success(createDocumentEnvelope(withImportedSourceNodes(input["data"])), true, ["Migrated document version 1 to version 2."]);
         }
+        if(version !== CURRENT_DOCUMENT_VERSION) return unsupported("document", version);
         if(!isSVGSave(input["data"])) {
-            return invalid("Document v1 contains an invalid SVG payload.");
+            return invalid("Document v2 contains an invalid SVG payload.");
         }
-        return success(input as unknown as DocumentEnvelopeV1, false);
+        return success(input as unknown as DocumentEnvelopeV2, false);
     }
 
     if(isSVGSave(input)) {
-        return success(createDocumentEnvelope(input), true, ["Migrated an unversioned document to version 1."]);
+        return success(createDocumentEnvelope(withImportedSourceNodes(input)), true, ["Migrated an unversioned document to version 2."]);
     }
 
     return invalid("Value is neither a legacy SVG document nor a supported document envelope.");
+}
+
+function withImportedSourceNodes(document: SVGSave): SVGSave {
+    return {
+        ...document,
+        importedSourceNodes: Array.isArray(document.importedSourceNodes) ? document.importedSourceNodes : [],
+    };
 }
 
 /**

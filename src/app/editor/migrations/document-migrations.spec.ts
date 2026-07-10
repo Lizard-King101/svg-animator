@@ -24,7 +24,7 @@ describe("document migrations", () => {
         expect(result.migrated).toBeTrue();
         expect(result.value.kind).toBe(DOCUMENT_ENVELOPE_KIND);
         expect(result.value.version).toBe(CURRENT_DOCUMENT_VERSION);
-        expect(result.value.data).toEqual(legacyDocument as any);
+        expect(result.value.data).toEqual({ ...legacyDocument, importedSourceNodes: [] } as any);
     });
 
     it("migrates the legacy project array into document and database envelopes", () => {
@@ -35,8 +35,8 @@ describe("document migrations", () => {
         expect(result.migrated).toBeTrue();
         expect(result.value.kind).toBe(PROJECT_DATABASE_KIND);
         expect(result.value.version).toBe(CURRENT_PROJECT_DATABASE_VERSION);
-        expect(result.value.projects[0].document.data).toEqual(legacyProjects[0].svgData as any);
-        expect(runtimeProjects(result.value)[0].svgData).toEqual(legacyProjects[0].svgData as any);
+        expect(result.value.projects[0].document.data).toEqual({ ...legacyProjects[0].svgData, importedSourceNodes: [] } as any);
+        expect(runtimeProjects(result.value)[0].svgData).toEqual({ ...legacyProjects[0].svgData, importedSourceNodes: [] } as any);
     });
 
     it("treats the current fixture as idempotent", () => {
@@ -49,6 +49,20 @@ describe("document migrations", () => {
         expect(storeRuntimeProjects(runtimeProjects(result.value))).toEqual(result.value);
     });
 
+    it("sequentially migrates a version-1 document envelope to version 2", () => {
+        const result = migrateDocument({
+            kind: DOCUMENT_ENVELOPE_KIND,
+            version: 1,
+            data: legacyProjects[0].svgData,
+        });
+
+        expect(result.status).toBe("ok");
+        if(result.status !== "ok") return;
+        expect(result.migrated).toBeTrue();
+        expect(result.value.version).toBe(2);
+        expect(result.value.data.importedSourceNodes).toEqual([]);
+    });
+
     it("isolates invalid records while retaining valid projects", () => {
         const result = migrateProjectDatabase(invalidProjects);
 
@@ -56,8 +70,7 @@ describe("document migrations", () => {
         if(result.status !== "ok") return;
         expect(result.migrated).toBeTrue();
         expect(result.value.projects.map((project) => project.id)).toEqual(["survivor"]);
-        expect(result.warnings.length).toBe(1);
-        expect(result.warnings[0]).toContain("Discarded project at index 0");
+        expect(result.warnings.some((warning) => warning.includes("Discarded project at index 0"))).toBeTrue();
     });
 
     it("rejects future storage versions instead of attempting a downgrade", () => {
@@ -88,7 +101,7 @@ describe("ProjectService migration boundary", () => {
         localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(legacyProjects));
         const service = new ProjectService();
 
-        expect(service.list()[0].svgData).toEqual(legacyProjects[0].svgData as any);
+        expect(service.list()[0].svgData).toEqual({ ...legacyProjects[0].svgData, importedSourceNodes: [] } as any);
         const persisted = JSON.parse(localStorage.getItem(PROJECT_STORAGE_KEY)!);
         expect(persisted.kind).toBe(PROJECT_DATABASE_KIND);
         expect(persisted.version).toBe(CURRENT_PROJECT_DATABASE_VERSION);

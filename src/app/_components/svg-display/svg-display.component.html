@@ -1,13 +1,13 @@
-<ng-template #renderElements let-elements>
+<ng-template #renderElements let-elements let-parentId="parentId" let-includeSource="includeSource">
 <ng-container *ngFor="let element of elements">
     <ng-container *ngIf="element.visible && asGroup(element) as group">
         <svg:defs *ngIf="group.clipElement">
             <svg:clipPath [id]="group.clipPathId">
-                <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: clipElementList(group) }"></ng-container>
+                <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: clipElementList(group), includeSource: false }"></ng-container>
             </svg:clipPath>
         </svg:defs>
         <svg:g [id]="group.id" [attr.clip-path]="clipUrl(group)" [attr.transform]="transformAttr(group)" [attr.opacity]="opacityAttr(group)">
-            <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: group.renderedElements }"></ng-container>
+            <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: group.renderedElements, parentId: group.id, includeSource: true }"></ng-container>
         </svg:g>
     </ng-container>
     <ng-container *ngIf="element.visible && asPath(element) as path">
@@ -77,9 +77,15 @@
         </svg:text>
     </ng-container>
 </ng-container>
+<ng-container *ngIf="includeSource">
+    <svg:g *ngFor="let source of sourceNodesFor(parentId ?? null)"
+           class="imported-source-node"
+           [attr.data-imported-source-id]="source.id"
+           [innerHTML]="source.markup"></svg:g>
+</ng-container>
 </ng-template>
 
-<ng-container *ngTemplateOutlet="renderElements; context: { $implicit: editor.selectedSVG?.elements }"></ng-container>
+<ng-container *ngTemplateOutlet="renderElements; context: { $implicit: editor.selectedSVG?.elements, parentId: null, includeSource: true }"></ng-container>
 
 <ng-container *ngFor="let element of editor.selectedSVG?.tempElements">
     <ng-container *ngIf="editor.elementIsPath(element)">
