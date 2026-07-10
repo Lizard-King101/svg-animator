@@ -1,6 +1,6 @@
 # ![SVG Animator](banner.svg)
 
-A browser-based vector drawing tool with an Illustrator-style workflow. Draw paths, shapes, and layers — then (eventually) animate them on a timeline.
+A browser-based motion SVG studio for drawing, editing, and keyframe animation.
 
 
 **Live demo → [svg-animator.multihosts.net](https://svg-animator.multihosts.net)**
@@ -13,28 +13,21 @@ A browser-based vector drawing tool with an Illustrator-style workflow. Draw pat
 - Pen tool — straight segments, bezier curves, open/closed paths
 - Shape tools — rectangle and ellipse with Shift/Alt modifiers
 - Select tool — move elements, drag anchors and bezier handles, convert straight ↔ curve, insert/delete points
-- Layers panel — visibility, lock, rename, duplicate, drag-reorder, delete
+- Layers panel — nested groups, clipping, visibility, lock, rename, duplicate, drag-reorder, and delete
 - Properties panel — per-element attributes (stroke, fill, width/height, caps/joins)
 - Project gallery — auto-saves to `localStorage`, thumbnail previews, project name + dimensions picker
-- Export — clean `.svg` file download
+- Timeline — property keyframes, easing, playback, selection, clipboard, and motion paths
+- Export — clean static `.svg` file download
 - Undo / redo — per-document history (50 steps)
 - Hosted on Cloudflare Pages, routed with SPA fallback
 
-See [`FEATURES.md`](FEATURES.md) for full technical detail, object structures, and what's next.
+See [`FEATURES.md`](FEATURES.md) for shipped behavior, [`ARCHITECTURE.md`](ARCHITECTURE.md) for ownership rules, and [`ROADMAP.md`](ROADMAP.md) for what comes next.
 
 ---
 
-## Roadmap toward animation
+## Product roadmap
 
-The drawing layer is being built with animation in mind. Transform support is now the foundation for keyframing and runtime playback.
-
-The animation MVP plan is tracked in [`ANIMATION_MVP.md`](ANIMATION_MVP.md). Current direction:
-
-1. **Animation model** - versioned tracks, keyframes, property targeting, interpolation
-2. **Animate mode** - timeline, playhead, auto-key, easing, preview playback
-3. **Runtime export** - lightweight JS runtime plus embedded or external animation JSON
-4. **Interaction hooks** - markers, trigger events, parent-page API
-5. **Advanced motion** - path points, proxy controls, rigs, and procedural modifiers after the core loop is stable
+Work is ordered around three milestones: SVG import/publishing, deeper native SVG drawing/editing, then expressions/physics/rigging. See [`ROADMAP.md`](ROADMAP.md) and the standards-oriented [`SVG_COMPATIBILITY.md`](SVG_COMPATIBILITY.md).
 
 ---
 

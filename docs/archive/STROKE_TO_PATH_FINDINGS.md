@@ -1,4 +1,6 @@
-# Stroke To Path Plan
+# Archived Stroke-To-Path Findings
+
+Status: implemented. These algorithm notes and regression constraints are retained for future maintenance.
 
 ## Findings
 
