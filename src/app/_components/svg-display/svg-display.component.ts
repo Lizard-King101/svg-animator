@@ -9,11 +9,12 @@ import { motionAdjustedMatrix } from "src/app/editor/objects/motion-path.object"
 import { AnyElement, ImportedSourceNode } from "src/app/editor/objects/svg.object";
 import { matrixToSvg } from "src/app/editor/objects/transform.object";
 import { SVGEditorOverlayComponent } from "../svg-editor-overlay/svg-editor-overlay.component";
+import { ImportedSVGSourceDirective } from "./imported-svg-source.directive";
 
 @Component({
     standalone: true,
     selector: '[display]',
-    imports: [NgFor, NgIf, NgTemplateOutlet, SVGEditorOverlayComponent],
+    imports: [NgFor, NgIf, NgTemplateOutlet, SVGEditorOverlayComponent, ImportedSVGSourceDirective],
     templateUrl: 'svg-display.component.html',
     styles: ':host { user-select: none; }'
 })

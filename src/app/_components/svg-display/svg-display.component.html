@@ -81,7 +81,7 @@
     <svg:g *ngFor="let source of sourceNodesFor(parentId ?? null)"
            class="imported-source-node"
            [attr.data-imported-source-id]="source.id"
-           [innerHTML]="source.markup"></svg:g>
+           [importedSvgSource]="source.markup"></svg:g>
 </ng-container>
 </ng-template>
 
