@@ -7,6 +7,7 @@ import { ElementSave, ImportedSourceNode, SVGSave } from "../objects/svg.object"
 import { TransformSave, identityMatrix, Matrix, multiplyMatrix, rotationMatrix, scaleMatrix, translationMatrix } from "../objects/transform.object";
 import { parseSVGPathData, SVGPathParseError } from "./svg-path-parser";
 import { sanitizeSVGText, SVGParseError } from "./svg-sanitizer";
+import { GradientPaintSave, GradientSpreadMethod, GradientUnits, PaintSave } from "../objects/paint.object";
 
 const UNSUPPORTED_NATIVE_ATTRIBUTES = [
     "clip-path", "mask", "filter", "marker", "marker-start", "marker-mid", "marker-end",
@@ -15,6 +16,7 @@ const UNSUPPORTED_NATIVE_ATTRIBUTES = [
 
 const EDITABLE_DEFINITION_TAGS = new Set([
     "clippath", "g", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "use",
+    "lineargradient", "radialgradient", "stop",
 ]);
 
 export interface SVGImportOptions { name?: string; }
@@ -295,7 +297,7 @@ class ImportContext {
         const contours = parseSVGPathData(data, (prefix) => this.id(undefined, prefix));
         if(contours.length === 0) throw new SVGImportError("Path has no drawable segments.");
         const id = this.id(element.getAttribute("id"), "path");
-        const paint = pathPaint(element);
+        const paint = pathPaint(element, false, (value) => this.paint(value));
         return {
             type: "path",
             ...commonState(element, id, "Path", this.transform(element)),
@@ -314,7 +316,7 @@ class ImportContext {
         const width = requiredNumberAttribute(element, "width");
         const height = requiredNumberAttribute(element, "height");
         const id = this.id(element.getAttribute("id"), "rectangle");
-        const paint = shapePaint(element);
+        const paint = shapePaint(element, (value) => this.paint(value));
         return {
             type: "shape",
             ...commonState(element, id, "Rectangle", this.transform(element)),
@@ -344,7 +346,7 @@ class ImportContext {
             settings: {
                 width: rx * 2,
                 height: ry * 2,
-                ...shapePaint(element),
+                ...shapePaint(element, (value) => this.paint(value)),
                 corner_radius: 0,
             },
         };
@@ -375,7 +377,7 @@ class ImportContext {
             type: "line" as const,
             points: [points[index], end],
         }));
-        const paint = pathPaint(element, fallbackName === "Line" || fallbackName === "Polyline");
+        const paint = pathPaint(element, fallbackName === "Line" || fallbackName === "Polyline", (value) => this.paint(value));
         const contour = { id: this.id(undefined, "contour"), closed, lines };
         return {
             type: "path",
@@ -428,10 +430,79 @@ class ImportContext {
                 throw new SVGImportError(`Attribute ${attribute} is not native yet.`);
             }
         }
-        ["fill", "stroke"].forEach((attribute) => {
-            const value = styleValue(element, attribute);
-            if(value?.includes("url(")) throw new SVGImportError(`${attribute} paint servers are not native yet.`);
-        });
+    }
+
+    private paint(source: string): PaintSave | undefined {
+        const referenceId = localUrlReference(source);
+        if(referenceId) return this.importGradient(referenceId);
+        return colorValue(source);
+    }
+
+    private importGradient(referenceId: string): GradientPaintSave {
+        const definition = this.definitions.get(referenceId);
+        const tag = definition?.localName.toLowerCase();
+        if(!definition || (tag !== "lineargradient" && tag !== "radialgradient")) {
+            throw new SVGImportError(`Paint server #${referenceId} is not an editable gradient.`);
+        }
+        if(this.resolvingDefinitions.has(referenceId)) {
+            throw new SVGImportError(`Gradient #${referenceId} contains a reference cycle.`);
+        }
+
+        this.resolvingDefinitions.add(referenceId);
+        try {
+            const inheritedId = localFragmentReference(definition.getAttribute("href") ?? definition.getAttribute("xlink:href"));
+            const inherited = inheritedId ? this.importGradient(inheritedId) : undefined;
+            const type = tag === "lineargradient" ? "linear-gradient" as const : "radial-gradient" as const;
+            const units = gradientUnits(definition.getAttribute("gradientUnits"), inherited?.units);
+            const spreadMethod = gradientSpreadMethod(definition.getAttribute("spreadMethod"), inherited?.spreadMethod);
+            let coordinates: GradientPaintSave["coordinates"];
+            if(type === "linear-gradient") {
+                coordinates = {
+                    x1: gradientCoordinate(definition, "x1", inherited?.coordinates.x1 ?? 0),
+                    y1: gradientCoordinate(definition, "y1", inherited?.coordinates.y1 ?? 0),
+                    x2: gradientCoordinate(definition, "x2", inherited?.coordinates.x2 ?? 1),
+                    y2: gradientCoordinate(definition, "y2", inherited?.coordinates.y2 ?? 0),
+                };
+            } else {
+                const cx = gradientCoordinate(definition, "cx", inherited?.coordinates.cx ?? 0.5);
+                const cy = gradientCoordinate(definition, "cy", inherited?.coordinates.cy ?? 0.5);
+                coordinates = {
+                    cx,
+                    cy,
+                    r: gradientCoordinate(definition, "r", inherited?.coordinates.r ?? 0.5),
+                    fx: gradientCoordinate(definition, "fx", inherited?.coordinates.fx ?? cx),
+                    fy: gradientCoordinate(definition, "fy", inherited?.coordinates.fy ?? cy),
+                };
+            }
+            const ownStops = Array.from(definition.children).filter((child) => child.localName.toLowerCase() === "stop");
+            const stops = ownStops.length > 0
+                ? ownStops.map((stop) => this.importGradientStop(stop))
+                : inherited?.stops.map((stop) => ({ ...stop, id: this.id(undefined, "stop") })) ?? [];
+            if(stops.length === 0) throw new SVGImportError(`Gradient #${referenceId} has no stops.`);
+
+            return {
+                type,
+                id: this.id(definition.getAttribute("id"), "gradient"),
+                units,
+                spreadMethod,
+                transform: gradientTransform(definition.getAttribute("gradientTransform"), inherited?.transform),
+                coordinates,
+                stops,
+            };
+        } finally {
+            this.resolvingDefinitions.delete(referenceId);
+        }
+    }
+
+    private importGradientStop(element: Element) {
+        const color = colorValue(styleValue(element, "stop-color") ?? "#000000");
+        if(typeof color !== "string") throw new SVGImportError("Gradient stop color is unsupported.");
+        return {
+            id: this.id(element.getAttribute("id"), "stop"),
+            offset: clamp01(gradientOffset(element.getAttribute("offset"))),
+            color,
+            opacity: clamp01(firstNumber(styleValue(element, "stop-opacity"), 1)),
+        };
     }
 
     private preserve(element: Element, parentId: string | null, warning: string): void {
@@ -508,11 +579,11 @@ function commonState(element: Element, id: string, fallbackName: string, transfo
     };
 }
 
-function pathPaint(element: Element, openByDefault = false): Pick<PathSave, "settings" | "fillRule"> {
+function pathPaint(element: Element, openByDefault = false, resolvePaint: (value: string) => PaintSave | undefined = colorValue): Pick<PathSave, "settings" | "fillRule"> {
     const fillSource = styleValue(element, "fill") ?? (openByDefault ? "none" : "#000000");
     const strokeSource = styleValue(element, "stroke") ?? "none";
-    const fill = colorValue(fillSource);
-    const stroke = colorValue(strokeSource);
+    const fill = resolvePaint(fillSource);
+    const stroke = resolvePaint(strokeSource);
     if(fill === undefined || stroke === undefined) throw new SVGImportError("Paint value cannot be represented natively.");
     return {
         fillRule: styleValue(element, "fill-rule") === "nonzero" ? "nonzero" : "evenodd",
@@ -527,9 +598,9 @@ function pathPaint(element: Element, openByDefault = false): Pick<PathSave, "set
     };
 }
 
-function shapePaint(element: Element): Pick<ShapeSave["settings"], "stroke_width" | "stroke" | "fill"> {
-    const fill = colorValue(styleValue(element, "fill") ?? "#000000");
-    const stroke = colorValue(styleValue(element, "stroke") ?? "none");
+function shapePaint(element: Element, resolvePaint: (value: string) => PaintSave | undefined = colorValue): Pick<ShapeSave["settings"], "stroke_width" | "stroke" | "fill"> {
+    const fill = resolvePaint(styleValue(element, "fill") ?? "#000000");
+    const stroke = resolvePaint(styleValue(element, "stroke") ?? "none");
     if(fill === undefined || stroke === undefined) throw new SVGImportError("Paint value cannot be represented natively.");
     return {
         stroke_width: Math.max(0, firstNumber(styleValue(element, "stroke-width"), 1)),
@@ -542,6 +613,47 @@ function styleValue(element: Element, property: string): string | undefined {
     const inline = element.getAttribute("style")?.split(";").map((entry) => entry.split(":"))
         .find(([name]) => name?.trim().toLowerCase() === property)?.slice(1).join(":").trim();
     return inline || element.getAttribute(property)?.trim() || undefined;
+}
+
+function gradientUnits(value: string | null, inherited?: GradientUnits): GradientUnits {
+    const normalized = value?.trim();
+    if(!normalized) return inherited ?? "objectBoundingBox";
+    if(normalized === "objectBoundingBox" || normalized === "userSpaceOnUse") return normalized;
+    throw new SVGImportError(`Unsupported gradientUnits value ${normalized}.`);
+}
+
+function gradientSpreadMethod(value: string | null, inherited?: GradientSpreadMethod): GradientSpreadMethod {
+    const normalized = value?.trim();
+    if(!normalized) return inherited ?? "pad";
+    if(normalized === "pad" || normalized === "reflect" || normalized === "repeat") return normalized;
+    throw new SVGImportError(`Unsupported gradient spread method ${normalized}.`);
+}
+
+function gradientCoordinate(element: Element, name: string, fallback: number): number {
+    const source = element.getAttribute(name)?.trim();
+    if(!source) return fallback;
+    if(source.endsWith("%")) {
+        const value = Number(source.slice(0, -1));
+        if(Number.isFinite(value)) return value / 100;
+    }
+    const value = Number(source);
+    if(Number.isFinite(value)) return value;
+    throw new SVGImportError(`Gradient coordinate ${name} is invalid.`);
+}
+
+function gradientOffset(value: string | null): number {
+    const source = value?.trim() ?? "0";
+    if(source.endsWith("%")) return Number(source.slice(0, -1)) / 100;
+    const numeric = Number(source);
+    if(!Number.isFinite(numeric)) throw new SVGImportError("Gradient stop offset is invalid.");
+    return numeric;
+}
+
+function gradientTransform(value: string | null, inherited?: GradientPaintSave["transform"]): GradientPaintSave["transform"] {
+    if(!value?.trim()) return inherited ? [...inherited] : undefined;
+    const matrix = parseTransform(value.trim());
+    if(!matrix) throw new SVGImportError("Gradient transform contains unsupported syntax.");
+    return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
 }
 
 function nullableStyle(element: Element, property: string): string | null {

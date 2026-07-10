@@ -7,6 +7,7 @@ SVG Animator is a motion SVG studio: a browser-based drawing, editing, and keyfr
 - Multi-document tabs with per-document undo/redo history (50 snapshots).
 - Local project gallery, thumbnails, autosave, dimension presets, and versioned, backward-compatible `localStorage` saves.
 - Safe SVG file import from the project gallery with editable/preserved/removed-content reporting.
+- Native editable linear/radial gradient import with inherited definitions, transforms, spread modes, translucent stops, and animated gradient fields.
 - `DOMParser` ingestion for groups, paths, rectangles, circles/ellipses, lines, polylines, polygons, and basic text.
 - Full path-command normalization for absolute/relative line, cubic, shorthand, quadratic, elliptical-arc, and close commands.
 - Unsupported safe SVG nodes survive as sanitized source through save, reload, editor rendering, and static export.
@@ -41,7 +42,7 @@ SVG Animator is a motion SVG studio: a browser-based drawing, editing, and keyfr
 ## Current limits
 
 - Animated/runtime publishing is not shipped yet.
-- Complex imported transforms with skew, paint servers, effects, rich text, and other non-native features are preserved but are not directly editable.
+- Complex imported transforms with skew, patterns, effects, rich text, and other non-native features are preserved but are not directly editable.
 - Multi-layer canvas marquee and multi-object transforms are not yet available.
 - Boolean editing is currently used by stroke conversion rather than exposed as a complete user-facing boolean toolset.
 - Gradients, patterns, images, masks, filters, symbols/use, rich text, embedded fonts, and accessibility metadata remain planned.

@@ -3,6 +3,7 @@ import { createAnimationColorValue, evaluateTrack } from "./animation.object";
 import { Color } from "./color.object";
 import { AnyElement } from "./svg.object";
 import { createDefaultGradient, gradientAnimationProperties, isGradientPaint, restorePaint, serializePaint } from "./paint.object";
+import { TimelineEditingService } from "../../_services/timeline-editing.service";
 
 describe("native gradient paint", () => {
     it("round-trips gradient geometry and stops without changing old solid paint saves", () => {
@@ -23,8 +24,16 @@ describe("native gradient paint", () => {
         const colorProperty = `settings.fill.gradient.stops.${stop.id}.color`;
         const offsetProperty = `settings.fill.gradient.stops.${stop.id}.offset`;
         const properties = gradientAnimationProperties(element.settings as Record<string, unknown>);
+        const rows = new TimelineEditingService().projectRows(
+            [element],
+            new Set([element.id]),
+            [],
+            () => true,
+            { property: "path.shape", label: "Path Shape", valueType: "string", group: "path", mvp: true },
+        );
 
         expect(properties.map((property) => property.property)).toContain(colorProperty);
+        expect(rows.filter((row) => row.type === "property").map((row) => row.property.property)).toContain(colorProperty);
         expect(properties.map((property) => property.property)).toContain("settings.fill.gradient.x2");
         expect(writeAnimationProperty(element, offsetProperty, 0.35)).toBeTrue();
         expect(readAnimationProperty(element, offsetProperty)).toBe(0.35);

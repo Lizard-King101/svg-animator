@@ -33,7 +33,7 @@ import { pinTransformOrigin, resolvedOrigin } from "./objects/element-bounds";
 import { canConvertStrokeToPath, StrokeToPathProfile } from "./objects/stroke-outline.object";
 import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, createAnimationColorValue } from "./objects/animation.object";
 import { pathPointAnimationProperty, readAnimationProperty } from "./objects/animation-targets";
-import { GradientPaint, gradientAnimationProperties, isGradientPaint } from "./objects/paint.object";
+import { createDefaultGradient, GradientCoordinateKey, GradientKind, GradientPaint, GradientStop, gradientAnimationProperties, isGradientPaint } from "./objects/paint.object";
 
 @Component({
     standalone: true,
@@ -969,6 +969,97 @@ export class EditorPage implements AfterViewInit {
 
     asGradientPaint(value: unknown): GradientPaint | null {
         return isGradientPaint(value) ? value : null;
+    }
+
+    gradientCoordinateValue(gradient: GradientPaint, coordinate: string): number | undefined {
+        return gradient.coordinates[coordinate as GradientCoordinateKey];
+    }
+
+    enableGradientPaint(element: AnyElement | undefined, key: string, kind: GradientKind = "linear-gradient") {
+        if(!element || (key !== "fill" && key !== "stroke") || this.animation.mode === "animate") return;
+        const gradient = createDefaultGradient(this.editor.ID, kind);
+        const current = this.settingsOf(element)[key];
+        if(current instanceof Color) {
+            gradient.stops[0].color = new Color(current.hex);
+            gradient.stops[1].color = new Color(current.hex);
+        }
+        this.settingsOf(element)[key] = gradient;
+        if(element instanceof Path && key === "fill") element.settings.fill_enabled = true;
+        this.scheduleAttributeSnapshot();
+    }
+
+    useSolidPaint(element: AnyElement | undefined, key: string, gradient: GradientPaint) {
+        if(!element || (key !== "fill" && key !== "stroke") || this.animation.mode === "animate") return;
+        this.settingsOf(element)[key] = gradient.stops[0] ? new Color(gradient.stops[0].color.hex) : null;
+        this.removeGradientTracks(element, `settings.${key}.gradient.`);
+        this.scheduleAttributeSnapshot();
+    }
+
+    setGradientKind(element: AnyElement | undefined, key: string, gradient: GradientPaint, kind: GradientKind) {
+        if(!element || this.animation.mode === "animate" || gradient.type === kind) return;
+        const replacement = createDefaultGradient(gradient.id, kind);
+        replacement.stops = gradient.stops;
+        replacement.units = gradient.units;
+        replacement.spreadMethod = gradient.spreadMethod;
+        replacement.transform = gradient.transform;
+        this.settingsOf(element)[key] = replacement;
+        this.removeGradientTracks(element, `settings.${key}.gradient.`);
+        this.scheduleAttributeSnapshot();
+    }
+
+    setGradientMeta(gradient: GradientPaint, field: "units" | "spreadMethod", value: GradientPaint["units"] | GradientPaint["spreadMethod"]) {
+        if(this.animation.mode === "animate") return;
+        if(field === "units" && (value === "objectBoundingBox" || value === "userSpaceOnUse")) gradient.units = value;
+        if(field === "spreadMethod" && (value === "pad" || value === "reflect" || value === "repeat")) gradient.spreadMethod = value;
+        this.scheduleAttributeSnapshot();
+    }
+
+    setGradientCoordinate(element: AnyElement | undefined, key: string, gradient: GradientPaint, coordinate: GradientCoordinateKey, value: number | string | null) {
+        if(!element) return;
+        const numeric = typeof value === "number" ? value : Number(value);
+        if(!Number.isFinite(numeric)) return;
+        const property = `settings.${key}.gradient.${coordinate}`;
+        if(this.animation.mode === "animate") this.animation.setAnimatedPropertyValue(element, property, "number", numeric);
+        else gradient.coordinates[coordinate] = numeric;
+        this.scheduleAttributeSnapshot();
+    }
+
+    setGradientStopValue(element: AnyElement | undefined, key: string, stop: GradientStop, field: "offset" | "opacity" | "color", value: unknown) {
+        if(!element) return;
+        const property = `settings.${key}.gradient.stops.${stop.id}.${field}`;
+        if(this.animation.mode === "animate") {
+            this.animation.setAnimatedPropertyValue(element, property, field === "color" ? "color" : "number", field === "color" ? this.normalizeAnimationValue(value, {
+                property, label: "Gradient Stop", valueType: "color", group: "style", mvp: true,
+            }) : value);
+            this.scheduleAttributeSnapshot();
+            return;
+        }
+        if(field === "color" && value instanceof Color) stop.color = value;
+        if(field !== "color") {
+            const numeric = typeof value === "number" ? value : Number(value);
+            if(Number.isFinite(numeric)) stop[field] = Math.max(0, Math.min(1, numeric));
+        }
+        this.scheduleAttributeSnapshot();
+    }
+
+    addGradientStop(gradient: GradientPaint) {
+        if(this.animation.mode === "animate") return;
+        const last = gradient.stops[gradient.stops.length - 1];
+        gradient.stops.push({ id: this.editor.ID, offset: 0.5, color: new Color(last?.color.hex ?? "#ffffff"), opacity: last?.opacity ?? 1 });
+        gradient.stops.sort((a, b) => a.offset - b.offset);
+        this.scheduleAttributeSnapshot();
+    }
+
+    removeGradientStop(element: AnyElement | undefined, key: string, gradient: GradientPaint, stop: GradientStop) {
+        if(!element || this.animation.mode === "animate" || gradient.stops.length <= 2) return;
+        gradient.stops = gradient.stops.filter((candidate) => candidate !== stop);
+        this.removeGradientTracks(element, `settings.${key}.gradient.stops.${stop.id}.`);
+        this.scheduleAttributeSnapshot();
+    }
+
+    private removeGradientTracks(element: AnyElement, prefix: string) {
+        const animation = this.editor.selectedSVG?.animation;
+        if(animation) animation.tracks = animation.tracks.filter((track) => track.targetId !== element.id || !track.property.startsWith(prefix));
     }
 
     handleAttributeChange(element: AnyElement | undefined, attr: ElementAttribute, value: unknown) {

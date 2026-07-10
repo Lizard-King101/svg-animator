@@ -20,7 +20,7 @@ References: [SVG paths](https://www.w3.org/TR/SVG/paths.html).
 2. `line`, `polyline`, `polygon`, nested `svg`/`viewBox`, `defs`, `symbol`, and reusable `use` semantics. Local `use` references to editable geometry already normalize to independent editable groups.
 3. Full boolean operations and primitive/path conversion.
 4. Alpha, fill/stroke opacity, dashes, markers, vector effects, and paint order.
-5. Editable linear/radial gradients and patterns.
+5. ✅ Editable linear/radial gradients, including timeline animation for geometry and stops. Reusable patterns remain planned.
 6. Images, embedded fonts, richer `tspan`, text-on-path, masks, filters, blend modes, metadata, and accessibility properties.
 7. Maintain native-edit, opaque-preservation, round-trip, and visual-rendering fixture corpora.
 

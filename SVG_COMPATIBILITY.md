@@ -17,13 +17,14 @@ Legend: **Native** = editable model (including import normalization); **Render/e
 | Clipping paths | Yes | Yes | Yes | Local `clipPath` geometry, compound unions, and nested intersections normalize to editable clipping groups |
 | Masks | No | Source | Yes | Distinct from clipping |
 | Solid fill/stroke | Yes | Yes | Yes | Hex, RGB, and browser-recognized solid colors |
-| Gradients/patterns | No | Source | Yes | Paint-server editing remains planned |
+| Linear/radial gradients | Yes | Yes | Yes | References normalize to editable per-element paints; inheritance, units, transforms, spread, stops, color, and opacity are retained |
+| Patterns | No | Source | Yes | Reusable pattern editing remains planned |
 | Dashes/markers/vector effects | No | Source | Yes | Style-depth milestone |
 | Images | No | Source | Yes | External references are stripped; safe embedded raster data is retained |
 | Filters/blend modes | No | Source | Yes | Sanitized before rendering |
 | Metadata/accessibility | Partial | Partial | Partial | Title can name a document; richer metadata remains planned |
 | SMIL/CSS/script animation | No | No | Rejected | Active elements and stylesheets are removed before persistence |
-| Editor animation JSON/runtime | Native model | Static SVG only | N/A | Publish formats are roadmap milestone 1 |
+| Editor animation JSON/runtime | Native model | Static SVG only | N/A | Gradient coordinates, stop offsets/colors/opacity, and solid paints use the same timeline pipeline |
 
 ## Import safety policy
 

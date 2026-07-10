@@ -3,7 +3,9 @@ import unsafeFixture from "./fixtures/unsafe-and-opaque.json";
 import malformedFixture from "./fixtures/malformed.json";
 import { GroupSave } from "../objects/elements/group.object";
 import { PathSave } from "../objects/elements/path.object";
+import { ShapeSave } from "../objects/elements/shape.object";
 import { ElementSave } from "../objects/svg.object";
+import { GradientPaintSave } from "../objects/paint.object";
 import { SVGImporterService, SVGImportError } from "./svg-importer.service";
 import { parseSVGPathData, SVGPathParseError } from "./svg-path-parser";
 import { sanitizeSVGText, SVGParseError } from "./svg-sanitizer";
@@ -81,13 +83,12 @@ describe("SVGImporterService", () => {
     it("preserves safe unsupported source while discarding unsafe behavior", () => {
         const result = importer.import(unsafeFixture.source, { name: unsafeFixture.name });
 
-        expect(result.nativeElementCount).toBe(1);
-        expect(result.preservedNodeCount).toBe(3);
+        expect(result.nativeElementCount).toBe(2);
+        expect(result.preservedNodeCount).toBe(1);
         expect(result.editability).toBe("partial");
         expect(result.removedUnsafeCount).toBeGreaterThan(5);
-        expect(result.document.importedSourceNodes?.map((node) => node.tagName)).toEqual(["defs", "image", "path"]);
+        expect(result.document.importedSourceNodes?.map((node) => node.tagName)).toEqual(["image"]);
         const preserved = result.document.importedSourceNodes?.map((node) => node.markup).join(" ") ?? "";
-        expect(preserved).toContain("linearGradient");
         expect(preserved).not.toContain("onclick");
         expect(preserved).not.toContain("evil.example");
     });
@@ -178,6 +179,39 @@ describe("SVGImporterService", () => {
         expect(result.nativeElementCount).toBe(0);
         expect(result.document.importedSourceNodes?.map((node) => node.tagName)).toEqual(["defs", "rect"]);
         expect(result.document.importedSourceNodes?.[0].markup).toContain("objectBoundingBox");
+    });
+
+    it("imports linear, radial, inherited, transformed, and translucent gradients as editable paint", () => {
+        const result = importer.import(`
+            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="200" height="100">
+                <defs>
+                    <linearGradient id="base" x1="0%" x2="100%">
+                        <stop id="start" offset="0" stop-color="#ff0000"/>
+                        <stop id="end" offset="100%" style="stop-color: #0000ff; stop-opacity: 0.5"/>
+                    </linearGradient>
+                    <linearGradient id="derived" xlink:href="#base" x2="75%" spreadMethod="reflect" gradientTransform="matrix(1 0 0 1 10 5)"/>
+                    <radialGradient id="radial" cx="40%" cy="60%" r="30%">
+                        <stop offset="0" stop-color="white"/>
+                        <stop offset="1" stop-color="black"/>
+                    </radialGradient>
+                </defs>
+                <rect id="linear-art" width="100" height="100" fill="url(#derived)"/>
+                <circle id="radial-art" cx="150" cy="50" r="50" fill="url(#radial)"/>
+            </svg>
+        `);
+
+        const linear = (result.document.elements[0] as ShapeSave).settings.fill as GradientPaintSave;
+        const radial = (result.document.elements[1] as ShapeSave).settings.fill as GradientPaintSave;
+        expect(result.editability).toBe("native");
+        expect(result.preservedNodeCount).toBe(0);
+        expect(linear.type).toBe("linear-gradient");
+        expect(linear.coordinates.x2).toBe(0.75);
+        expect(linear.spreadMethod).toBe("reflect");
+        expect(linear.transform).toEqual([1, 0, 0, 1, 10, 5]);
+        expect(linear.stops.map((stop) => stop.color)).toEqual(["#ff0000", "#0000ff"]);
+        expect(linear.stops[1].opacity).toBe(0.5);
+        expect(radial.type).toBe("radial-gradient");
+        expect(radial.coordinates).toEqual({ cx: 0.4, cy: 0.6, r: 0.3, fx: 0.4, fy: 0.6 });
     });
 
     it("throws a user-facing import error for invalid SVG XML", () => {

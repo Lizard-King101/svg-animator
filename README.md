@@ -16,7 +16,7 @@ A browser-based motion SVG studio for drawing, editing, and keyframe animation.
 - Layers panel — nested groups, clipping, visibility, lock, rename, duplicate, drag-reorder, and delete
 - Properties panel — per-element attributes (stroke, fill, width/height, caps/joins)
 - Project gallery — auto-saves to `localStorage`, thumbnail previews, project name + dimensions picker
-- SVG import — safe native conversion with full path-command support and opaque preservation
+- SVG import — safe native conversion with full path-command, clipping, and editable gradient support plus opaque preservation
 - Timeline — property keyframes, easing, playback, selection, clipboard, and motion paths
 - Export — clean static `.svg` file download
 - Undo / redo — per-document history (50 steps)

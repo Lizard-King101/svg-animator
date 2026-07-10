@@ -87,7 +87,10 @@ export function clonePaint(value: Paint | null | undefined, id?: string): Paint 
     if(value == null) return null;
     if(value instanceof Color) return new Color(value.hex);
     const restored = restorePaint(serializePaint(value));
-    if(restored && isGradientPaint(restored) && id) restored.id = id;
+    if(restored && isGradientPaint(restored) && id) {
+        restored.id = id;
+        restored.stops.forEach((stop, index) => stop.id = `${id}-stop-${index + 1}`);
+    }
     return restored;
 }
 
