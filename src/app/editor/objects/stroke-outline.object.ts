@@ -2,6 +2,7 @@ import { EditorService } from "src/app/_services/editor.service";
 import { Color } from "./color.object";
 import { Path, PathContour, RoundedCorner } from "./elements/path.object";
 import { Line } from "./line.object";
+import { unionFilledPathContours } from "./path-boolean.object";
 import { Point } from "./point.object";
 
 interface Vec {
@@ -31,6 +32,11 @@ interface StraightRun {
     start: Point;
     end: Point;
     points: Point[];
+}
+
+interface SourceOffsets {
+    left: OutlineSegment[];
+    right: OutlineSegment[];
 }
 
 type Side = 1 | -1;
@@ -110,7 +116,168 @@ export function convertStrokeToPath(path: Path, editor: EditorService, profile: 
         converted.contours.push(converted.createContour(linesFromSegments(prepareOutputSegments(outline, profile, halfWidth, true), editor, true), true));
     });
 
+    if(profile === 'optimized') {
+        const pieces = strokePieceContours(path, editor, halfWidth, profile);
+        const resolved = unionFilledPathContours(pieces, editor);
+        if(resolved?.length) {
+            converted.contours = resolved;
+            converted.fillRule = 'nonzero';
+        }
+    }
+
     return converted.contours.length ? converted : null;
+}
+
+function strokePieceContours(path: Path, editor: EditorService, halfWidth: number, profile: StrokeToPathProfile): PathContour[] {
+    const pieces: PathContour[] = [];
+    const addPiece = (segments: OutlineSegment[]) => {
+        const prepared = prepareOutputSegments(segments, profile, halfWidth, true);
+        if(prepared.length >= 2) {
+            pieces.push({
+                id: editor.ID,
+                closed: true,
+                lines: linesFromSegments(prepared, editor, true),
+            });
+        }
+    };
+
+    path.contours.forEach((contour) => {
+        const source = strokeSourceSegments(path, contour, editor);
+        const closed = contourIsClosed(contour);
+        const offsets: SourceOffsets[] = source.map(({ line }) => ({
+            left: offsetLine(line, halfWidth, 1),
+            right: offsetLine(line, halfWidth, -1),
+        }));
+
+        offsets.forEach(({ left, right }) => {
+            if(left.length === 0 || right.length === 0) {
+                return;
+            }
+
+            addPiece([
+                ...left,
+                lineSegment(left[left.length - 1].end, right[right.length - 1].end),
+                ...reverseSegments(right),
+                lineSegment(right[0].start, left[0].start),
+            ]);
+        });
+
+        source.forEach((current, index) => {
+            if(!current.joinAnchor || (!closed && index === 0)) {
+                return;
+            }
+
+            const previousIndex = index === 0 ? source.length - 1 : index - 1;
+            const patch = joinPatchSegments(
+                source[previousIndex].line,
+                current.line,
+                offsets[previousIndex],
+                offsets[index],
+                current.joinAnchor,
+                halfWidth,
+                path.settings.line_join,
+            );
+            if(patch.length) {
+                addPiece(patch);
+            }
+        });
+
+        if(!closed && source.length > 0) {
+            const firstLine = source[0].line;
+            const lastLine = source[source.length - 1].line;
+            const firstOffsets = offsets[0];
+            const lastOffsets = offsets[offsets.length - 1];
+            if(firstOffsets.left.length && firstOffsets.right.length) {
+                const startPatch = capPatchSegments(
+                    firstLine.points[0],
+                    firstOffsets.right[0].start,
+                    firstOffsets.left[0].start,
+                    path.settings.line_cap,
+                    negate(lineStartDirection(firstLine)),
+                    halfWidth,
+                );
+                if(startPatch.length) addPiece(startPatch);
+            }
+            if(lastOffsets.left.length && lastOffsets.right.length) {
+                const endPatch = capPatchSegments(
+                    lastLine.points[1],
+                    lastOffsets.left[lastOffsets.left.length - 1].end,
+                    lastOffsets.right[lastOffsets.right.length - 1].end,
+                    path.settings.line_cap,
+                    lineEndDirection(lastLine),
+                    halfWidth,
+                );
+                if(endPatch.length) addPiece(endPatch);
+            }
+        }
+    });
+
+    return pieces;
+}
+
+function joinPatchSegments(
+    previousLine: Line,
+    nextLine: Line,
+    previousOffsets: SourceOffsets,
+    nextOffsets: SourceOffsets,
+    anchor: Point,
+    halfWidth: number,
+    join: string | null,
+): OutlineSegment[] {
+    const turn = cross(lineEndDirection(previousLine), lineStartDirection(nextLine));
+    if(Math.abs(turn) <= EPSILON) {
+        return [];
+    }
+
+    const outerSide: Side = turn > 0 ? -1 : 1;
+    const previousOuter = outerSide === 1 ? previousOffsets.left : previousOffsets.right;
+    const nextOuter = outerSide === 1 ? nextOffsets.left : nextOffsets.right;
+    if(previousOuter.length === 0 || nextOuter.length === 0) {
+        return [];
+    }
+
+    const previousSegment = previousOuter[previousOuter.length - 1];
+    const nextSegment = nextOuter[0];
+    const from = previousSegment.end;
+    const to = nextSegment.start;
+    let boundary: OutlineSegment[];
+
+    if(join === 'round') {
+        boundary = arcSegments(anchor, from, to, turn > 0 ? 1 : -1);
+    } else if(join == null || join === 'miter') {
+        const intersection = lineIntersection(
+            from,
+            segmentEndDirection(previousSegment),
+            to,
+            segmentStartDirection(nextSegment),
+        );
+        boundary = intersection && distance(anchor, intersection) <= halfWidth * MITER_LIMIT
+            ? [lineSegment(from, intersection), lineSegment(intersection, to)]
+            : [lineSegment(from, to)];
+    } else {
+        boundary = [lineSegment(from, to)];
+    }
+
+    return [
+        ...boundary,
+        lineSegment(to, anchor),
+        lineSegment(anchor, from),
+    ];
+}
+
+function capPatchSegments(center: Point, from: Point, to: Point, cap: string | null, direction: Vec, halfWidth: number): OutlineSegment[] {
+    if(cap !== 'round' && cap !== 'square') {
+        return [];
+    }
+
+    return [
+        ...capSegments(center, from, to, cap, direction, halfWidth),
+        lineSegment(to, from),
+    ];
+}
+
+function lineSegment(start: Point, end: Point): OutlineSegment {
+    return { type: 'line', start, end };
 }
 
 function strokeSourceSegments(path: Path, contour: PathContour, editor: EditorService): StrokeSourceSegment[] {

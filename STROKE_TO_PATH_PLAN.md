@@ -56,13 +56,20 @@ References:
 
 ## V1 Limitations
 
-- Boolean cleanup for self-intersecting outlines is out of scope until we add or implement a robust polygon/curve boolean layer.
 - Exact offset math is out of scope; the goal is clean, compact, visually faithful cubic approximation.
 - Current compound editing remains primary-contour-focused; combined contours render/export correctly but deep editing can follow after stroke conversion stabilizes.
 
 ## Conversion Profiles
 
 - `Precise` preserves every segment produced by adaptive offset subdivision and remains the comparison baseline.
-- `Optimized` uses the same offset tolerance, then removes zero-length lines and merges only straight spans whose complete line/bezier control hull stays within a bounded distance of one chord.
+- `Optimized` uses the same offset tolerance, removes zero-length lines, merges only straight spans whose complete line/bezier control hull stays within a bounded distance of one chord, then resolves the union of curve-native stroke pieces.
 - The cleanup tolerance is capped by the offset fitter tolerance and scales conservatively with stroke width. Curved spans, round caps, and round joins are left intact.
 - Keeping both profiles in the layer menu supports visual A/B testing and direct segment-count comparison without changing source artwork.
+
+## Intersection Cleanup
+
+- Optimized conversion represents every source segment as a closed cubic stroke strip and adds explicit miter, bevel, round-join, and end-cap patches.
+- Paper.js performs curve-native boolean union on those pieces. The result is translated back into editable native `PathContour`, `Line`, and `Point` objects; the authoring model does not depend on Paper.js objects.
+- Union is used instead of even-odd cleanup so overlapping stroke passes remain filled.
+- The same process removes self-crossing offset loops and false inner holes when stroke width exceeds the local curve or closed-loop radius.
+- `Precise` remains available as the pre-boolean baseline and optimized conversion falls back to that result if boolean tracing cannot produce contours.

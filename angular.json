@@ -29,6 +29,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "paper-core.min.js",
+                "input": "node_modules/paper/dist",
+                "output": "vendor"
               }
             ],
             "styles": [
