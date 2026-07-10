@@ -50,6 +50,7 @@ export interface AnimationColorValue {
     hex: string;
     rgb: RGB;
     hsl: HSL;
+    alpha?: number;
 }
 
 export interface AnimatablePropertyDefinition {
@@ -327,14 +328,17 @@ function interpolateColor(from: unknown, to: unknown, t: number): string {
             s: interpolateNumber(fromColor.hsl.s, toColor.hsl.s, t),
             l: interpolateNumber(fromColor.hsl.l, toColor.hsl.l, t),
         };
-        return color.hex;
+        color.alpha = interpolateNumber(fromColor.alpha ?? 1, toColor.alpha ?? 1, t);
+        return color.serialized;
     }
 
-    return rgbToHex({
+    const color = new Color(rgbToHex({
         r: Math.round(interpolateNumber(fromColor.rgb.r, toColor.rgb.r, t)),
         g: Math.round(interpolateNumber(fromColor.rgb.g, toColor.rgb.g, t)),
         b: Math.round(interpolateNumber(fromColor.rgb.b, toColor.rgb.b, t)),
-    });
+    }));
+    color.alpha = interpolateNumber(fromColor.alpha ?? 1, toColor.alpha ?? 1, t);
+    return color.serialized;
 }
 
 function parseAnimationColor(value: unknown): (AnimationColorValue & { space?: ColorSpace }) | undefined {
@@ -345,6 +349,7 @@ function parseAnimationColor(value: unknown): (AnimationColorValue & { space?: C
             hex: value.hex,
             rgb: value.rgb,
             hsl: value.hsl,
+            alpha: value.alpha,
         };
     }
 
@@ -362,6 +367,7 @@ function parseAnimationColor(value: unknown): (AnimationColorValue & { space?: C
                 hex: color.hex,
                 rgb: color.rgb,
                 hsl: color.hsl,
+                alpha: color.alpha,
             };
         }
     }
@@ -383,7 +389,7 @@ function isAnimationColorValue(value: unknown): value is AnimationColorValue {
 }
 
 function parseHexColor(value: string): RGB | undefined {
-    const shorthand = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(value);
+    const shorthand = /^#([0-9a-f])([0-9a-f])([0-9a-f])(?:[0-9a-f])?$/i.exec(value);
     if(shorthand) {
         return {
             r: parseInt(shorthand[1] + shorthand[1], 16),
@@ -392,7 +398,7 @@ function parseHexColor(value: string): RGB | undefined {
         };
     }
 
-    const full = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(value);
+    const full = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})(?:[0-9a-f]{2})?$/i.exec(value);
     if(full) {
         return {
             r: parseInt(full[1], 16),

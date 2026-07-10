@@ -8,6 +8,7 @@ import { TransformSave, identityMatrix, Matrix, multiplyMatrix, rotationMatrix, 
 import { parseSVGPathData, SVGPathParseError } from "./svg-path-parser";
 import { sanitizeSVGText, SVGParseError } from "./svg-sanitizer";
 import { GradientPaintSave, GradientSpreadMethod, GradientUnits, PaintSave } from "../objects/paint.object";
+import { Color } from "../objects/color.object";
 
 const UNSUPPORTED_NATIVE_ATTRIBUTES = [
     "clip-path", "mask", "filter", "marker", "marker-start", "marker-mid", "marker-end",
@@ -666,11 +667,14 @@ function colorValue(input: string): string | null | undefined {
     if(value.startsWith("url(")) return undefined;
     if(/^#[0-9a-f]{6}$/i.test(value)) return value;
     if(/^#[0-9a-f]{3}$/i.test(value)) return `#${value.slice(1).split("").map((part) => part + part).join("")}`;
+    if(/^#[0-9a-f]{4}(?:[0-9a-f]{4})?$/i.test(value)) return new Color(value).serialized;
     const rgb = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/.exec(value);
     if(rgb) {
         const alpha = rgb[4]?.endsWith("%") ? Number(rgb[4].slice(0, -1)) / 100 : Number(rgb[4] ?? 1);
-        if(alpha !== 1) return undefined;
-        return `#${[rgb[1], rgb[2], rgb[3]].map((part) => Math.max(0, Math.min(255, Math.round(Number(part)))).toString(16).padStart(2, "0")).join("")}`;
+        const hex = `#${[rgb[1], rgb[2], rgb[3]].map((part) => Math.max(0, Math.min(255, Math.round(Number(part)))).toString(16).padStart(2, "0")).join("")}`;
+        const color = new Color(hex);
+        color.alpha = clamp01(alpha);
+        return color.serialized;
     }
     if(typeof CSS !== "undefined" && CSS.supports("color", value)) {
         const canvas = document.createElement("canvas").getContext("2d");

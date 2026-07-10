@@ -176,7 +176,7 @@ export class TextElement {
                 font_size: this.settings.font_size,
                 font_weight: this.settings.font_weight ?? '400',
                 text_align: this.textAnchor,
-                color: this.settings.color?.hex ?? null,
+                color: this.settings.color?.serialized ?? null,
             },
         };
     }

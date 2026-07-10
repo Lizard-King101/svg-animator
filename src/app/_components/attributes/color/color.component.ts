@@ -53,6 +53,11 @@ export class ColorAttribute implements AfterViewInit, ControlValueAccessor {
         this.emitChange();
     }
 
+    updateAlpha() {
+        this.color.alpha = Math.max(0, Math.min(1, Number(this.color.alpha)));
+        this.emitChange();
+    }
+
     ngAfterViewInit() {}
 
     onChange(_value: Color) {};
@@ -66,11 +71,11 @@ export class ColorAttribute implements AfterViewInit, ControlValueAccessor {
     writeValue(_value: Color | null) {
         if (_value) {
             const preferredSpace = _value.preferredSpace ?? 'rgb';
-            if(this.color.hex === _value.hex && this.color.preferredSpace === preferredSpace) {
+            if(this.color.hex === _value.hex && Math.abs(this.color.alpha - _value.alpha) < 0.0001 && this.color.preferredSpace === preferredSpace) {
                 return;
             }
 
-            this.color = new Color(_value.hex);
+            this.color = new Color(_value.serialized);
             this.color.preferredSpace = preferredSpace;
             this.rgb = this.color.rgb;
             this.hsl = this.color.hsl;

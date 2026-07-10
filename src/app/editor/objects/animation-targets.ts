@@ -190,7 +190,9 @@ function writeColor(element: AnyElement, key: "fill" | "stroke", value: unknown)
     }
 
     if(isAnimationColorValue(value)) {
-        (element.settings as Record<string, unknown>)[key] = new Color(value.hex);
+        const color = new Color(value.hex);
+        color.alpha = value.alpha ?? 1;
+        (element.settings as Record<string, unknown>)[key] = color;
         return true;
     }
 
@@ -207,7 +209,7 @@ function solidColorHex(value: unknown): string | null | undefined {
         return value as null | undefined;
     }
 
-    return value instanceof Color ? value.hex : undefined;
+    return value instanceof Color ? value.serialized : undefined;
 }
 
 interface ParsedGradientProperty {
@@ -235,7 +237,7 @@ function readGradientProperty(element: AnyElement, property: ParsedGradientPrope
     if(property.coordinate) return paint.coordinates[property.coordinate];
     const stop = paint.stops.find((candidate) => candidate.id === property.stopId);
     if(!stop || !property.stopField) return undefined;
-    return property.stopField === "color" ? stop.color.hex : stop[property.stopField];
+    return property.stopField === "color" ? stop.color.serialized : stop[property.stopField];
 }
 
 function writeGradientProperty(element: AnyElement, property: ParsedGradientProperty, value: unknown): boolean {
@@ -247,7 +249,11 @@ function writeGradientProperty(element: AnyElement, property: ParsedGradientProp
     const stop = paint.stops.find((candidate) => candidate.id === property.stopId);
     if(!stop || !property.stopField) return false;
     if(property.stopField === "color") {
-        if(isAnimationColorValue(value)) stop.color = new Color(value.hex);
+        if(isAnimationColorValue(value)) {
+            stop.color = new Color(value.hex);
+            stop.color.alpha = value.alpha ?? 1;
+            stop.opacity = stop.color.alpha;
+        }
         else if(typeof value === "string") stop.color = new Color(value);
         else return false;
         return true;

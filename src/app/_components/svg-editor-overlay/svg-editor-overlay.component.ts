@@ -7,6 +7,7 @@ import { combinedMotionAdjustedMatrixFor } from "../../editor/objects/motion-pat
 import { Point } from "../../editor/objects/point.object";
 import { AnyElement } from "../../editor/objects/svg.object";
 import { applyMatrix, Bounds, matrixToSvg, transformedBounds } from "../../editor/objects/transform.object";
+import { gradientGeometry, GradientGeometry } from "../../editor/objects/gradient-geometry";
 
 @Component({
     selector: "[editorOverlay]",
@@ -85,6 +86,10 @@ export class SVGEditorOverlayComponent {
     }
 
     segmentPath(path: Path, line: Line): string { return path.segmentRaw(line); }
+
+    gradient(element?: AnyElement): GradientGeometry | null {
+        return element ? gradientGeometry(element, this.editor.selectedGradientPaintKey) ?? null : null;
+    }
 }
 
 interface SelectionBox {

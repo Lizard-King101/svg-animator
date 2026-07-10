@@ -76,7 +76,7 @@
       <div class="timeline-left-cell"
            [ngClass]="{'selected': editor.selectedElement == row.element, 'property': row.type == 'property'}"
            [style.padding-left.px]="10 + row.depth * 16"
-           (click)="selectLayer(row.element)"
+           (click)="selectTimelineRow(row)"
            (contextmenu)="openRowContextMenu(row, $event)">
         <button class="row-expander"
                 *ngIf="row.type == 'layer'"
@@ -87,7 +87,23 @@
         <span class="row-name" *ngIf="row.type == 'layer'">{{ row.element.name }}</span>
         <ng-container *ngIf="row.type == 'property'">
           <span class="row-name">{{ row.property.label }}</span>
-          <span class="row-value" *ngIf="row.property.valueType != 'color'">{{ propertyDisplayValue(row) }}</span>
+          <span class="row-value" *ngIf="row.property.valueType != 'color' && !isGradientStopsRow(row)">{{ propertyDisplayValue(row) }}</span>
+          <div class="gradient-stops-control" *ngIf="isGradientStopsRow(row) && gradientForRow(row) as gradient"
+               (click)="$event.stopPropagation()" (pointerdown)="$event.stopPropagation()">
+            <button class="gradient-stops-trigger" (click)="toggleColorEditor(row, $event)">{{ gradient.stops.length }} stops</button>
+            <div class="gradient-stops-popover" *ngIf="colorEditorOpen(row)"
+                 (click)="$event.stopPropagation()" (pointerdown)="$event.stopPropagation()">
+              <div class="gradient-stop-popover-row" *ngFor="let stop of gradient.stops; let stopIndex = index">
+                <strong>Stop {{ stopIndex + 1 }}</strong>
+                <label>
+                  <span>Position</span>
+                  <input type="number" min="0" max="1" step="0.01" [ngModel]="stop.offset"
+                         (ngModelChange)="setTimelineGradientStop(row, stop, 'offset', $event)" />
+                </label>
+                <color [ngModel]="stop.color" (ngModelChange)="setTimelineGradientStop(row, stop, 'color', $event)"></color>
+              </div>
+            </div>
+          </div>
           <input class="property-number"
                  *ngIf="row.property.valueType == 'number'"
                  type="number"

@@ -214,6 +214,18 @@ describe("SVGImporterService", () => {
         expect(radial.coordinates).toEqual({ cx: 0.4, cy: 0.6, r: 0.3, fx: 0.4, fy: 0.6 });
     });
 
+    it("imports alpha fill and stroke as native solid paint", () => {
+        const result = importer.import(`
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                <rect width="20" height="20" fill="rgba(255, 0, 0, 0.5)" stroke="#0000ff40"/>
+            </svg>
+        `);
+        const shape = result.document.elements[0] as ShapeSave;
+        expect(shape.settings.fill).toBe("#ff000080");
+        expect(shape.settings.stroke).toBe("#0000ff40");
+        expect(result.editability).toBe("native");
+    });
+
     it("throws a user-facing import error for invalid SVG XML", () => {
         expect(() => importer.import("not svg"))
             .toThrowError(SVGImportError);

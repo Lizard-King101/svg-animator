@@ -10,7 +10,7 @@ import { AnyElement, ImportedSourceNode } from "src/app/editor/objects/svg.objec
 import { matrixToSvg } from "src/app/editor/objects/transform.object";
 import { SVGEditorOverlayComponent } from "../svg-editor-overlay/svg-editor-overlay.component";
 import { ImportedSVGSourceDirective } from "./imported-svg-source.directive";
-import { GradientPaint, gradientTransformValue, isGradientPaint, Paint, paintSVGValue } from "src/app/editor/objects/paint.object";
+import { GradientPaint, gradientTransformValue, isGradientPaint, Paint, paintOpacity, paintSVGValue } from "src/app/editor/objects/paint.object";
 
 @Component({
     standalone: true,
@@ -106,6 +106,7 @@ export class SVGDisplay implements AfterViewInit {
     }
 
     paintValue(paint: Paint | null | undefined): string | null { return paintSVGValue(paint); }
+    paintOpacity(paint: Paint | null | undefined): number | null { return paintOpacity(paint); }
     gradientTransform(gradient: GradientPaint): string | null { return gradientTransformValue(gradient); }
 
 }

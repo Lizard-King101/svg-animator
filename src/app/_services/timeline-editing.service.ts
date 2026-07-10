@@ -4,7 +4,7 @@ import { AnyElement } from "../editor/objects/svg.object";
 import { AnimatablePropertyDefinition } from "../editor/objects/animation.object";
 import { Group } from "../editor/objects/elements/group.object";
 import { Path } from "../editor/objects/elements/path.object";
-import { gradientAnimationProperties } from "../editor/objects/paint.object";
+import { gradientTimelineProperties } from "../editor/objects/paint.object";
 
 export type TimelineRow = LayerTimelineRow | PropertyTimelineRow;
 export type LayerTimelineRow = { type: "layer"; element: AnyElement; depth: number };
@@ -28,7 +28,7 @@ export class TimelineEditingService {
             if(expanded.has(element.id)) {
                 properties.filter((property) => propertySupported(element, property))
                     .forEach((property) => rows.push({ type: "property", element, depth: depth + 1, property }));
-                gradientAnimationProperties(element.settings as Record<string, unknown>)
+                gradientTimelineProperties(element.settings as Record<string, unknown>)
                     .forEach((property) => rows.push({ type: "property", element, depth: depth + 1, property }));
                 if(element instanceof Path) rows.push({ type: "property", element, depth: depth + 1, property: pathShapeProperty });
             }

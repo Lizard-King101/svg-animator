@@ -20,6 +20,7 @@ export class EditorService {
     selectedSVG?: SVG;
 
     selectedElement?: AnyElement;
+    selectedGradientPaintKey?: "fill" | "stroke";
     activeElement?: AnyElement;
     selectedPathAnchor?: Point;
     selectedPathLine?: Line;

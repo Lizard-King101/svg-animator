@@ -1,7 +1,7 @@
 <label *ngIf="label">{{label}}</label>
 <div class="inputs">
   <div class="hex-selector">
-    <span class="color-swatch" [ngStyle]="{'background-color': color.hex}"></span>
+    <span class="color-swatch" [ngStyle]="{'background-color': color.serialized}"></span>
     <input type="text" [(ngModel)]="color.hex" (input)="updateHEX()" placeholder="#000000">
     <select [(ngModel)]="editType">
       <option value="hsl">HSL</option>
@@ -19,5 +19,9 @@
     <input class="range slider" type="range" [(ngModel)]="hsl.h" [min]="0" [max]="360" (input)="updateHSL()">
     <input class="range slider" type="range" [(ngModel)]="hsl.s" [min]="0" [max]="100" (input)="updateHSL()">
     <input class="range slider" type="range" [(ngModel)]="hsl.l" [min]="0" [max]="100" (input)="updateHSL()">
+  </div>
+  <div class="alpha">
+    <span>Alpha {{ (color.alpha * 100).toFixed(0) }}%</span>
+    <input class="range slider" type="range" [(ngModel)]="color.alpha" [min]="0" [max]="1" [step]="0.01" (input)="updateAlpha()">
   </div>
 </div>

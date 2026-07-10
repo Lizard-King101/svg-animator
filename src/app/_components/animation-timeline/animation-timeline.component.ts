@@ -12,6 +12,7 @@ import { Color } from "src/app/editor/objects/color.object";
 import { Group } from "src/app/editor/objects/elements/group.object";
 import { Path } from "src/app/editor/objects/elements/path.object";
 import { AnyElement } from "src/app/editor/objects/svg.object";
+import { GradientPaint, GradientStop, gradientAnimationProperties, isGradientPaint } from "src/app/editor/objects/paint.object";
 import {
     clampTimelineScale,
     KeyframeEntry,
@@ -112,6 +113,14 @@ export class AnimationTimelineComponent {
         this.editor.selectedPathLines = [];
     }
 
+    selectTimelineRow(row: TimelineRow) {
+        this.selectLayer(row.element);
+        if(row.type === "property") {
+            const match = /^settings\.(fill|stroke)\.gradient\./.exec(row.property.property);
+            if(match) this.editor.selectedGradientPaintKey = match[1] as "fill" | "stroke";
+        }
+    }
+
     openRowContextMenu(row: TimelineRow, event: MouseEvent) {
         if(row.type !== "layer") {
             return;
@@ -151,6 +160,7 @@ export class AnimationTimelineComponent {
             if(this.isPathShapeRow(row)) {
                 return this.pathShapeKeyframes(row.element);
             }
+            if(this.isGradientGroupRow(row)) return this.gradientGroupKeyframes(row);
 
             return this.animation.trackFor(row.element, row.property.property)?.keyframes ?? [];
         }
@@ -245,6 +255,8 @@ export class AnimationTimelineComponent {
         if(this.hasKeyAtTime(row)) {
             if(this.isPathShapeRow(row)) {
                 this.removePathShapeKeyframesAtCurrentTime(row.element);
+            } else if(this.isGradientGroupRow(row)) {
+                this.removeGradientGroupKeyframesAtCurrentTime(row);
             } else {
                 this.animation.removeKeyframeAtCurrentTime(row.element, row.property.property);
             }
@@ -252,6 +264,8 @@ export class AnimationTimelineComponent {
         } else {
             if(this.isPathShapeRow(row)) {
                 this.addPathShapeKeyframesAtCurrentTime(row.element);
+            } else if(this.isGradientGroupRow(row)) {
+                this.addGradientGroupKeyframesAtCurrentTime(row);
             } else {
                 this.animation.upsertKeyframe(row.element, row.property.property, row.property.valueType);
             }
@@ -426,6 +440,7 @@ export class AnimationTimelineComponent {
         if(this.isPathShapeRow(row)) {
             return this.pathShapeKeyframes(row.element).some((keyframe) => this.timesMatch(keyframe.time, this.animation.currentTime));
         }
+        if(this.isGradientGroupRow(row)) return this.gradientGroupKeyframes(row).some((keyframe) => this.timesMatch(keyframe.time, this.animation.currentTime));
 
         return this.animation.hasKeyframeAtCurrentTime(row.element, row.property.property);
     }
@@ -471,6 +486,8 @@ export class AnimationTimelineComponent {
         if(row.type === "property" && this.isPathShapeRow(row)) {
             return `${this.pathShapeAnimatedPointCount(row.element)} pts`;
         }
+        if(row.type === "property" && this.isGradientGeometryRow(row)) return "Canvas handles";
+        if(row.type === "property" && this.isGradientStopsRow(row)) return `${this.gradientForRow(row)?.stops.length ?? 0} stops`;
 
         return row.type === "property"
             ? readAnimationProperty(row.element, row.property.property)
@@ -524,6 +541,30 @@ export class AnimationTimelineComponent {
 
     colorEditorOpen(row: TimelineRow): boolean {
         return this.openColorEditorKey === this.colorRowKey(row);
+    }
+
+    isGradientGeometryRow(row: TimelineRow): boolean {
+        return row.type === "property" && /\.gradient\.geometry$/.test(row.property.property);
+    }
+
+    isGradientStopsRow(row: TimelineRow): boolean {
+        return row.type === "property" && /\.gradient\.stops$/.test(row.property.property);
+    }
+
+    gradientForRow(row: TimelineRow): GradientPaint | undefined {
+        if(row.type !== "property") return undefined;
+        const match = /^settings\.(fill|stroke)\.gradient\./.exec(row.property.property);
+        const paint = match ? (row.element.settings as Record<string, unknown>)[match[1]] : undefined;
+        return isGradientPaint(paint) ? paint : undefined;
+    }
+
+    setTimelineGradientStop(row: TimelineRow, stop: GradientStop, field: "offset" | "color", value: unknown) {
+        if(row.type !== "property") return;
+        const match = /^settings\.(fill|stroke)\.gradient\./.exec(row.property.property);
+        if(!match) return;
+        const property = `settings.${match[1]}.gradient.stops.${stop.id}.${field}`;
+        this.animation.setAnimatedPropertyValue(row.element, property, field === "color" ? "color" : "number", value);
+        this.animationChange.emit();
     }
 
     setPropertyValue(row: TimelineRow, value: unknown) {
@@ -1007,6 +1048,53 @@ export class AnimationTimelineComponent {
 
     private isPathShapeRow(row: TimelineRow): row is PropertyTimelineRow & { element: Path } {
         return row.type === "property" && row.element instanceof Path && row.property.property === PATH_SHAPE_PROPERTY.property;
+    }
+
+    private isGradientGroupRow(row: TimelineRow): boolean {
+        return row.type === "property" && (/\.gradient\.geometry$/.test(row.property.property) || /\.gradient\.stops$/.test(row.property.property));
+    }
+
+    private gradientPropertiesForRow(row: PropertyTimelineRow): AnimatablePropertyDefinition[] {
+        const match = /^settings\.(fill|stroke)\.gradient\.(geometry|stops)$/.exec(row.property.property);
+        if(!match) return [];
+        const prefix = `settings.${match[1]}.gradient.`;
+        return gradientAnimationProperties(row.element.settings as Record<string, unknown>).filter((property) => {
+            if(!property.property.startsWith(prefix)) return false;
+            return match[2] === "stops" ? property.property.includes(".stops.") : !property.property.includes(".stops.");
+        });
+    }
+
+    private gradientGroupTracks(row: PropertyTimelineRow): AnimationTrack[] {
+        const properties = new Set(this.gradientPropertiesForRow(row).map((property) => property.property));
+        return this.editor.selectedSVG?.animation.tracks.filter((track) => track.targetId === row.element.id && properties.has(track.property)) ?? [];
+    }
+
+    private gradientGroupKeyframes(row: PropertyTimelineRow): TimelineKeyframe[] {
+        const groups: TimelineKeyframe[] = [];
+        this.gradientGroupTracks(row).forEach((track) => track.keyframes.forEach((keyframe) => {
+            let group = groups.find((candidate) => this.timesMatch(candidate.time, keyframe.time));
+            if(!group) {
+                group = { id: `gradient-${row.element.id}-${row.property.property}-${keyframe.time}`, time: keyframe.time, value: row.property.label, easing: keyframe.easing, groupedKeyframeIds: [] };
+                groups.push(group);
+            }
+            group.groupedKeyframeIds!.push(keyframe.id);
+        }));
+        return groups.sort((a, b) => a.time - b.time);
+    }
+
+    private removeGradientGroupKeyframesAtCurrentTime(row: PropertyTimelineRow) {
+        this.gradientGroupTracks(row).forEach((track) => {
+            track.keyframes = track.keyframes.filter((keyframe) => !this.timesMatch(keyframe.time, this.animation.currentTime));
+        });
+        if(this.editor.selectedSVG) this.editor.selectedSVG.animation.tracks = this.editor.selectedSVG.animation.tracks.filter((track) => track.keyframes.length > 0);
+        this.animation.previewAt(this.animation.currentTime);
+    }
+
+    private addGradientGroupKeyframesAtCurrentTime(row: PropertyTimelineRow) {
+        this.gradientPropertiesForRow(row).forEach((property) => {
+            const value = readAnimationProperty(row.element, property.property);
+            this.animation.upsertKeyframe(row.element, property.property, property.valueType, value, value);
+        });
     }
 
     private pathPointTracks(path: Path): AnimationTrack[] {

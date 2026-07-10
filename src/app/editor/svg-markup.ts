@@ -5,7 +5,7 @@ import { TextElement } from "./objects/elements/text.object";
 import { motionAdjustedMatrix } from "./objects/motion-path.object";
 import { AnyElement, ImportedSourceNode, SVG } from "./objects/svg.object";
 import { matrixToSvg } from "./objects/transform.object";
-import { GradientPaint, gradientTransformValue, isGradientPaint, paintSVGValue } from "./objects/paint.object";
+import { GradientPaint, gradientTransformValue, isGradientPaint, paintOpacity, paintSVGValue } from "./objects/paint.object";
 
 export function escapeXmlText(value: unknown): string {
     return String(value)
@@ -83,8 +83,10 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                     attr('transform', transform) +
                     attr('opacity', opacityAttr(element.opacity)) +
                     attr('fill', s.fill_enabled ? paintSVGValue(s.fill) ?? 'none' : 'none') +
+                    attr('fill-opacity', s.fill_enabled ? paintOpacity(s.fill) : null) +
                     attr('fill-rule', element.fillRule) +
                     attr('stroke', paintSVGValue(s.stroke)) +
+                    attr('stroke-opacity', paintOpacity(s.stroke)) +
                     attr('stroke-width', s.stroke_width ?? null) +
                     attr('stroke-linecap', s.line_cap ?? null) +
                     attr('stroke-linejoin', s.line_join ?? null) +
@@ -111,6 +113,7 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                     attr('font-weight', s.font_weight) +
                     attr('text-anchor', element.textAnchor) +
                     attr('fill', s.color?.hex ?? '#000000') +
+                    attr('fill-opacity', s.color && s.color.alpha < 0.9999 ? s.color.alpha : null) +
                     ` dominant-baseline="hanging">` +
                     `\n${tspans}\n${indent}</text>`
                 );
@@ -118,6 +121,8 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                 const s = element.settings;
                 const fillAttr = attr('fill', paintSVGValue(s.fill) ?? 'none');
                 const strokeAttr = attr('stroke', paintSVGValue(s.stroke));
+                const fillOpacityAttr = attr('fill-opacity', paintOpacity(s.fill));
+                const strokeOpacityAttr = attr('stroke-opacity', paintOpacity(s.stroke));
                 const swAttr = attr('stroke-width', s.stroke_width ?? null);
                 if(element.type === 'rectangle') {
                     const cr = s.corner_radius || null;
@@ -132,7 +137,7 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                         attr('height', element.height) +
                         attr('rx', cr) +
                         attr('ry', cr) +
-                        fillAttr + strokeAttr + swAttr +
+                        fillAttr + fillOpacityAttr + strokeAttr + strokeOpacityAttr + swAttr +
                         `/>`
                     );
                 } else {
@@ -145,7 +150,7 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                         attr('opacity', opacityAttr(element.opacity)) +
                         attr('rx', element.radiusX) +
                         attr('ry', element.radiusY) +
-                        fillAttr + strokeAttr + swAttr +
+                        fillAttr + fillOpacityAttr + strokeAttr + strokeOpacityAttr + swAttr +
                         `/>`
                     );
                 }
@@ -185,7 +190,7 @@ function appendGradient(gradient: GradientPaint, lines: string[], depth: number)
         .map(([name, value]) => attr(name, value)).join("");
     lines.push(`${indent}<${tag}${attr("id", gradient.id)}${attr("gradientUnits", gradient.units)}${attr("spreadMethod", gradient.spreadMethod)}${attr("gradientTransform", gradientTransformValue(gradient))}${coordinateAttrs}>`);
     gradient.stops.forEach((stop) => lines.push(
-        `${indent}  <stop${attr("id", stop.id)}${attr("offset", stop.offset)}${attr("stop-color", stop.color.hex)}${attr("stop-opacity", stop.opacity === 1 ? null : stop.opacity)}/>`
+        `${indent}  <stop${attr("id", stop.id)}${attr("offset", stop.offset)}${attr("stop-color", stop.color.hex)}${attr("stop-opacity", stop.color.alpha < 0.9999 ? stop.color.alpha : null)}/>`
     ));
     lines.push(`${indent}</${tag}>`);
 }

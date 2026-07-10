@@ -3,15 +3,23 @@ export class Color {
     _rgb: RGB = {r: 255, g: 0, b: 0};
     _hsl: HSL = {h: 0, s: 1, l: .5};
     preferredSpace: ColorSpace = 'rgb';
-
+    alpha: number = 1;
 
     get hex(): string {
         return this._hex;
     }
     set hex(hex: string) {
-        this._hex = hex;
+        const expanded = expandHex(hex);
+        if(expanded.length !== 6 && expanded.length !== 8) return;
+        this._hex = `#${expanded.slice(0, 6)}`;
+        if(expanded.length === 8) this.alpha = parseInt(expanded.slice(6, 8), 16) / 255;
         this._rgb = this.hexToRgb(this._hex);
         this._hsl = this.rgbToHsl(this._rgb);
+    }
+
+    get serialized(): string {
+        if(this.alpha >= 0.9999) return this.hex;
+        return `${this.hex}${Math.round(this.alpha * 255).toString(16).padStart(2, '0')}`;
     }
 
     get rgb(): RGB {
@@ -35,7 +43,9 @@ export class Color {
 
     constructor(hex?: string) {
         if(hex && this.isColor(hex)) {
-            this.rgb = this.hexToRgb(hex);
+            const expanded = expandHex(hex);
+            this.alpha = expanded.length === 8 ? parseInt(expanded.slice(6, 8), 16) / 255 : 1;
+            this.rgb = this.hexToRgb(expanded.slice(0, 6));
         } else {
             this.rgb = {r: 255, g: 0, b: 0};
         }
@@ -43,9 +53,9 @@ export class Color {
     }
 
     isColor(color: any): boolean {
-        if(color.r && color.g && color.b) return true;
-        if(color.h && color.s && color.l) return true;
-        if(typeof color == 'string' && color.match(/^#(?:[0-9a-fA-F]{3}){1,2}$/g)) return true;
+        if(color && typeof color === 'object' && Number.isFinite(color.r) && Number.isFinite(color.g) && Number.isFinite(color.b)) return true;
+        if(color && typeof color === 'object' && Number.isFinite(color.h) && Number.isFinite(color.s) && Number.isFinite(color.l)) return true;
+        if(typeof color == 'string' && /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color)) return true;
         return false;
     }
 
@@ -149,6 +159,12 @@ export interface HSL {
     h: number;
     s: number;
     l: number;
+}
+
+function expandHex(value: string): string {
+    const source = value.replace(/^#/, '').toLowerCase();
+    if(source.length === 3 || source.length === 4) return source.split('').map((part) => part + part).join('');
+    return source;
 }
 
 export type ColorSpace = 'rgb' | 'hsl';

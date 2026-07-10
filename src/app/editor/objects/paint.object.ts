@@ -10,7 +10,7 @@ export interface GradientStopSave {
     id: string;
     offset: number;
     color: string;
-    opacity: number;
+    opacity?: number;
 }
 
 export interface GradientStop {
@@ -46,7 +46,7 @@ export function isGradientPaint(value: unknown): value is GradientPaint {
 
 export function serializePaint(value: Paint | null | undefined): PaintSave {
     if(value == null) return null;
-    if(value instanceof Color) return value.hex;
+    if(value instanceof Color) return value.serialized;
     return {
         type: value.type,
         id: value.id,
@@ -58,7 +58,7 @@ export function serializePaint(value: Paint | null | undefined): PaintSave {
             id: stop.id,
             offset: clamp01(stop.offset),
             color: stop.color.hex,
-            opacity: clamp01(stop.opacity),
+            opacity: clamp01(stop.color.alpha),
         })),
     };
 }
@@ -77,15 +77,15 @@ export function restorePaint(value: PaintSave | undefined): Paint | null {
         stops: value.stops.map((stop) => ({
             id: stop.id,
             offset: clamp01(stop.offset),
-            color: new Color(stop.color),
-            opacity: clamp01(stop.opacity),
+            color: colorWithFallbackAlpha(stop.color, stop.opacity),
+            opacity: clamp01(stop.opacity ?? new Color(stop.color).alpha),
         })),
     };
 }
 
 export function clonePaint(value: Paint | null | undefined, id?: string): Paint | null {
     if(value == null) return null;
-    if(value instanceof Color) return new Color(value.hex);
+    if(value instanceof Color) return new Color(value.serialized);
     const restored = restorePaint(serializePaint(value));
     if(restored && isGradientPaint(restored) && id) {
         restored.id = id;
@@ -115,6 +115,10 @@ export function paintSVGValue(value: Paint | null | undefined): string | null {
     return value instanceof Color ? value.hex : `url(#${value.id})`;
 }
 
+export function paintOpacity(value: Paint | null | undefined): number | null {
+    return value instanceof Color && value.alpha < 0.9999 ? value.alpha : null;
+}
+
 export function gradientTransformValue(value: GradientPaint): string | null {
     return value.transform ? `matrix(${value.transform.join(" ")})` : null;
 }
@@ -135,8 +139,18 @@ export function gradientAnimationProperties(settings: Record<string, unknown>): 
             const prefix = `settings.${paintKey}.gradient.stops.${stop.id}`;
             properties.push({ property: `${prefix}.offset`, label: `${paintKey === "fill" ? "Fill" : "Stroke"} Stop ${index + 1} Offset`, valueType: "number", group: "style", mvp: true });
             properties.push({ property: `${prefix}.color`, label: `${paintKey === "fill" ? "Fill" : "Stroke"} Stop ${index + 1} Color`, valueType: "color", group: "style", mvp: true });
-            properties.push({ property: `${prefix}.opacity`, label: `${paintKey === "fill" ? "Fill" : "Stroke"} Stop ${index + 1} Opacity`, valueType: "number", group: "style", mvp: true });
         });
+    });
+    return properties;
+}
+
+export function gradientTimelineProperties(settings: Record<string, unknown>): AnimatablePropertyDefinition[] {
+    const properties: AnimatablePropertyDefinition[] = [];
+    (["fill", "stroke"] as const).forEach((paintKey) => {
+        if(!isGradientPaint(settings[paintKey])) return;
+        const label = paintKey === "fill" ? "Fill" : "Stroke";
+        properties.push({ property: `settings.${paintKey}.gradient.geometry`, label: `${label} Gradient Geometry`, valueType: "string", group: "style", mvp: true });
+        properties.push({ property: `settings.${paintKey}.gradient.stops`, label: `${label} Gradient Stops`, valueType: "string", group: "style", mvp: true });
     });
     return properties;
 }
@@ -151,7 +165,13 @@ function isGradientPaintSave(value: unknown): value is GradientPaintSave {
         && !!candidate.coordinates && typeof candidate.coordinates === "object"
         && Array.isArray(candidate.stops)
         && candidate.stops.every((stop) => !!stop && typeof stop.id === "string" && typeof stop.color === "string"
-            && Number.isFinite(stop.offset) && Number.isFinite(stop.opacity));
+            && Number.isFinite(stop.offset) && (stop.opacity == null || Number.isFinite(stop.opacity)));
+}
+
+function colorWithFallbackAlpha(value: string, opacity?: number): Color {
+    const color = new Color(value);
+    if(opacity != null) color.alpha = clamp01(color.alpha * opacity);
+    return color;
 }
 
 function clamp01(value: number): number { return Math.max(0, Math.min(1, value)); }

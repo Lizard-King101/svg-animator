@@ -9,12 +9,15 @@ describe("native gradient paint", () => {
     it("round-trips gradient geometry and stops without changing old solid paint saves", () => {
         const gradient = createDefaultGradient("gradient-1");
         gradient.coordinates.x2 = 0.75;
-        gradient.stops[1].opacity = 0.4;
+        gradient.stops[1].color.alpha = 0.4;
 
         const restored = restorePaint(serializePaint(gradient));
         expect(isGradientPaint(restored)).toBeTrue();
         expect(serializePaint(restored)).toEqual(serializePaint(gradient));
         expect(serializePaint(restorePaint("#123456"))).toBe("#123456");
+        const translucent = restorePaint("#12345680") as Color;
+        expect(translucent.alpha).toBeCloseTo(0.502, 2);
+        expect(serializePaint(translucent)).toBe("#12345680");
     });
 
     it("projects gradient geometry and stop fields into timeline-addressable properties", () => {
@@ -33,7 +36,10 @@ describe("native gradient paint", () => {
         );
 
         expect(properties.map((property) => property.property)).toContain(colorProperty);
-        expect(rows.filter((row) => row.type === "property").map((row) => row.property.property)).toContain(colorProperty);
+        expect(rows.filter((row) => row.type === "property").map((row) => row.property.property)).toEqual([
+            "settings.fill.gradient.geometry",
+            "settings.fill.gradient.stops",
+        ]);
         expect(properties.map((property) => property.property)).toContain("settings.fill.gradient.x2");
         expect(writeAnimationProperty(element, offsetProperty, 0.35)).toBeTrue();
         expect(readAnimationProperty(element, offsetProperty)).toBe(0.35);
@@ -57,6 +63,17 @@ describe("native gradient paint", () => {
 
         expect(writeAnimationProperty(element, "settings.fill", value)).toBeTrue();
         expect(readAnimationProperty(element, "settings.fill")).toBe("#808080");
+    });
+
+    it("interpolates alpha through existing color tracks", () => {
+        const value = evaluateTrack({
+            id: "alpha-track", targetId: "element", property: "settings.fill", valueType: "color",
+            keyframes: [
+                { id: "from", time: 0, value: createAnimationColorValue("#00000000") },
+                { id: "to", time: 1, value: createAnimationColorValue("#ffffff") },
+            ],
+        }, 0.5);
+        expect(value).toBe("#80808080");
     });
 });
 

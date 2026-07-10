@@ -9,6 +9,8 @@ import { EditorService } from "../editor.service";
 import { Tool } from "./tool";
 import { contourForLine, deletePathAnchor, insertPathPoint, togglePathLineType } from "./path-edit.helpers";
 import { TransformInteraction } from "./transform.interaction";
+import { elementGradient, GradientHandle, moveGradientHandle } from "src/app/editor/objects/gradient-geometry";
+import { GradientPaint } from "src/app/editor/objects/paint.object";
 
 export class SelectTool extends Tool {
     override readonly preferenceKey = "select";
@@ -27,6 +29,7 @@ export class SelectTool extends Tool {
     convertingIncomingLine?: Line;
     convertingOutgoingLine?: Line;
     private readonly transformInteraction: TransformInteraction;
+    private gradientDrag?: { element: AnyElement; paint: GradientPaint; handle: GradientHandle };
 
     constructor(private _editor: EditorService) {
         super(_editor);
@@ -205,6 +208,16 @@ export class SelectTool extends Tool {
         return this.findLine(this._editor.selectedElement, segmentId);
     }
 
+    private findGradientHandle(target: HTMLElement): GradientHandle | undefined {
+        let current: HTMLElement | null = target;
+        while(current) {
+            const handle = current.dataset['gradientHandle'];
+            if(handle === 'start' || handle === 'end' || handle === 'center' || handle === 'radius' || handle === 'focal') return handle;
+            current = current.parentElement;
+        }
+        return undefined;
+    }
+
     private convertLine(line: Line) {
         togglePathLineType(line);
     }
@@ -229,6 +242,17 @@ export class SelectTool extends Tool {
         let target = <HTMLElement>event.target;
         const canvasPoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
         this.moveStart = canvasPoint;
+
+        const gradientHandle = this.findGradientHandle(target);
+        const selectedGradient = this._editor.selectedElement ? elementGradient(this._editor.selectedElement, this._editor.selectedGradientPaintKey) : undefined;
+        if(gradientHandle && selectedGradient && this._editor.selectedElement && !this._editor.selectedElement.locked) {
+            pinAncestorTransformOrigins(this.rootElements(), this._editor.selectedElement);
+            pinTransformOrigin(this._editor.selectedElement);
+            this.gradientDrag = { element: this._editor.selectedElement, paint: selectedGradient.paint, handle: gradientHandle };
+            this.moveStart = this.canvasToSelectedLocal(canvasPoint);
+            this.canDeselect = false;
+            return;
+        }
 
         const transformHandle = this.transformInteraction.handle(target);
         if(transformHandle && this.transformInteraction.begin(transformHandle, event)) {
@@ -309,6 +333,15 @@ export class SelectTool extends Tool {
     }
 
     override drag(event: MouseEvent) {
+        if(this.gradientDrag && this._editor.selectedElement === this.gradientDrag.element) {
+            const point = this.canvasToSelectedLocal(this._editor.toCanvasPoint(event.clientX, event.clientY));
+            if(moveGradientHandle(this.gradientDrag.element, this.gradientDrag.paint, this.gradientDrag.handle, point)) {
+                this.movedElement = true;
+                this.canDeselect = false;
+            }
+            return;
+        }
+
         if(this.transformInteraction.update(event)) {
             this.movedElement = true;
             this.canDeselect = false;
@@ -400,6 +433,7 @@ export class SelectTool extends Tool {
     override up(event: MouseEvent) {
         this.movingElement = false;
         this.transformInteraction.end();
+        this.gradientDrag = undefined;
         this.movingPoint = undefined;
         this.movingPointRole = undefined;
         this.movingLine = undefined;

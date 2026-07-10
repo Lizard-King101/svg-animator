@@ -41,7 +41,7 @@ export class ElementFactory {
     }
 
     private cloneColor(value: unknown): unknown {
-        return value instanceof Color ? new Color(value.hex) : value;
+        return value instanceof Color ? new Color(value.serialized) : value;
     }
 
     private clonePath(path: Path): Path {
@@ -105,7 +105,7 @@ export class ElementFactory {
         clone.motion = { ...text.motion };
         clone.settings = {
             ...text.settings,
-            color: text.settings.color ? new Color(text.settings.color.hex) : null,
+            color: text.settings.color ? new Color(text.settings.color.serialized) : null,
         };
         return clone;
     }

@@ -6,7 +6,7 @@
             [attr.x1]="gradient.coordinates.x1" [attr.y1]="gradient.coordinates.y1"
             [attr.x2]="gradient.coordinates.x2" [attr.y2]="gradient.coordinates.y2">
             <svg:stop *ngFor="let stop of gradient.stops" [id]="stop.id" [attr.offset]="stop.offset"
-                [attr.stop-color]="stop.color.hex" [attr.stop-opacity]="stop.opacity" />
+                [attr.stop-color]="stop.color.hex" [attr.stop-opacity]="stop.color.alpha" />
         </svg:linearGradient>
         <svg:radialGradient *ngIf="gradient.type == 'radial-gradient'"
             [id]="gradient.id" [attr.gradientUnits]="gradient.units" [attr.spreadMethod]="gradient.spreadMethod"
@@ -14,7 +14,7 @@
             [attr.cx]="gradient.coordinates.cx" [attr.cy]="gradient.coordinates.cy" [attr.r]="gradient.coordinates.r"
             [attr.fx]="gradient.coordinates.fx" [attr.fy]="gradient.coordinates.fy">
             <svg:stop *ngFor="let stop of gradient.stops" [id]="stop.id" [attr.offset]="stop.offset"
-                [attr.stop-color]="stop.color.hex" [attr.stop-opacity]="stop.opacity" />
+                [attr.stop-color]="stop.color.hex" [attr.stop-opacity]="stop.color.alpha" />
         </svg:radialGradient>
     </ng-container>
 </svg:defs>
@@ -38,8 +38,10 @@
         [attr.transform]="transformAttr(path)"
         [attr.opacity]="opacityAttr(path)"
         [attr.fill]="path.settings.fill_enabled ? (paintValue(path.settings.fill) ?? 'none') : 'none'"
+        [attr.fill-opacity]="path.settings.fill_enabled ? paintOpacity(path.settings.fill) : null"
         [attr.fill-rule]="path.fillRule"
         [attr.stroke]="paintValue(path.settings.stroke)"
+        [attr.stroke-opacity]="paintOpacity(path.settings.stroke)"
         [attr.stroke-width]="path.settings.stroke_width"
         [attr.stroke-linecap]="path.settings.line_cap"
         [attr.stroke-linejoin]="path.settings.line_join"
@@ -61,7 +63,9 @@
         [attr.rx]="shape.settings.corner_radius || null"
         [attr.ry]="shape.settings.corner_radius || null"
         [attr.fill]="paintValue(shape.settings.fill) ?? 'none'"
+        [attr.fill-opacity]="paintOpacity(shape.settings.fill)"
         [attr.stroke]="paintValue(shape.settings.stroke)"
+        [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)"
         [attr.stroke-width]="shape.settings.stroke_width"
         />
         <svg:ellipse
@@ -74,7 +78,9 @@
         [attr.rx]="shape.radiusX"
         [attr.ry]="shape.radiusY"
         [attr.fill]="paintValue(shape.settings.fill) ?? 'none'"
+        [attr.fill-opacity]="paintOpacity(shape.settings.fill)"
         [attr.stroke]="paintValue(shape.settings.stroke)"
+        [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)"
         [attr.stroke-width]="shape.settings.stroke_width"
         />
     </ng-container>
@@ -90,6 +96,7 @@
         [attr.font-weight]="text.settings.font_weight"
         [attr.text-anchor]="text.textAnchor"
         [attr.fill]="text.settings.color?.hex ?? '#000000'"
+        [attr.fill-opacity]="text.settings.color && text.settings.color.alpha < 0.9999 ? text.settings.color.alpha : null"
         dominant-baseline="hanging">
             <svg:tspan
             *ngFor="let span of textTspans(text)"
@@ -123,7 +130,9 @@
         [attr.width]="shape.width"
         [attr.height]="shape.height"
         [attr.fill]="paintValue(shape.settings.fill) ?? 'none'"
+        [attr.fill-opacity]="paintOpacity(shape.settings.fill)"
         [attr.stroke]="paintValue(shape.settings.stroke)"
+        [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)"
         [attr.stroke-width]="shape.settings.stroke_width"
         />
         <svg:ellipse
@@ -136,7 +145,9 @@
         [attr.rx]="shape.radiusX"
         [attr.ry]="shape.radiusY"
         [attr.fill]="paintValue(shape.settings.fill) ?? 'none'"
+        [attr.fill-opacity]="paintOpacity(shape.settings.fill)"
         [attr.stroke]="paintValue(shape.settings.stroke)"
+        [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)"
         [attr.stroke-width]="shape.settings.stroke_width"
         />
     </ng-container>
@@ -282,6 +293,30 @@
             [attr.stroke-width]="overlay.screenPx(1.5)"
             vector-effect="non-scaling-stroke"
             />
+        </ng-container>
+    </svg:g>
+</ng-container>
+<ng-container *ngIf="editor.selectedElement?.visible && !editor.selectedElement?.locked && overlay.gradient(editor.selectedElement) as gradient">
+    <svg:g [attr.transform]="overlay.selectedTransform(editor.selectedElement!)">
+        <ng-container *ngIf="gradient.kind == 'linear'">
+            <svg:line [attr.x1]="gradient.start?.x" [attr.y1]="gradient.start?.y" [attr.x2]="gradient.end?.x" [attr.y2]="gradient.end?.y"
+                      stroke="#f59e0b" [attr.stroke-width]="overlay.screenPx(1.5)" vector-effect="non-scaling-stroke" pointer-events="none" />
+            <svg:circle data-gradient-handle="start" [attr.cx]="gradient.start?.x" [attr.cy]="gradient.start?.y"
+                        [attr.r]="overlay.screenPx(5)" fill="#14141a" stroke="#f59e0b" [attr.stroke-width]="overlay.screenPx(2)" vector-effect="non-scaling-stroke" />
+            <svg:circle data-gradient-handle="end" [attr.cx]="gradient.end?.x" [attr.cy]="gradient.end?.y"
+                        [attr.r]="overlay.screenPx(5)" fill="#f59e0b" stroke="#14141a" [attr.stroke-width]="overlay.screenPx(1.5)" vector-effect="non-scaling-stroke" />
+        </ng-container>
+        <ng-container *ngIf="gradient.kind == 'radial'">
+            <svg:line [attr.x1]="gradient.center?.x" [attr.y1]="gradient.center?.y" [attr.x2]="gradient.radius?.x" [attr.y2]="gradient.radius?.y"
+                      stroke="#f59e0b" [attr.stroke-width]="overlay.screenPx(1.5)" vector-effect="non-scaling-stroke" pointer-events="none" />
+            <svg:line [attr.x1]="gradient.center?.x" [attr.y1]="gradient.center?.y" [attr.x2]="gradient.focal?.x" [attr.y2]="gradient.focal?.y"
+                      stroke="#f59e0b" [attr.stroke-width]="overlay.screenPx(1)" [attr.stroke-dasharray]="overlay.screenDash(3, 3)" vector-effect="non-scaling-stroke" pointer-events="none" />
+            <svg:circle data-gradient-handle="center" [attr.cx]="gradient.center?.x" [attr.cy]="gradient.center?.y"
+                        [attr.r]="overlay.screenPx(5)" fill="#14141a" stroke="#f59e0b" [attr.stroke-width]="overlay.screenPx(2)" vector-effect="non-scaling-stroke" />
+            <svg:circle data-gradient-handle="radius" [attr.cx]="gradient.radius?.x" [attr.cy]="gradient.radius?.y"
+                        [attr.r]="overlay.screenPx(5)" fill="#f59e0b" stroke="#14141a" [attr.stroke-width]="overlay.screenPx(1.5)" vector-effect="non-scaling-stroke" />
+            <svg:circle data-gradient-handle="focal" [attr.cx]="gradient.focal?.x" [attr.cy]="gradient.focal?.y"
+                        [attr.r]="overlay.screenPx(4)" fill="#ffffff" stroke="#f59e0b" [attr.stroke-width]="overlay.screenPx(1.5)" vector-effect="non-scaling-stroke" />
         </ng-container>
     </svg:g>
 </ng-container>

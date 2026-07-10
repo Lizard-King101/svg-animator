@@ -16,15 +16,15 @@ Legend: **Native** = editable model (including import normalization); **Render/e
 | `symbol`, `use` | Partial | Yes | Yes | Local `use` of editable geometry expands to editable groups; reusable symbol semantics remain planned |
 | Clipping paths | Yes | Yes | Yes | Local `clipPath` geometry, compound unions, and nested intersections normalize to editable clipping groups |
 | Masks | No | Source | Yes | Distinct from clipping |
-| Solid fill/stroke | Yes | Yes | Yes | Hex, RGB, and browser-recognized solid colors |
-| Linear/radial gradients | Yes | Yes | Yes | References normalize to editable per-element paints; inheritance, units, transforms, spread, stops, color, and opacity are retained |
+| Solid fill/stroke | Yes | Yes | Yes | Hex, RGB/RGBA, alpha-aware picking, and browser-recognized solid colors |
+| Linear/radial gradients | Yes | Yes | Yes | References normalize to editable per-element paints; direct canvas handles and stop popovers edit inheritance-normalized geometry and alpha-aware stops |
 | Patterns | No | Source | Yes | Reusable pattern editing remains planned |
 | Dashes/markers/vector effects | No | Source | Yes | Style-depth milestone |
 | Images | No | Source | Yes | External references are stripped; safe embedded raster data is retained |
 | Filters/blend modes | No | Source | Yes | Sanitized before rendering |
 | Metadata/accessibility | Partial | Partial | Partial | Title can name a document; richer metadata remains planned |
 | SMIL/CSS/script animation | No | No | Rejected | Active elements and stylesheets are removed before persistence |
-| Editor animation JSON/runtime | Native model | Static SVG only | N/A | Gradient coordinates, stop offsets/colors/opacity, and solid paints use the same timeline pipeline |
+| Editor animation JSON/runtime | Native model | Static SVG only | N/A | Gradient geometry is grouped like path shape; stop offsets and alpha-aware colors use a compact timeline popover |
 
 ## Import safety policy
 

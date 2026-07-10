@@ -33,7 +33,7 @@ import { pinTransformOrigin, resolvedOrigin } from "./objects/element-bounds";
 import { canConvertStrokeToPath, StrokeToPathProfile } from "./objects/stroke-outline.object";
 import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, createAnimationColorValue } from "./objects/animation.object";
 import { pathPointAnimationProperty, readAnimationProperty } from "./objects/animation-targets";
-import { createDefaultGradient, GradientCoordinateKey, GradientKind, GradientPaint, GradientStop, gradientAnimationProperties, isGradientPaint } from "./objects/paint.object";
+import { createDefaultGradient, GradientKind, GradientPaint, GradientStop, gradientAnimationProperties, isGradientPaint } from "./objects/paint.object";
 
 @Component({
     standalone: true,
@@ -73,6 +73,8 @@ export class EditorPage implements AfterViewInit {
     private suppressLayerClick = false;
     private animationTransformDragStart?: AnimationTransformDragStart;
     private animationPathPointDragStart?: AnimationPathPointDragStart;
+    private animationGradientDragStart?: AnimationGradientDragStart;
+    openGradientStopsKey?: string;
     renamingLayer?: AnyElement;
     selectedLayers: AnyElement[] = [];
     private lastSelectedLayer?: AnyElement;
@@ -190,6 +192,10 @@ export class EditorPage implements AfterViewInit {
         this.editor.keyReleased(event.key);
     }
 
+    @HostListener('document:click') closeGradientStopsPopover() {
+        this.openGradientStopsKey = undefined;
+    }
+
     constructor(
         public editor: EditorService,
         public animation: AnimationPlaybackService,
@@ -219,11 +225,13 @@ export class EditorPage implements AfterViewInit {
     beginCanvasInteraction(): void {
         this.captureAnimationTransformDragStart();
         this.captureAnimationPathPointDragStart();
+        this.captureAnimationGradientDragStart();
     }
 
     endCanvasInteraction(): void {
         this.commitAnimationTransformDrag();
         this.commitAnimationPathPointDrag();
+        this.commitAnimationGradientDrag();
     }
 
     // ── New SVG dialog ────────────────────────────────────────────────
@@ -971,8 +979,19 @@ export class EditorPage implements AfterViewInit {
         return isGradientPaint(value) ? value : null;
     }
 
-    gradientCoordinateValue(gradient: GradientPaint, coordinate: string): number | undefined {
-        return gradient.coordinates[coordinate as GradientCoordinateKey];
+    toggleGradientStopsPopover(element: AnyElement | undefined, key: string, event: MouseEvent) {
+        event.stopPropagation();
+        if(!element) return;
+        const rowKey = `${element.id}:${key}`;
+        this.openGradientStopsKey = this.openGradientStopsKey === rowKey ? undefined : rowKey;
+    }
+
+    gradientStopsPopoverOpen(element: AnyElement | undefined, key: string): boolean {
+        return !!element && this.openGradientStopsKey === `${element.id}:${key}`;
+    }
+
+    selectGradientPaint(key: string) {
+        if(key === "fill" || key === "stroke") this.editor.selectedGradientPaintKey = key;
     }
 
     enableGradientPaint(element: AnyElement | undefined, key: string, kind: GradientKind = "linear-gradient") {
@@ -980,17 +999,18 @@ export class EditorPage implements AfterViewInit {
         const gradient = createDefaultGradient(this.editor.ID, kind);
         const current = this.settingsOf(element)[key];
         if(current instanceof Color) {
-            gradient.stops[0].color = new Color(current.hex);
-            gradient.stops[1].color = new Color(current.hex);
+            gradient.stops[0].color = new Color(current.serialized);
+            gradient.stops[1].color = new Color(current.serialized);
         }
         this.settingsOf(element)[key] = gradient;
+        this.selectGradientPaint(key);
         if(element instanceof Path && key === "fill") element.settings.fill_enabled = true;
         this.scheduleAttributeSnapshot();
     }
 
     useSolidPaint(element: AnyElement | undefined, key: string, gradient: GradientPaint) {
         if(!element || (key !== "fill" && key !== "stroke") || this.animation.mode === "animate") return;
-        this.settingsOf(element)[key] = gradient.stops[0] ? new Color(gradient.stops[0].color.hex) : null;
+        this.settingsOf(element)[key] = gradient.stops[0] ? new Color(gradient.stops[0].color.serialized) : null;
         this.removeGradientTracks(element, `settings.${key}.gradient.`);
         this.scheduleAttributeSnapshot();
     }
@@ -1014,16 +1034,6 @@ export class EditorPage implements AfterViewInit {
         this.scheduleAttributeSnapshot();
     }
 
-    setGradientCoordinate(element: AnyElement | undefined, key: string, gradient: GradientPaint, coordinate: GradientCoordinateKey, value: number | string | null) {
-        if(!element) return;
-        const numeric = typeof value === "number" ? value : Number(value);
-        if(!Number.isFinite(numeric)) return;
-        const property = `settings.${key}.gradient.${coordinate}`;
-        if(this.animation.mode === "animate") this.animation.setAnimatedPropertyValue(element, property, "number", numeric);
-        else gradient.coordinates[coordinate] = numeric;
-        this.scheduleAttributeSnapshot();
-    }
-
     setGradientStopValue(element: AnyElement | undefined, key: string, stop: GradientStop, field: "offset" | "opacity" | "color", value: unknown) {
         if(!element) return;
         const property = `settings.${key}.gradient.stops.${stop.id}.${field}`;
@@ -1034,7 +1044,10 @@ export class EditorPage implements AfterViewInit {
             this.scheduleAttributeSnapshot();
             return;
         }
-        if(field === "color" && value instanceof Color) stop.color = value;
+        if(field === "color" && value instanceof Color) {
+            stop.color = value;
+            stop.opacity = value.alpha;
+        }
         if(field !== "color") {
             const numeric = typeof value === "number" ? value : Number(value);
             if(Number.isFinite(numeric)) stop[field] = Math.max(0, Math.min(1, numeric));
@@ -1045,7 +1058,7 @@ export class EditorPage implements AfterViewInit {
     addGradientStop(gradient: GradientPaint) {
         if(this.animation.mode === "animate") return;
         const last = gradient.stops[gradient.stops.length - 1];
-        gradient.stops.push({ id: this.editor.ID, offset: 0.5, color: new Color(last?.color.hex ?? "#ffffff"), opacity: last?.opacity ?? 1 });
+        gradient.stops.push({ id: this.editor.ID, offset: 0.5, color: new Color(last?.color.serialized ?? "#ffffff"), opacity: last?.color.alpha ?? 1 });
         gradient.stops.sort((a, b) => a.offset - b.offset);
         this.scheduleAttributeSnapshot();
     }
@@ -1426,6 +1439,36 @@ export class EditorPage implements AfterViewInit {
             values[point.id] = { x: point.x, y: point.y };
         });
         return values;
+    }
+
+    private captureAnimationGradientDragStart() {
+        const element = this.editor.selectedElement;
+        if(this.animation.mode !== 'animate' || !element) {
+            this.animationGradientDragStart = undefined;
+            return;
+        }
+        const values: Record<string, number> = {};
+        gradientAnimationProperties(element.settings as Record<string, unknown>)
+            .filter((definition) => !definition.property.includes('.stops.'))
+            .forEach((definition) => {
+                const value = readAnimationProperty(element, definition.property);
+                if(typeof value === 'number') values[definition.property] = value;
+            });
+        this.animationGradientDragStart = Object.keys(values).length ? { element, values } : undefined;
+    }
+
+    private commitAnimationGradientDrag() {
+        const start = this.animationGradientDragStart;
+        this.animationGradientDragStart = undefined;
+        if(this.animation.mode !== 'animate' || !start || this.editor.selectedElement !== start.element) return;
+        const changes = Object.entries(start.values).flatMap(([property, baseline]) => {
+            const value = readAnimationProperty(start.element, property);
+            if(typeof value === 'number' && Math.abs(value - baseline) >= 0.0005) {
+                return [{ property, baseline, value }];
+            }
+            return [];
+        });
+        changes.forEach(({ property, baseline, value }) => this.animation.upsertKeyframe(start.element, property, 'number', value, baseline));
     }
 
     selectLayer(element: AnyElement, event?: MouseEvent) {
@@ -2023,6 +2066,11 @@ interface AnimationTransformDragStart {
 interface AnimationPathPointDragStart {
     path: Path;
     values: Record<string, { x: number; y: number }>;
+}
+
+interface AnimationGradientDragStart {
+    element: AnyElement;
+    values: Record<string, number>;
 }
 
 interface GuideDragState {
