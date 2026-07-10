@@ -65,7 +65,7 @@
     </div>
 
     <!-- Canvas viewport -->
-    <app-canvas-workspace
+    <app-canvas-workspace class="view-port"
       (interactionStart)="beginCanvasInteraction()"
       (interactionEnd)="endCanvasInteraction()">
       <svg #canvas display *ngIf="editor.selectedSVG"></svg>

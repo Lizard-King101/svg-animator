@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, HostListener, ViewChild, ViewEncapsulation } from "@angular/core";
+import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, HostListener, ViewChild } from "@angular/core";
 import { NgClass, NgFor, NgIf, NgStyle, NgTemplateOutlet } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute } from "@angular/router";
@@ -61,7 +61,6 @@ import { pathPointAnimationProperty, readAnimationProperty } from "./objects/ani
     ],
     templateUrl: 'editor.page.html',
     styleUrls: ['editor.page.scss'],
-    encapsulation: ViewEncapsulation.None,
 })
 export class EditorPage implements AfterViewInit {
     scale: number = 1;

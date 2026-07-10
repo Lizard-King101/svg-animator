@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, EventEmitter, NgZone, OnDestroy, Output, ViewChild } from "@angular/core";
+import { AfterViewInit, Component, ElementRef, EventEmitter, NgZone, OnDestroy, Output } from "@angular/core";
 import { DocumentMutationService } from "../../_services/document-mutation.service";
 import { EditorService } from "../../_services/editor.service";
 import { Point } from "../../editor/objects/point.object";
@@ -6,11 +6,9 @@ import { Point } from "../../editor/objects/point.object";
 @Component({
     selector: "app-canvas-workspace",
     standalone: true,
-    template: '<div #viewport class="view-port"><ng-content /></div>',
-    styles: [':host { display: contents; }'],
+    template: '<ng-content />',
 })
 export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
-    @ViewChild("viewport", { static: true }) private viewport!: ElementRef<HTMLElement>;
     @Output() interactionStart = new EventEmitter<void>();
     @Output() interactionEnd = new EventEmitter<void>();
 
@@ -18,12 +16,13 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
     private movingView = false;
     private moveStart = new Point(0, 0);
 
-    get element(): HTMLElement { return this.viewport.nativeElement; }
+    get element(): HTMLElement { return this.host.nativeElement; }
 
     constructor(
         private editor: EditorService,
         private mutations: DocumentMutationService,
         private zone: NgZone,
+        private host: ElementRef<HTMLElement>,
     ) {}
 
     ngAfterViewInit(): void {
