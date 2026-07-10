@@ -32,3 +32,5 @@ The importer parses text with `DOMParser`; imported nodes are never inserted as 
 ## Fixture requirements
 
 Each supported family needs fixtures for native editing, save/reload, exported markup, and representative visual output. Unsupported families need opaque-preservation and sanitizer fixtures before they can be advertised as preserved.
+
+The maintained real-world corpus and current diagnostic baseline are documented in [SVG_IMPORT_CORPUS.md](SVG_IMPORT_CORPUS.md).

@@ -10,6 +10,10 @@ const SAFE_STYLE_PROPERTIES = new Set([
     "vector-effect", "font-family", "font-size", "font-style", "font-weight",
     "letter-spacing", "word-spacing", "text-anchor", "dominant-baseline",
     "transform", "transform-origin", "clip-path", "mask", "filter", "mix-blend-mode",
+    "marker", "marker-start", "marker-mid", "marker-end", "stop-color", "stop-opacity",
+    "flood-color", "flood-opacity", "lighting-color", "color", "background-color",
+    "enable-background", "overflow", "cursor", "text-decoration", "baseline-shift",
+    "shape-rendering", "color-rendering", "image-rendering", "color-interpolation",
 ]);
 
 export interface SanitizedSVG {
@@ -63,9 +67,9 @@ export function sanitizeSVGText(source: string): SanitizedSVG {
             }
             if(name === "style") {
                 const sanitized = sanitizeStyle(value);
-                if(sanitized) element.setAttribute(attribute.name, sanitized);
+                if(sanitized.value) element.setAttribute(attribute.name, sanitized.value);
                 else element.removeAttributeNode(attribute);
-                if(sanitized !== value) remove("Removed unsupported or unsafe inline styles.");
+                if(sanitized.removed) remove("Removed unsupported or unsafe inline styles.");
                 return;
             }
             if(containsUnsafeUrl(value)) {
@@ -87,17 +91,25 @@ export function sanitizeSVGText(source: string): SanitizedSVG {
     };
 }
 
-function sanitizeStyle(style: string): string {
+function sanitizeStyle(style: string): { value: string; removed: boolean } {
     const declarations: string[] = [];
+    let removed = false;
     style.split(";").forEach((entry) => {
         const separator = entry.indexOf(":");
-        if(separator < 1) return;
+        if(!entry.trim()) return;
+        if(separator < 1) {
+            removed = true;
+            return;
+        }
         const property = entry.slice(0, separator).trim().toLowerCase();
         const value = entry.slice(separator + 1).trim();
-        if(!SAFE_STYLE_PROPERTIES.has(property) || !value || containsUnsafeUrl(value)) return;
+        if(!SAFE_STYLE_PROPERTIES.has(property) || !value || containsUnsafeUrl(value)) {
+            removed = true;
+            return;
+        }
         declarations.push(`${property}: ${value}`);
     });
-    return declarations.join("; ");
+    return { value: declarations.join("; "), removed };
 }
 
 function isSafeResourceReference(value: string): boolean {

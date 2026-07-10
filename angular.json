@@ -93,6 +93,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "*.svg",
+                "input": "SVG Samples",
+                "output": "svg-samples"
               }
             ],
             "styles": [
