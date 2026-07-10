@@ -3,10 +3,12 @@ import { Line } from "src/app/editor/objects/line.object";
 import { Path, PathContour } from "src/app/editor/objects/elements/path.object";
 import { Point } from "src/app/editor/objects/point.object";
 import { AnyElement } from "src/app/editor/objects/svg.object";
-import { combinedMatrixFor, localBounds, parentMatrixFor, pinAncestorTransformOrigins, pinTransformOrigin, resolvedOrigin } from "src/app/editor/objects/element-bounds";
-import { Bounds, TransformState, applyMatrix, invertMatrix, transformMatrix } from "src/app/editor/objects/transform.object";
+import { combinedMatrixFor, parentMatrixFor, pinAncestorTransformOrigins, pinTransformOrigin } from "src/app/editor/objects/element-bounds";
+import { applyMatrix, invertMatrix } from "src/app/editor/objects/transform.object";
 import { EditorService } from "../editor.service";
 import { Tool } from "./tool";
+import { contourForLine, deletePathAnchor, insertPathPoint, togglePathLineType } from "./path-edit.helpers";
+import { TransformInteraction } from "./transform.interaction";
 
 export class SelectTool extends Tool {
     override readonly preferenceKey = "select";
@@ -24,10 +26,11 @@ export class SelectTool extends Tool {
     movingLines?: Line[];
     convertingIncomingLine?: Line;
     convertingOutgoingLine?: Line;
-    transformDrag?: TransformDrag;
+    private readonly transformInteraction: TransformInteraction;
 
     constructor(private _editor: EditorService) {
         super(_editor);
+        this.transformInteraction = new TransformInteraction(_editor);
     }
 
     private clonePoint(point: Point) {
@@ -41,42 +44,6 @@ export class SelectTool extends Tool {
         );
     }
 
-    private cubicPoint(start: Point, controlStart: Point, controlEnd: Point, end: Point, t: number) {
-        const mt = 1 - t;
-        return new Point(
-            (mt * mt * mt * start.x) + (3 * mt * mt * t * controlStart.x) + (3 * mt * t * t * controlEnd.x) + (t * t * t * end.x),
-            (mt * mt * mt * start.y) + (3 * mt * mt * t * controlStart.y) + (3 * mt * t * t * controlEnd.y) + (t * t * t * end.y),
-        );
-    }
-
-    private closestLineT(start: Point, end: Point, target: Point) {
-        const dx = end.x - start.x;
-        const dy = end.y - start.y;
-        const lengthSquared = (dx * dx) + (dy * dy);
-        if(lengthSquared == 0) {
-            return 0.5;
-        }
-
-        return Math.max(0, Math.min(1, (((target.x - start.x) * dx) + ((target.y - start.y) * dy)) / lengthSquared));
-    }
-
-    private closestBezierT(start: Point, controlStart: Point, controlEnd: Point, end: Point, target: Point) {
-        let bestT = 0.5;
-        let bestDistance = Number.POSITIVE_INFINITY;
-
-        for(let i = 0; i <= 40; i++) {
-            const t = i / 40;
-            const point = this.cubicPoint(start, controlStart, controlEnd, end, t);
-            const distance = point.distanceFrom(target);
-            if(distance < bestDistance) {
-                bestDistance = distance;
-                bestT = t;
-            }
-        }
-
-        return bestT;
-    }
-
     private findLine(path: Path, id?: string): Line | undefined {
         return this.allLines(path).find((line) => {
             return line.id == id;
@@ -88,38 +55,7 @@ export class SelectTool extends Tool {
     }
 
     private contourForLine(path: Path, line: Line): PathContour | undefined {
-        return path.contours.find((contour) => contour.lines.includes(line));
-    }
-
-    private contourForAnchor(path: Path, anchor: Point): PathContour | undefined {
-        return path.contours.find((contour) => {
-            return contour.lines.some((line) => line.points[0] == anchor || line.points[1] == anchor);
-        });
-    }
-
-    private cloneTransform(transform: TransformState): TransformState {
-        return {
-            translateX: transform.translateX,
-            translateY: transform.translateY,
-            scaleX: transform.scaleX,
-            scaleY: transform.scaleY,
-            rotation: transform.rotation,
-            originX: transform.originX,
-            originY: transform.originY,
-        };
-    }
-
-    private findTransformHandle(target: HTMLElement): string | undefined {
-        let current: HTMLElement | null = target;
-        while(current) {
-            const handle = current.dataset['transformHandle'];
-            if(handle) {
-                return handle;
-            }
-            current = current.parentElement;
-        }
-
-        return undefined;
+        return contourForLine(path, line);
     }
 
     private rootElements(): AnyElement[] {
@@ -140,148 +76,6 @@ export class SelectTool extends Tool {
         const inverse = invertMatrix(parentMatrixFor(this.rootElements(), element));
         const local = applyMatrix(inverse, point.x, point.y);
         return new Point(local.x, local.y);
-    }
-
-    private rotateVector(point: Point, degrees: number): Point {
-        const radians = degrees * Math.PI / 180;
-        const cos = Math.cos(radians);
-        const sin = Math.sin(radians);
-        return new Point(
-            (point.x * cos) - (point.y * sin),
-            (point.x * sin) + (point.y * cos),
-        );
-    }
-
-    private oppositeHandlePoint(bounds: Bounds, handle: string): Point {
-        const x = handle.includes('w')
-            ? bounds.x + bounds.width
-            : handle.includes('e')
-                ? bounds.x
-                : bounds.x + bounds.width / 2;
-        const y = handle.includes('n')
-            ? bounds.y + bounds.height
-            : handle.includes('s')
-                ? bounds.y
-                : bounds.y + bounds.height / 2;
-        return new Point(x, y);
-    }
-
-    private handlePoint(bounds: Bounds, handle: string): Point {
-        const x = handle.includes('w')
-            ? bounds.x
-            : handle.includes('e')
-                ? bounds.x + bounds.width
-                : bounds.x + bounds.width / 2;
-        const y = handle.includes('n')
-            ? bounds.y
-            : handle.includes('s')
-                ? bounds.y + bounds.height
-                : bounds.y + bounds.height / 2;
-        return new Point(x, y);
-    }
-
-    private beginTransformDrag(handle: string, event: MouseEvent) {
-        const element = this._editor.selectedElement;
-        if(!element || element.locked || !element.visible) {
-            return false;
-        }
-
-        if(handle == 'move') {
-            pinAncestorTransformOrigins(this.rootElements(), element);
-            const canvasPoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
-            this.moveStart = this.canvasToParentLocal(element, canvasPoint);
-            this.movingElement = true;
-            this.canDeselect = false;
-            return true;
-        }
-
-        const bounds = localBounds(element);
-        const origin = handle == 'origin' ? resolvedOrigin(element) : pinTransformOrigin(element);
-        const initial = this.cloneTransform(element.transform);
-        const own = transformMatrix(initial, origin);
-        const pivotLocal = handle == 'origin' || event.altKey
-            ? new Point(origin.x, origin.y)
-            : this.oppositeHandlePoint(bounds, handle);
-        const pivotParent = applyMatrix(own, pivotLocal.x, pivotLocal.y);
-        const handleLocal = this.handlePoint(bounds, handle);
-        const canvasPoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
-        const parentPoint = this.canvasToParentLocal(element, canvasPoint);
-
-        this.transformDrag = {
-            handle,
-            element,
-            bounds,
-            origin,
-            initial,
-            pivotLocal,
-            pivotParent: new Point(pivotParent.x, pivotParent.y),
-            handleLocal,
-            startAngle: Math.atan2(parentPoint.y - pivotParent.y, parentPoint.x - pivotParent.x) * 180 / Math.PI,
-        };
-        this.canDeselect = false;
-        return true;
-    }
-
-    private updateTransformDrag(event: MouseEvent) {
-        if(!this.transformDrag) {
-            return false;
-        }
-
-        const drag = this.transformDrag;
-        const canvasPoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
-        const parentPoint = this.canvasToParentLocal(drag.element, canvasPoint);
-        const next = this.cloneTransform(drag.initial);
-
-        if(drag.handle == 'origin') {
-            next.originX = parentPoint.x - drag.initial.translateX;
-            next.originY = parentPoint.y - drag.initial.translateY;
-            drag.element.transform = next;
-            return true;
-        }
-
-        if(drag.handle == 'rotate') {
-            const angle = Math.atan2(parentPoint.y - drag.pivotParent.y, parentPoint.x - drag.pivotParent.x) * 180 / Math.PI;
-            next.rotation = drag.initial.rotation + angle - drag.startAngle;
-            drag.element.transform = next;
-            return true;
-        }
-
-        const hasX = drag.handle.includes('e') || drag.handle.includes('w');
-        const hasY = drag.handle.includes('n') || drag.handle.includes('s');
-        const currentVector = parentPoint.subtract(drag.pivotParent);
-        const unrotated = this.rotateVector(currentVector, -drag.initial.rotation);
-        const initialVector = drag.handleLocal.subtract(drag.pivotLocal);
-
-        if(hasX && Math.abs(initialVector.x) > 0.000001) {
-            next.scaleX = this.nonZeroScale(unrotated.x / initialVector.x);
-        }
-
-        if(hasY && Math.abs(initialVector.y) > 0.000001) {
-            next.scaleY = this.nonZeroScale(unrotated.y / initialVector.y);
-        }
-
-        if(event.shiftKey) {
-            const ratio = hasX
-                ? next.scaleX / drag.initial.scaleX
-                : next.scaleY / drag.initial.scaleY;
-            next.scaleX = this.nonZeroScale(drag.initial.scaleX * ratio);
-            next.scaleY = this.nonZeroScale(drag.initial.scaleY * ratio);
-        }
-
-        const own = transformMatrix(next, drag.origin);
-        const mappedPivot = applyMatrix(own, drag.pivotLocal.x, drag.pivotLocal.y);
-        next.translateX += drag.pivotParent.x - mappedPivot.x;
-        next.translateY += drag.pivotParent.y - mappedPivot.y;
-        drag.element.transform = next;
-        return true;
-    }
-
-    private nonZeroScale(value: number): number {
-        if(Math.abs(value) < 0.01) {
-            return value < 0 ? -0.01 : 0.01;
-        }
-
-        return value;
     }
 
     private moveAnchor(path: Path, anchor: Point, delta: Point) {
@@ -412,144 +206,23 @@ export class SelectTool extends Tool {
     }
 
     private convertLine(line: Line) {
-        if(line.points.length < 2) {
-            return;
-        }
-
-        if(line.type == 'line') {
-            const start = line.points[0];
-            const end = line.points[1];
-            line.type = 'bezier';
-            line.controlStart = this.lerpPoint(start, end, 1 / 3);
-            line.controlEnd = this.lerpPoint(start, end, 2 / 3);
-            return;
-        }
-
-        line.type = 'line';
-        line.controlStart = undefined;
-        line.controlEnd = undefined;
+        togglePathLineType(line);
     }
 
     private insertPoint(path: Path, line: Line, targetPoint?: Point) {
-        const contour = this.contourForLine(path, line);
-        const lines = contour?.lines;
-        const index = lines?.indexOf(line) ?? -1;
-        if(index < 0 || line.points.length < 2) {
-            return;
+        const result = insertPathPoint(path, line, (options) => new Line(this._editor, options), targetPoint);
+        if(result.changed) {
+            this._editor.selectedPathAnchor = result.selectedAnchor;
+            this._editor.selectedPathLine = result.selectedLine;
         }
-
-        const start = line.points[0];
-        const end = line.points[1];
-        const t = line.type == 'bezier' && line.controlStart && line.controlEnd
-            ? this.closestBezierT(start, line.controlStart, line.controlEnd, end, targetPoint ?? this.lerpPoint(start, end, 0.5))
-            : this.closestLineT(start, end, targetPoint ?? this.lerpPoint(start, end, 0.5));
-
-        if(line.type == 'bezier' && line.controlStart && line.controlEnd) {
-            const q0 = this.lerpPoint(start, line.controlStart, t);
-            const q1 = this.lerpPoint(line.controlStart, line.controlEnd, t);
-            const q2 = this.lerpPoint(line.controlEnd, end, t);
-            const r0 = this.lerpPoint(q0, q1, t);
-            const r1 = this.lerpPoint(q1, q2, t);
-            const midpoint = this.lerpPoint(r0, r1, t);
-
-            line.points = [start, midpoint];
-            line.controlStart = q0;
-            line.controlEnd = r0;
-
-            const next = new Line(this._editor, {
-                type: 'bezier',
-                points: [midpoint, end],
-                controlStart: r1,
-                controlEnd: q2,
-            });
-
-            lines!.splice(index + 1, 0, next);
-            this._editor.selectedPathAnchor = midpoint;
-            this._editor.selectedPathLine = next;
-            return;
-        }
-
-        const midpoint = this.lerpPoint(start, end, t);
-        line.points = [start, midpoint];
-
-        const next = new Line(this._editor, {
-            points: [midpoint, end],
-        });
-
-        lines!.splice(index + 1, 0, next);
-        this._editor.selectedPathAnchor = midpoint;
-        this._editor.selectedPathLine = next;
     }
 
     private deleteAnchor(path: Path, anchor: Point) {
-        const contour = this.contourForAnchor(path, anchor);
-        if(!contour) {
-            return;
-        }
-
-        const lines = contour.lines;
-        const anchorCount = lines.length + (contour.closed ? 0 : 1);
-        if(anchorCount <= 2) {
-            return;
-        }
-
-        const isClosedBoundaryAnchor = contour.closed && lines.length > 1 && lines[0].points[0] == anchor;
-        if(isClosedBoundaryAnchor) {
-            const firstLine = lines[0];
-            const lastLine = lines[lines.length - 1];
-            const nextAnchor = firstLine.points[1];
-            const previousAnchor = lastLine.points[0];
-            const mergedIsBezier = lastLine.type == 'bezier' || firstLine.type == 'bezier';
-            const merged = new Line(this._editor, {
-                type: mergedIsBezier ? 'bezier' : 'line',
-                points: [previousAnchor, nextAnchor],
-                controlStart: lastLine.type == 'bezier' ? lastLine.controlStart : (mergedIsBezier ? this.clonePoint(previousAnchor) : undefined),
-                controlEnd: firstLine.type == 'bezier' ? firstLine.controlEnd : (mergedIsBezier ? this.clonePoint(nextAnchor) : undefined),
-            });
-
-            lines.splice(lines.length - 1, 1);
-            lines.splice(0, 1, merged);
+        const result = deletePathAnchor(path, anchor, (options) => new Line(this._editor, options));
+        if(result.changed) {
             this._editor.selectedPathAnchor = undefined;
-            this._editor.selectedPathLine = merged;
-            return;
+            this._editor.selectedPathLine = result.selectedLine;
         }
-
-        const incomingIndex = lines.findIndex((line) => {
-            return line.points[1] == anchor;
-        });
-        const outgoingIndex = lines.findIndex((line) => {
-            return line.points[0] == anchor;
-        });
-
-        if(incomingIndex < 0 && outgoingIndex < 0) {
-            return;
-        }
-
-        if(incomingIndex < 0) {
-            lines.splice(outgoingIndex, 1);
-            this._editor.selectedPathLine = lines[outgoingIndex] ?? lines[outgoingIndex - 1];
-        } else if(outgoingIndex < 0) {
-            lines.splice(incomingIndex, 1);
-            this._editor.selectedPathLine = lines[incomingIndex] ?? lines[incomingIndex - 1];
-        } else {
-            const incoming = lines[incomingIndex];
-            const outgoing = lines[outgoingIndex];
-            const mergedStart = incoming.points[0];
-            const mergedEnd = outgoing.points[1];
-            const isBezier = incoming.type == 'bezier' || outgoing.type == 'bezier';
-            const merged = new Line(this._editor, {
-                type: isBezier ? 'bezier' : 'line',
-                points: [mergedStart, mergedEnd],
-                controlStart: incoming.type == 'bezier' ? incoming.controlStart : (isBezier ? this.clonePoint(mergedStart) : undefined),
-                controlEnd: outgoing.type == 'bezier' ? outgoing.controlEnd : (isBezier ? this.clonePoint(mergedEnd) : undefined),
-            });
-
-            lines.splice(incomingIndex, 1, merged);
-            lines.splice(outgoingIndex > incomingIndex ? outgoingIndex : outgoingIndex + 1, 1);
-            this._editor.selectedPathLine = merged;
-        }
-
-        this._editor.selectedPathAnchor = undefined;
     }
 
     override down(event: MouseEvent) {
@@ -557,8 +230,9 @@ export class SelectTool extends Tool {
         const canvasPoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
         this.moveStart = canvasPoint;
 
-        const transformHandle = this.findTransformHandle(target);
-        if(transformHandle && this.beginTransformDrag(transformHandle, event)) {
+        const transformHandle = this.transformInteraction.handle(target);
+        if(transformHandle && this.transformInteraction.begin(transformHandle, event)) {
+            this.canDeselect = false;
             this._editor.selectedPathAnchor = undefined;
             this._editor.selectedPathLine = undefined;
             this._editor.selectedPathLines = [];
@@ -635,7 +309,7 @@ export class SelectTool extends Tool {
     }
 
     override drag(event: MouseEvent) {
-        if(this.updateTransformDrag(event)) {
+        if(this.transformInteraction.update(event)) {
             this.movedElement = true;
             this.canDeselect = false;
             return;
@@ -725,7 +399,7 @@ export class SelectTool extends Tool {
 
     override up(event: MouseEvent) {
         this.movingElement = false;
-        this.transformDrag = undefined;
+        this.transformInteraction.end();
         this.movingPoint = undefined;
         this.movingPointRole = undefined;
         this.movingLine = undefined;
@@ -855,16 +529,4 @@ export class SelectTool extends Tool {
                 break;
         }
     }
-}
-
-interface TransformDrag {
-    handle: string;
-    element: AnyElement;
-    bounds: Bounds;
-    origin: { x: number; y: number };
-    initial: TransformState;
-    pivotLocal: Point;
-    pivotParent: Point;
-    handleLocal: Point;
-    startAngle: number;
 }

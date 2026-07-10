@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, HostListener, NgZone, OnDestroy, ViewChild } from "@angular/core";
+import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, HostListener, ViewChild, ViewEncapsulation } from "@angular/core";
 import { NgClass, NgFor, NgIf, NgStyle, NgTemplateOutlet } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute } from "@angular/router";
@@ -12,6 +12,9 @@ import { ElementFactory } from "../_services/element-factory.service";
 import { LayerContext, LayerOperationsService } from "../_services/layer-operations.service";
 import { SVGDisplay } from "../_components/svg-display/svg-display.component";
 import { AnimationTimelineComponent } from "../_components/animation-timeline/animation-timeline.component";
+import { CanvasWorkspaceComponent } from "../_components/canvas-workspace/canvas-workspace.component";
+import { LayersPanelComponent } from "../_components/layers-panel/layers-panel.component";
+import { PropertiesPanelComponent } from "../_components/properties-panel/properties-panel.component";
 import { BoolAttribute } from "../_components/attributes/bool/bool.component";
 import { ColorAttribute } from "../_components/attributes/color/color.component";
 import { RangeAttribute } from "../_components/attributes/range/range.component";
@@ -43,7 +46,10 @@ import { pathPointAnimationProperty, readAnimationProperty } from "./objects/ani
         RangeAttribute,
         SelectAttribut,
         TextAttribute,
-        AnimationTimelineComponent
+        AnimationTimelineComponent,
+        CanvasWorkspaceComponent,
+        LayersPanelComponent,
+        PropertiesPanelComponent,
     ],
     providers: [
         EditorService,
@@ -54,14 +60,12 @@ import { pathPointAnimationProperty, readAnimationProperty } from "./objects/ani
         LayerOperationsService,
     ],
     templateUrl: 'editor.page.html',
-    styleUrls: ['editor.page.scss']
+    styleUrls: ['editor.page.scss'],
+    encapsulation: ViewEncapsulation.None,
 })
-export class EditorPage implements AfterViewInit, OnDestroy {
+export class EditorPage implements AfterViewInit {
     scale: number = 1;
 
-    movingView: boolean = false;
-    moveStart: Point;
-    private readonly viewportListeners = new AbortController();
     draggingLayer?: AnyElement;
     dragTargetLayer?: AnyElement;
     dragTargetPosition?: 'before' | 'after' | 'inside';
@@ -97,7 +101,7 @@ export class EditorPage implements AfterViewInit, OnDestroy {
     readonly ANIMATABLE_PROPERTIES = ANIMATABLE_PROPERTIES;
 
     @ViewChild('canvas') canvas?: ElementRef<SVGElement>;
-    @ViewChild('viewPort') viewPort?: ElementRef<HTMLElement>;
+    @ViewChild(CanvasWorkspaceComponent) workspace?: CanvasWorkspaceComponent;
 
     @HostListener('document:keydown', ['$event']) handleKeyDown(event: KeyboardEvent) {
         if(this.showExportDialog) {
@@ -193,136 +197,10 @@ export class EditorPage implements AfterViewInit, OnDestroy {
         public projectService: ProjectService,
         private layerOperations: LayerOperationsService,
         private route: ActivatedRoute,
-        private ngZone: NgZone,
         private cdr: ChangeDetectorRef
-    ) {
-        this.moveStart = new Point(0, 0);
-    }
-
-    ngOnDestroy(): void {
-        this.viewportListeners.abort();
-    }
+    ) {}
 
     ngAfterViewInit() {
-        const viewport = <HTMLElement>this.viewPort?.nativeElement;
-
-        viewport.addEventListener('mousedown', (event: MouseEvent) => {
-            this.ngZone.run(() => {
-                this.editor.closeContextMenu();
-                const start = this.editor.toViewportPoint(event.x, event.y);
-                switch (event.button) {
-                    case 0:
-                        if (this.editor.selectedTool) {
-                            this.editor.selectedTool.down(event);
-                            this.captureAnimationTransformDragStart();
-                            this.captureAnimationPathPointDragStart();
-                        }
-                        break;
-                    case 1:
-                        this.movingView = true;
-                        this.moveStart = start;
-                        break;
-                    case 2:
-                        event.preventDefault();
-                        break;
-                }
-            });
-        }, { signal: this.viewportListeners.signal });
-
-        viewport.addEventListener('mouseup', (event: MouseEvent) => {
-            this.ngZone.run(() => {
-                const wasMovingView = this.movingView;
-                if (this.editor.selectedTool) this.editor.selectedTool.up(event);
-                this.commitAnimationTransformDrag();
-                this.commitAnimationPathPointDrag();
-                this.movingView = false;
-                if(wasMovingView && this.editor.selectedSVG) {
-                    this.editor.rememberCanvasView(this.editor.selectedSVG);
-                }
-                // Skip snapshot on right-click — contextmenu fires next and handles it
-                if (event.button !== 2) this.snapshotAndSave();
-            });
-        }, { signal: this.viewportListeners.signal });
-
-        viewport.addEventListener('wheel', (event: WheelEvent) => {
-            this.ngZone.run(() => {
-                this.editor.closeContextMenu();
-                const svg = this.editor.selectedSVG;
-                if (svg) {
-                    const oldZoom = svg.zoom;
-                    const step = oldZoom * 0.1;
-                    const newZoom = Math.max(0.05, event.deltaY > 0 ? oldZoom - step : oldZoom + step);
-
-                    // Cursor relative to the viewport element
-                    const vpRect = viewport.getBoundingClientRect();
-                    const vx = event.clientX - vpRect.left;
-                    const vy = event.clientY - vpRect.top;
-
-                    // CSS scale: zoom origin is the element center, so rendered top-left is:
-                    //   pos + svgSize * (1 - zoom) / 2
-                    const renderedLeft = svg.pos.x + svg.width  * (1 - oldZoom) / 2;
-                    const renderedTop  = svg.pos.y + svg.height * (1 - oldZoom) / 2;
-
-                    // After zoom, shift pos so the canvas point under the cursor stays put
-                    const newRenderedLeft = vx - (vx - renderedLeft) * newZoom / oldZoom;
-                    const newRenderedTop  = vy - (vy - renderedTop)  * newZoom / oldZoom;
-
-                    svg.pos.x = newRenderedLeft - svg.width  * (1 - newZoom) / 2;
-                    svg.pos.y = newRenderedTop  - svg.height * (1 - newZoom) / 2;
-                    this.editor.setZoom(svg, newZoom);
-                }
-            });
-        }, { passive: true, signal: this.viewportListeners.signal });
-
-        viewport.addEventListener('contextmenu', (event: MouseEvent) => {
-            this.ngZone.run(() => {
-                event.preventDefault();
-                if (this.editor.selectedTool) this.editor.selectedTool.contextMenu(event);
-                this.snapshotAndSave();
-            });
-        }, { signal: this.viewportListeners.signal });
-
-        viewport.addEventListener('mousemove', (event: MouseEvent) => {
-            this.ngZone.run(() => {
-                if (this.movingView && this.editor.selectedSVG != undefined) {
-                    const pos = this.editor.toViewportPoint(event.x, event.y);
-                    const delta = pos.subtract(this.moveStart);
-                    this.moveStart.addTo(delta.x, delta.y);
-                    this.editor.selectedSVG.pos.addTo(delta);
-                }
-                if (this.editor.selectedTool) this.editor.selectedTool.drag(event);
-            });
-        }, { signal: this.viewportListeners.signal });
-
-        viewport.addEventListener('click', (event: MouseEvent) => {
-            this.ngZone.run(() => {
-                this.editor.closeContextMenu();
-                if (this.editor.selectedTool && event.button == 0) {
-                    this.editor.selectedTool.click(event);
-                    this.snapshotAndSave();
-                }
-            });
-        }, { signal: this.viewportListeners.signal });
-
-        viewport.addEventListener('dblclick', (event: MouseEvent) => {
-            this.ngZone.run(() => {
-                this.editor.closeContextMenu();
-                if (this.editor.selectedTool && event.button == 0) {
-                    this.editor.selectedTool.doubleClick(event);
-                    this.snapshotAndSave();
-                }
-            });
-        }, { signal: this.viewportListeners.signal });
-
-        viewport.addEventListener('mouseleave', (event: MouseEvent) => {
-            if(this.movingView && this.editor.selectedSVG) {
-                this.editor.rememberCanvasView(this.editor.selectedSVG);
-            }
-            this.movingView = false;
-        }, { signal: this.viewportListeners.signal });
-
-        this.editor.setViewPort(viewport);
-
         // Load project from query params, or auto-open new-project dialog
         const params = this.route.snapshot.queryParamMap;
         const projectId = params.get('id');
@@ -336,6 +214,16 @@ export class EditorPage implements AfterViewInit, OnDestroy {
         } else {
             this.openNewDialog();
         }
+    }
+
+    beginCanvasInteraction(): void {
+        this.captureAnimationTransformDragStart();
+        this.captureAnimationPathPointDragStart();
+    }
+
+    endCanvasInteraction(): void {
+        this.commitAnimationTransformDrag();
+        this.commitAnimationPathPointDrag();
     }
 
     // ── New SVG dialog ────────────────────────────────────────────────
@@ -453,7 +341,7 @@ export class EditorPage implements AfterViewInit, OnDestroy {
 
     rulerMarks(axis: "x" | "y"): RulerMark[] {
         const svg = this.editor.selectedSVG;
-        const viewport = this.viewPort?.nativeElement;
+        const viewport = this.workspace?.element;
         if(!svg || !viewport) {
             return [];
         }
@@ -625,7 +513,7 @@ export class EditorPage implements AfterViewInit, OnDestroy {
             return;
         }
 
-        const viewport = this.viewPort?.nativeElement.getBoundingClientRect();
+        const viewport = this.workspace?.element.getBoundingClientRect();
         const existingValue = guide?.value ?? this.guideValueFromClient(axis, clientX, clientY, false);
         this.guideInput = {
             axis,
@@ -708,7 +596,7 @@ export class EditorPage implements AfterViewInit, OnDestroy {
 
     private canvasRectInViewport(): { left: number; top: number; width: number; height: number } | undefined {
         const canvas = this.canvas?.nativeElement;
-        const viewport = this.viewPort?.nativeElement;
+        const viewport = this.workspace?.element;
         if(!canvas || !viewport) {
             return undefined;
         }
@@ -724,7 +612,7 @@ export class EditorPage implements AfterViewInit, OnDestroy {
     }
 
     private guideIsInDeleteZone(axis: "x" | "y", event: PointerEvent): boolean {
-        const viewport = this.viewPort?.nativeElement.getBoundingClientRect();
+        const viewport = this.workspace?.element.getBoundingClientRect();
         if(!viewport) {
             return false;
         }

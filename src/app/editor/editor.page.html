@@ -65,7 +65,9 @@
     </div>
 
     <!-- Canvas viewport -->
-    <div #viewPort class="view-port">
+    <app-canvas-workspace
+      (interactionStart)="beginCanvasInteraction()"
+      (interactionEnd)="endCanvasInteraction()">
       <svg #canvas display *ngIf="editor.selectedSVG"></svg>
       <ng-container *ngIf="editor.selectedSVG && animation.mode == 'edit'">
         <button class="ruler-corner"
@@ -188,10 +190,11 @@
           <div class="context-menu-info-line" *ngFor="let line of editor.contextMenu.infoLines">{{ line }}</div>
         </div>
       </div>
-    </div>
+    </app-canvas-workspace>
 
     <!-- Right attribute panel -->
     <div class="attribute-panel" *ngIf="animation.mode == 'edit'">
+      <app-properties-panel>
       <ng-container *ngIf="editor.inspectedElement">
         <div class="panel-header">Properties</div>
         <div class="transform-section" *ngIf="asShape(editor.inspectedElement) as selectedShape">
@@ -335,7 +338,9 @@
         <fa-icon icon="mouse-pointer"></fa-icon>
         <span>Select an element</span>
       </div>
+      </app-properties-panel>
 
+      <app-layers-panel>
       <div class="panel-header">Layers</div>
       <div class="layer-list" *ngIf="layerRows.length; else emptyLayers">
         <div class="layer-row"
@@ -417,6 +422,7 @@
           <span>No layers yet</span>
         </div>
       </ng-template>
+      </app-layers-panel>
     </div>
 
   </div>

@@ -12,6 +12,18 @@ import { Color } from "src/app/editor/objects/color.object";
 import { Group } from "src/app/editor/objects/elements/group.object";
 import { Path } from "src/app/editor/objects/elements/path.object";
 import { AnyElement } from "src/app/editor/objects/svg.object";
+import {
+    clampTimelineScale,
+    KeyframeEntry,
+    PropertyTimelineRow,
+    snapTimelineTime,
+    TimelineEditingService,
+    timelineRulerInterval,
+    TimelineRow,
+    timelineTimesMatch,
+    timelineTimeToX,
+    timelineXToTime,
+} from "src/app/_services/timeline-editing.service";
 
 const PATH_SHAPE_PROPERTY: AnimatablePropertyDefinition = {
     property: "path.shape",
@@ -27,6 +39,7 @@ const PATH_SHAPE_PROPERTY: AnimatablePropertyDefinition = {
     imports: [NgFor, NgIf, NgClass, NgStyle, FormsModule, FaIconComponent, ColorAttribute],
     templateUrl: "animation-timeline.component.html",
     styleUrls: ["animation-timeline.component.scss"],
+    providers: [TimelineEditingService],
 })
 export class AnimationTimelineComponent {
     @Output() animationChange = new EventEmitter<void>();
@@ -46,7 +59,8 @@ export class AnimationTimelineComponent {
     readonly timePadding = 28;
     expandedLayerIds = new Set<string>();
     selectedRowKey?: string;
-    selectedKeyframeIds = new Set<string>();
+    get selectedKeyframeIds(): Set<string> { return this.editing.selectedKeyframeIds; }
+    set selectedKeyframeIds(value: Set<string>) { this.editing.selectedKeyframeIds = value; }
     openColorEditorKey?: string;
     pixelsPerSecond = 120;
     private scrubbing = false;
@@ -55,7 +69,6 @@ export class AnimationTimelineComponent {
     private keyframeDrag?: KeyframeDrag;
     private numberDrag?: NumberDrag;
     marquee?: KeyframeMarquee;
-    private keyframeClipboard: CopiedKeyframe[] = [];
     private colorCache = new Map<string, { source: string; color: Color }>();
 
     constructor(
@@ -63,14 +76,19 @@ export class AnimationTimelineComponent {
         public animation: AnimationPlaybackService,
         private host: ElementRef<HTMLElement>,
         private preferences: EditorPreferencesService,
+        private editing: TimelineEditingService,
     ) {
         this.timelineHeight = this.clampTimelineHeight(this.preferences.timelineHeight);
     }
 
     get rows(): TimelineRow[] {
-        const rows: TimelineRow[] = [];
-        this.addRows(this.editor.selectedSVG?.elements ?? [], rows, 0);
-        return rows;
+        return this.editing.projectRows(
+            this.editor.selectedSVG?.elements ?? [],
+            this.expandedLayerIds,
+            this.properties,
+            (element, property) => this.propertySupported(element, property),
+            PATH_SHAPE_PROPERTY,
+        );
     }
 
     trackRow(_index: number, row: TimelineRow): string {
@@ -377,51 +395,14 @@ export class AnimationTimelineComponent {
     }
 
     copySelectedKeyframes(): boolean {
-        const entries = this.selectedKeyframeEntries();
-        if(entries.length === 0) {
-            return false;
-        }
-
-        const earliestTime = Math.min(...entries.map((entry) => entry.keyframe.time));
-        this.keyframeClipboard = entries.map((entry) => ({
-            targetId: entry.track.targetId,
-            property: entry.track.property,
-            valueType: entry.track.valueType,
-            timeOffset: entry.keyframe.time - earliestTime,
-            value: this.cloneValue(entry.keyframe.value),
-            easing: this.cloneValue(entry.keyframe.easing),
-        }));
-        return true;
+        return this.editing.copy(this.editor.selectedSVG?.animation.tracks ?? []);
     }
 
     pasteKeyframes(): boolean {
         const svg = this.editor.selectedSVG;
-        if(!svg || this.keyframeClipboard.length === 0) {
+        if(!svg || !this.editing.paste(svg.animation, this.animation.currentTime)) {
             return false;
         }
-
-        this.selectedKeyframeIds.clear();
-        this.keyframeClipboard.forEach((copied) => {
-            const track = this.ensureTimelineTrack(copied.targetId, copied.property, copied.valueType);
-            const time = this.snapTime(this.animation.currentTime + copied.timeOffset);
-            const existing = track.keyframes.find((keyframe) => this.timesMatch(keyframe.time, time));
-            if(existing) {
-                existing.value = this.cloneValue(copied.value);
-                existing.easing = this.cloneValue(copied.easing);
-                this.selectedKeyframeIds.add(existing.id);
-            } else {
-                const pasted: Keyframe = {
-                    id: makeAnimationId("key"),
-                    time,
-                    value: this.cloneValue(copied.value),
-                    easing: this.cloneValue(copied.easing),
-                };
-                track.keyframes.push(pasted);
-                this.selectedKeyframeIds.add(pasted.id);
-            }
-            track.keyframes.sort((a, b) => a.time - b.time);
-        });
-
         this.animation.previewAt(this.animation.currentTime);
         this.animationChange.emit();
         return true;
@@ -429,15 +410,9 @@ export class AnimationTimelineComponent {
 
     deleteSelectedKeyframes(): boolean {
         const svg = this.editor.selectedSVG;
-        if(!svg || this.selectedKeyframeIds.size === 0) {
+        if(!svg || !this.editing.delete(svg.animation)) {
             return false;
         }
-
-        svg.animation.tracks.forEach((track) => {
-            track.keyframes = track.keyframes.filter((keyframe) => !this.selectedKeyframeIds.has(keyframe.id));
-        });
-        svg.animation.tracks = svg.animation.tracks.filter((track) => track.keyframes.length > 0);
-        this.selectedKeyframeIds.clear();
         this.animation.previewAt(this.animation.currentTime);
         this.animationChange.emit();
         return true;
@@ -799,23 +774,6 @@ export class AnimationTimelineComponent {
         }
     }
 
-    private addRows(elements: AnyElement[], rows: TimelineRow[], depth: number) {
-        [...elements].reverse().forEach((element) => {
-            rows.push({ type: "layer", element, depth });
-            if(this.expandedLayerIds.has(element.id)) {
-                this.properties
-                    .filter((property) => this.propertySupported(element, property))
-                    .forEach((property) => rows.push({ type: "property", element, depth: depth + 1, property }));
-                if(element instanceof Path) {
-                    rows.push({ type: "property", element, depth: depth + 1, property: PATH_SHAPE_PROPERTY });
-                }
-            }
-            if(element instanceof Group) {
-                this.addRows(element.elements, rows, depth + 1);
-            }
-        });
-    }
-
     private availableMotionPaths(element: AnyElement): Path[] {
         const svg = this.editor.selectedSVG;
         if(!svg) {
@@ -956,29 +914,19 @@ export class AnimationTimelineComponent {
     }
 
     private timeToX(time: number): number {
-        return this.timePadding + (Math.max(0, time) * this.pixelsPerSecond);
+        return timelineTimeToX(time, this.timePadding, this.pixelsPerSecond);
     }
 
     private xToTime(x: number): number {
-        return Math.max(0, (x - this.timePadding) / this.pixelsPerSecond);
+        return timelineXToTime(x, this.timePadding, this.pixelsPerSecond);
     }
 
     private snapTime(time: number): number {
-        const clamped = Math.max(0, Math.min(this.animation.duration, time));
-        return Math.round(clamped * 100) / 100;
+        return snapTimelineTime(time, this.animation.duration);
     }
 
     private selectedKeyframeEntries(): KeyframeEntry[] {
-        const svg = this.editor.selectedSVG;
-        if(!svg || this.selectedKeyframeIds.size === 0) {
-            return [];
-        }
-
-        return svg.animation.tracks.flatMap((track) => {
-            return track.keyframes
-                .filter((keyframe) => this.selectedKeyframeIds.has(keyframe.id))
-                .map((keyframe) => ({ track, keyframe }));
-        });
+        return this.editing.entries(this.editor.selectedSVG?.animation.tracks ?? []);
     }
 
     private timelineKeyframeEasingType(keyframe: TimelineKeyframe): EasingType | "mixed" {
@@ -1158,7 +1106,7 @@ export class AnimationTimelineComponent {
     }
 
     private timesMatch(a: number, b: number): boolean {
-        return Math.abs(a - b) < 0.0005;
+        return timelineTimesMatch(a, b);
     }
 
     private shouldIgnoreShortcut(event: KeyboardEvent): boolean {
@@ -1181,50 +1129,22 @@ export class AnimationTimelineComponent {
     }
 
     private pruneKeyframeSelection() {
-        const svg = this.editor.selectedSVG;
-        if(!svg || this.selectedKeyframeIds.size === 0) {
-            return;
-        }
-
-        const activeIds = new Set(svg.animation.tracks.flatMap((track) => track.keyframes.map((keyframe) => keyframe.id)));
-        this.selectedKeyframeIds.forEach((id) => {
-            if(!activeIds.has(id)) {
-                this.selectedKeyframeIds.delete(id);
-            }
-        });
+        this.editing.prune(this.editor.selectedSVG?.animation.tracks ?? []);
     }
 
     private rulerInterval(): number {
-        if(this.pixelsPerSecond >= 220) {
-            return 0.25;
-        }
-        if(this.pixelsPerSecond >= 120) {
-            return 0.5;
-        }
-        if(this.pixelsPerSecond >= 70) {
-            return 1;
-        }
-        return 2;
+        return timelineRulerInterval(this.pixelsPerSecond);
     }
 
     private clampTimelineScale(value: number): number {
-        return Math.round(Math.max(40, Math.min(360, value)));
+        return clampTimelineScale(value);
     }
 }
-
-type TimelineRow = LayerTimelineRow | PropertyTimelineRow;
-type LayerTimelineRow = { type: "layer"; element: AnyElement; depth: number };
-type PropertyTimelineRow = { type: "property"; element: AnyElement; depth: number; property: AnimatablePropertyDefinition };
 
 interface TimelineRulerMark {
     time: number;
     label: string;
     left: number;
-}
-
-interface KeyframeEntry {
-    track: AnimationTrack;
-    keyframe: Keyframe;
 }
 
 interface TimelineKeyframe extends Keyframe {
@@ -1261,15 +1181,6 @@ interface KeyframeMarquee {
     active: boolean;
     baseSelection: Set<string>;
     rect: DOMRect;
-}
-
-interface CopiedKeyframe {
-    targetId: string;
-    property: string;
-    valueType: AnimationTrack["valueType"];
-    timeOffset: number;
-    value: unknown;
-    easing: Keyframe["easing"];
 }
 
 interface EasingToolbarOption {

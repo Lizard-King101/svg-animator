@@ -5,7 +5,7 @@ import { ElementFactory } from "../_services/element-factory.service";
 import { HistoryService } from "../_services/history.service";
 import { LayerOperationsService } from "../_services/layer-operations.service";
 import { ProjectService } from "../_services/project.service";
-import { evaluateTrack } from "./objects/animation.object";
+import { createDefaultAnimation, evaluateTrack } from "./objects/animation.object";
 import { Color } from "./objects/color.object";
 import { Group } from "./objects/elements/group.object";
 import { Path } from "./objects/elements/path.object";
@@ -15,6 +15,8 @@ import { Point } from "./objects/point.object";
 import { canConvertStrokeToPath, convertStrokeToPath } from "./objects/stroke-outline.object";
 import { SVG } from "./objects/svg.object";
 import { buildSVGMarkup } from "./svg-markup";
+import { deletePathAnchor, insertPathPoint, togglePathLineType } from "../_services/tools/path-edit.helpers";
+import { snapTimelineTime, TimelineEditingService, timelineTimeToX, timelineXToTime } from "../_services/timeline-editing.service";
 
 function editorDouble(): EditorService {
     let id = 0;
@@ -262,5 +264,50 @@ describe("editor topology boundaries", () => {
         mutations.mutate(() => undefined);
         expect(history.snapshot).toHaveBeenCalledTimes(1);
         expect(projects.upsert).toHaveBeenCalledTimes(1);
+    });
+
+    it("edits path topology through pure helpers while preserving shared endpoints", () => {
+        const editor = editorDouble();
+        const path = new Path(editor);
+        const start = new Point(0, 0);
+        const end = new Point(12, 0);
+        const segment = line(editor, start, end);
+        path.lines = [segment];
+        const createLine = (options: ConstructorParameters<typeof Line>[1]) => new Line(editor, options);
+
+        expect(togglePathLineType(segment)).toBeTrue();
+        const inserted = insertPathPoint(path, segment, createLine, new Point(6, 0));
+        expect(inserted.changed).toBeTrue();
+        expect(path.lines.length).toBe(2);
+        expect(path.lines[0].points[1]).toBe(path.lines[1].points[0]);
+
+        const third = new Point(18, 0);
+        path.lines.push(line(editor, end, third));
+        const removed = deletePathAnchor(path, end, createLine);
+        expect(removed.changed).toBeTrue();
+        expect(path.lines.length).toBe(2);
+    });
+
+    it("centralizes timeline math, clipboard, selection, paste, and delete behavior", () => {
+        const editing = new TimelineEditingService();
+        const animation = createDefaultAnimation();
+        animation.duration = 2;
+        animation.tracks = [{
+            id: "track",
+            targetId: "shape",
+            property: "opacity",
+            valueType: "number",
+            keyframes: [{ id: "key", time: 0.5, value: 0.25, easing: { type: "linear" } }],
+        }];
+        editing.selectedKeyframeIds.add("key");
+
+        expect(editing.copy(animation.tracks)).toBeTrue();
+        expect(editing.paste(animation, 1.25)).toBeTrue();
+        expect(animation.tracks[0].keyframes.map((keyframe) => keyframe.time)).toEqual([0.5, 1.25]);
+        expect(editing.delete(animation)).toBeTrue();
+        expect(animation.tracks[0].keyframes.map((keyframe) => keyframe.time)).toEqual([0.5]);
+        expect(timelineTimeToX(1, 20, 100)).toBe(120);
+        expect(timelineXToTime(120, 20, 100)).toBe(1);
+        expect(snapTimelineTime(3, 2)).toBe(2);
     });
 });
