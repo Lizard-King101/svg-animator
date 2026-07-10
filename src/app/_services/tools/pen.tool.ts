@@ -7,6 +7,7 @@ import { EditorService } from "../editor.service";
 import { Tool } from "./tool";
 
 export class PenTool extends Tool{
+    override readonly preferenceKey = 'pen';
     override icon: IconName = 'pen-fancy';
 
     workingLine?: Line;

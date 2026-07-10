@@ -4,6 +4,7 @@ import { FormsModule } from "@angular/forms";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { AnimationPlaybackService } from "src/app/_services/animation-playback.service";
 import { EditorService } from "src/app/_services/editor.service";
+import { EditorPreferencesService } from "src/app/_services/editor-preferences.service";
 import { ColorAttribute } from "../attributes/color/color.component";
 import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, AnimationTrack, EasingType, Keyframe, makeAnimationId } from "src/app/editor/objects/animation.object";
 import { parsePathPointProperty, pathPointAnimationProperty, readAnimationProperty } from "src/app/editor/objects/animation-targets";
@@ -57,7 +58,14 @@ export class AnimationTimelineComponent {
     private keyframeClipboard: CopiedKeyframe[] = [];
     private colorCache = new Map<string, { source: string; color: Color }>();
 
-    constructor(public editor: EditorService, public animation: AnimationPlaybackService, private host: ElementRef<HTMLElement>) {}
+    constructor(
+        public editor: EditorService,
+        public animation: AnimationPlaybackService,
+        private host: ElementRef<HTMLElement>,
+        private preferences: EditorPreferencesService,
+    ) {
+        this.timelineHeight = this.clampTimelineHeight(this.preferences.timelineHeight);
+    }
 
     get rows(): TimelineRow[] {
         const rows: TimelineRow[] = [];
@@ -747,6 +755,7 @@ export class AnimationTimelineComponent {
         }
 
         this.resizingTimeline = false;
+        this.preferences.setTimelineHeight(this.timelineHeight);
         try {
             (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
         } catch {}

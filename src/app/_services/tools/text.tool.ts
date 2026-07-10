@@ -5,6 +5,7 @@ import { EditorService } from '../editor.service';
 import { Tool } from './tool';
 
 export class TextTool extends Tool {
+    override readonly preferenceKey = 'text';
     override icon: IconName = 'font';
 
     constructor(private _editor: EditorService) {

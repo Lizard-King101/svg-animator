@@ -220,10 +220,14 @@ export class EditorPage implements AfterViewInit {
 
         viewport.addEventListener('mouseup', (event: MouseEvent) => {
             this.ngZone.run(() => {
+                const wasMovingView = this.movingView;
                 if (this.editor.selectedTool) this.editor.selectedTool.up(event);
                 this.commitAnimationTransformDrag();
                 this.commitAnimationPathPointDrag();
                 this.movingView = false;
+                if(wasMovingView && this.editor.selectedSVG) {
+                    this.editor.rememberCanvasView(this.editor.selectedSVG);
+                }
                 // Skip snapshot on right-click — contextmenu fires next and handles it
                 if (event.button !== 2) this.snapshotAndSave();
             });
@@ -254,7 +258,7 @@ export class EditorPage implements AfterViewInit {
 
                     svg.pos.x = newRenderedLeft - svg.width  * (1 - newZoom) / 2;
                     svg.pos.y = newRenderedTop  - svg.height * (1 - newZoom) / 2;
-                    svg.zoom  = newZoom;
+                    this.editor.setZoom(svg, newZoom);
                 }
             });
         }, { passive: true });
@@ -300,6 +304,9 @@ export class EditorPage implements AfterViewInit {
         });
 
         viewport.addEventListener('mouseleave', (event: MouseEvent) => {
+            if(this.movingView && this.editor.selectedSVG) {
+                this.editor.rememberCanvasView(this.editor.selectedSVG);
+            }
             this.movingView = false;
         })
 
@@ -310,7 +317,10 @@ export class EditorPage implements AfterViewInit {
         const projectId = params.get('id');
         if (projectId) {
             const record = this.projectService.get(projectId);
-            if (record) this.editor.loadSVG(record.svgData);
+            if (record) {
+                this.editor.loadSVG(record.svgData);
+                this.restoreAnimationPreview();
+            }
         } else {
             this.openNewDialog();
         }
@@ -328,6 +338,7 @@ export class EditorPage implements AfterViewInit {
     confirmNewSVG() {
         const name = this.newName.trim() || 'Untitled';
         this.editor.newSVG(this.newWidth, this.newHeight, name);
+        this.restoreAnimationPreview();
         this.showNewDialog = false;
         this.autoSave();
     }
@@ -965,6 +976,12 @@ export class EditorPage implements AfterViewInit {
 
     setEditorMode(mode: 'edit' | 'animate') {
         this.animation.setMode(mode);
+    }
+
+    private restoreAnimationPreview() {
+        if(this.animation.mode === 'animate') {
+            this.animation.seek(this.animation.currentTime);
+        }
     }
 
     setAnimationDuration(value: number | string | null) {

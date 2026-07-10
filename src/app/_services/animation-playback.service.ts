@@ -9,6 +9,7 @@ import {
 import { AnimationTrack, AnimationValueType, colorValueSpace, createAnimationColorValue, evaluateTrack, makeAnimationId } from "../editor/objects/animation.object";
 import { AnyElement, SVG } from "../editor/objects/svg.object";
 import { EditorService } from "./editor.service";
+import { EditorPreferencesService } from "./editor-preferences.service";
 
 export type EditorMode = "edit" | "animate";
 
@@ -24,7 +25,13 @@ export class AnimationPlaybackService implements OnDestroy {
     private previewSVG?: SVG;
     private previewBaseValues = new Map<string, AppliedAnimationValue>();
 
-    constructor(private editor: EditorService, private zone: NgZone) {}
+    constructor(
+        private editor: EditorService,
+        private zone: NgZone,
+        private preferences: EditorPreferencesService,
+    ) {
+        this.mode = this.preferences.mode;
+    }
 
     ngOnDestroy() {
         this.pause();
@@ -40,6 +47,7 @@ export class AnimationPlaybackService implements OnDestroy {
     }
 
     setMode(mode: EditorMode) {
+        this.preferences.setMode(mode);
         if(this.mode === mode) {
             return;
         }
@@ -172,7 +180,7 @@ export class AnimationPlaybackService implements OnDestroy {
             return;
         }
 
-        this.mode = "animate";
+        this.setMode("animate");
         this.playing = true;
         this.lastFrameTime = undefined;
         this.zone.runOutsideAngular(() => {

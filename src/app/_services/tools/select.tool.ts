@@ -9,6 +9,7 @@ import { EditorService } from "../editor.service";
 import { Tool } from "./tool";
 
 export class SelectTool extends Tool {
+    override readonly preferenceKey = "select";
     override icon: IconName = "mouse-pointer";
     override interactsWithGuides = true;
 

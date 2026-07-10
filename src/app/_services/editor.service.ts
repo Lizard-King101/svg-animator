@@ -9,6 +9,7 @@ import { AnyElement, SVG, SVGSave } from "../editor/objects/svg.object";
 import { Tool } from "./tools/tool";
 
 import { Tools } from "./tools/tools";
+import { EditorPreferencesService } from "./editor-preferences.service";
 
 @Injectable()
 export class EditorService {
@@ -33,11 +34,39 @@ export class EditorService {
 
     keysDown: KeysPressed = {};
 
-    constructor() {
+    constructor(private preferences: EditorPreferencesService) {
         Tools.forEach((tool) => {
             let t = new tool(this);
             this.tools.push(t);
         })
+
+        const preferredTool = this.findTool(this.preferences.tool);
+        if(!preferredTool?.restoreSelection()) {
+            this.tools[0]?.restoreSelection();
+        }
+    }
+
+    rememberSelectedTool(preferenceKey: string) {
+        this.preferences.setTool(preferenceKey);
+    }
+
+    private findTool(preferenceKey: string): Tool | undefined {
+        const findIn = (tools: Tool[]): Tool | undefined => {
+            for(const tool of tools) {
+                if(tool.preferenceKey === preferenceKey) {
+                    return tool;
+                }
+
+                const child = findIn(tool.children);
+                if(child) {
+                    return child;
+                }
+            }
+
+            return undefined;
+        };
+
+        return findIn(this.tools);
     }
 
     deselectOther(tool: Tool) {
@@ -56,11 +85,16 @@ export class EditorService {
         this.selectedPathLine = undefined;
         this.selectedPathLines = [];
         if(this.viewPort != undefined) {
+            const position = this.preferences.canvasPosition ?? {
+                x: (this.viewPort.clientWidth / 2) - (width / 2),
+                y: (this.viewPort.clientHeight / 2) - (height / 2),
+            };
             const svg = new SVG(this, {
                 width,
                 height,
                 name,
-                pos: new Point((this.viewPort.clientWidth / 2) - (width / 2), (this.viewPort.clientHeight / 2) - (height / 2))
+                zoom: this.preferences.zoom,
+                pos: new Point(position.x, position.y)
             });
 
             this.svgs.push(svg);
@@ -77,8 +111,22 @@ export class EditorService {
         const vw = this.viewPort?.clientWidth ?? 800;
         const vh = this.viewPort?.clientHeight ?? 600;
         const svg = SVG.fromSave(save, this, vw, vh);
+        svg.zoom = this.preferences.zoom;
+        const position = this.preferences.canvasPosition;
+        if(position) {
+            svg.pos = new Point(position.x, position.y);
+        }
         this.svgs.push(svg);
         this.selectedSVG = svg;
+    }
+
+    setZoom(svg: SVG, zoom: number) {
+        svg.zoom = zoom;
+        this.preferences.setCanvasView(zoom, svg.pos);
+    }
+
+    rememberCanvasView(svg: SVG) {
+        this.preferences.setCanvasView(svg.zoom, svg.pos);
     }
 
     selectSVG(id: string) {
@@ -97,6 +145,9 @@ export class EditorService {
         this.tools.forEach((t) => {
             t.reset();
         })
+        if(this.selectedSVG) {
+            this.rememberCanvasView(this.selectedSVG);
+        }
     }
 
     closeSVG(id: string) {
@@ -131,6 +182,9 @@ export class EditorService {
                 
                 continue;
             }
+        }
+        if(this.selectedSVG) {
+            this.rememberCanvasView(this.selectedSVG);
         }
     }
 

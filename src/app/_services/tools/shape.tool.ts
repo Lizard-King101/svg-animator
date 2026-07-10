@@ -11,6 +11,7 @@ const shapeTools = [
 ]
 
 export class Shapes extends Tool {
+    override readonly preferenceKey = 'shapes';
     override icon: IconName = 'shapes';
 
     override children: Tool[];

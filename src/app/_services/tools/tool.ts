@@ -2,6 +2,7 @@ import { IconName } from "@fortawesome/fontawesome-svg-core";
 import { EditorService } from "../editor.service";
 
 export class Tool {
+    readonly preferenceKey: string = "tool";
     icon: IconName = "question-circle";
     get getIcon() {
         if(this.children.length && this.selectedChild) {
@@ -30,14 +31,28 @@ export class Tool {
             this.onselect();
             return false;
         }
-        let next = this.onselect();
-        if(next) {
-            const activeTool = this.parentTool ?? this;
-            this.selected = true;
-            activeTool.selected = true;
-            this.editor.selectedTool = activeTool;
-            this.editor.deselectOther(activeTool);
+        if(this.onselect()) {
+            this.activate();
         }
+    }
+
+    restoreSelection(): boolean {
+        if(!this.onselect()) {
+            return false;
+        }
+
+        this.activate();
+        return true;
+    }
+
+    private activate() {
+        const activeTool = this.parentTool ?? this;
+        const rememberedTool = this.selectedChild ?? this;
+        this.selected = true;
+        activeTool.selected = true;
+        this.editor.selectedTool = activeTool;
+        this.editor.deselectOther(activeTool);
+        this.editor.rememberSelectedTool(rememberedTool.preferenceKey);
     }
 
     onselect() : boolean {

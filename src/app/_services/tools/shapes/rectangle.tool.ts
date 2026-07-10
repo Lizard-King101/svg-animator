@@ -5,6 +5,7 @@ import { Shape } from "src/app/editor/objects/elements/shape.object";
 import { Tool } from "../tool";
 
 export class Rectangle extends Tool {
+    override readonly preferenceKey = 'rectangle';
     override icon: IconName = 'square';
     private startPoint?: Point;
 

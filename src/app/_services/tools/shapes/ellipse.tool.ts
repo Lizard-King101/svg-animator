@@ -5,6 +5,7 @@ import { Shape } from "src/app/editor/objects/elements/shape.object";
 import { Tool } from "../tool";
 
 export class Ellipse extends Tool {
+    override readonly preferenceKey = 'ellipse';
     override icon: IconName = 'circle';
     private startPoint?: Point;
 
