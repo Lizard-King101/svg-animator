@@ -83,6 +83,7 @@ export class AnimationTimelineComponent {
         this.editor.selectedElement = element;
         this.editor.selectedPathAnchor = undefined;
         this.editor.selectedPathLine = undefined;
+        this.editor.selectedPathLines = [];
     }
 
     openRowContextMenu(row: TimelineRow, event: MouseEvent) {

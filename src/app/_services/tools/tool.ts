@@ -58,6 +58,8 @@ export class Tool {
 
     click(event: MouseEvent) {}
 
+    doubleClick(event: MouseEvent) {}
+
     down(event: MouseEvent) {}
 
     up(event: MouseEvent) {}

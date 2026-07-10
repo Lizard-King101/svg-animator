@@ -76,6 +76,7 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                     attr('transform', transform) +
                     attr('opacity', opacityAttr(element.opacity)) +
                     attr('fill', s.fill_enabled && s.fill ? s.fill.hex : 'none') +
+                    attr('fill-rule', element.fillRule) +
                     attr('stroke', s.stroke?.hex ?? null) +
                     attr('stroke-width', s.stroke_width ?? null) +
                     attr('stroke-linecap', s.line_cap ?? null) +

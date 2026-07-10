@@ -17,6 +17,7 @@
         [attr.transform]="transformAttr(path)"
         [attr.opacity]="opacityAttr(path)"
         [attr.fill]="path.settings.fill_enabled && path.settings.fill ? path.settings.fill.hex : 'none'"
+        [attr.fill-rule]="path.fillRule"
         [attr.stroke]="path.settings.stroke?.hex"
         [attr.stroke-width]="path.settings.stroke_width"
         [attr.stroke-linecap]="path.settings.line_cap"
@@ -144,8 +145,8 @@
             [attr.data-segment-id]="segment.id"
             [attr.d]="segmentPath(selectedPath, segment)"
             fill="none"
-            [attr.stroke]="editor.selectedPathLine == segment ? '#2dd4bf' : 'transparent'"
-            [attr.stroke-width]="screenPx(editor.selectedPathLine == segment ? 2.5 : 12)"
+            [attr.stroke]="segmentSelected(segment) ? '#2dd4bf' : 'transparent'"
+            [attr.stroke-width]="screenPx(segmentSelected(segment) ? 2.5 : 12)"
             vector-effect="non-scaling-stroke"
             [attr.pointer-events]="'stroke'"
             />

@@ -22,6 +22,7 @@ export class EditorService {
     activeElement?: AnyElement;
     selectedPathAnchor?: Point;
     selectedPathLine?: Line;
+    selectedPathLines: Line[] = [];
     contextMenu?: EditorContextMenu;
 
     private viewPort?: HTMLElement;
@@ -53,6 +54,7 @@ export class EditorService {
         this.activeElement = undefined;
         this.selectedPathAnchor = undefined;
         this.selectedPathLine = undefined;
+        this.selectedPathLines = [];
         if(this.viewPort != undefined) {
             const svg = new SVG(this, {
                 width,
@@ -71,6 +73,7 @@ export class EditorService {
         this.activeElement = undefined;
         this.selectedPathAnchor = undefined;
         this.selectedPathLine = undefined;
+        this.selectedPathLines = [];
         const vw = this.viewPort?.clientWidth ?? 800;
         const vh = this.viewPort?.clientHeight ?? 600;
         const svg = SVG.fromSave(save, this, vw, vh);
@@ -83,6 +86,7 @@ export class EditorService {
         this.activeElement = undefined;
         this.selectedPathAnchor = undefined;
         this.selectedPathLine = undefined;
+        this.selectedPathLines = [];
         for(let i = 0; i < this.svgs.length; i++) {
             let s = this.svgs[i];
             if(s.id == id) {
@@ -111,6 +115,7 @@ export class EditorService {
                     this.activeElement = undefined;
                     this.selectedPathAnchor = undefined;
                     this.selectedPathLine = undefined;
+                    this.selectedPathLines = [];
                 } else {
                     this.svgs.splice(i, 1);
                     if(chooseAnother) {
@@ -119,6 +124,7 @@ export class EditorService {
                         this.activeElement = undefined;
                         this.selectedPathAnchor = undefined;
                         this.selectedPathLine = undefined;
+                        this.selectedPathLines = [];
                     }
                 }
                 console.log(this.svgs);

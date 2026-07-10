@@ -16,7 +16,7 @@ import {
 
 export function localBounds(element: AnyElement): Bounds {
     if(element instanceof Path) {
-        const points = element.lines.flatMap((line) => {
+        const points = element.contours.flatMap((contour) => contour.lines).flatMap((line) => {
             return [
                 ...line.points,
                 ...(line.controlStart ? [line.controlStart] : []),

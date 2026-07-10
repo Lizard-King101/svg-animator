@@ -148,7 +148,7 @@ export class SVGDisplay implements AfterViewInit {
     pathAnchors(path: Path): Point[] {
         const anchors: Point[] = [];
 
-        path.lines.forEach((line) => {
+        path.contours.flatMap((contour) => contour.lines).forEach((line) => {
             line.points.forEach((point) => {
                 if(!anchors.includes(point)) {
                     anchors.push(point);
@@ -160,15 +160,19 @@ export class SVGDisplay implements AfterViewInit {
     }
 
     bezierSegments(path: Path): Line[] {
-        return path.lines.filter((line) => {
+        return path.contours.flatMap((contour) => contour.lines).filter((line) => {
             return line.type == 'bezier' && !!line.controlStart && !!line.controlEnd && line.points.length >= 2;
         });
     }
 
     completeSegments(path: Path): Line[] {
-        return path.lines.filter((line) => {
+        return path.contours.flatMap((contour) => contour.lines).filter((line) => {
             return line.points.length >= 2;
         });
+    }
+
+    segmentSelected(segment: Line): boolean {
+        return this.editor.selectedPathLine === segment || this.editor.selectedPathLines.includes(segment);
     }
 
     segmentPath(path: Path, line: Line) {

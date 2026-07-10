@@ -132,7 +132,7 @@ function rotateVector(x: number, y: number, degrees: number): { x: number; y: nu
 }
 
 function flattenPath(path: Path, matrix: Matrix): FlattenedSegment[] {
-    return path.lines
+    return path.contours.flatMap((contour) => contour.lines)
         .filter((line) => line.points.length >= 2)
         .flatMap((line) => flattenLine(line, matrix))
         .filter((segment) => segment.length > 0);

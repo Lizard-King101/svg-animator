@@ -1,6 +1,6 @@
 import { IconName } from "@fortawesome/fontawesome-common-types";
 import { Line } from "src/app/editor/objects/line.object";
-import { Path } from "src/app/editor/objects/elements/path.object";
+import { Path, PathContour } from "src/app/editor/objects/elements/path.object";
 import { Point } from "src/app/editor/objects/point.object";
 import { AnyElement } from "src/app/editor/objects/svg.object";
 import { combinedMatrixFor, localBounds, parentMatrixFor, pinAncestorTransformOrigins, pinTransformOrigin, resolvedOrigin } from "src/app/editor/objects/element-bounds";
@@ -20,6 +20,7 @@ export class SelectTool extends Tool {
     movingPoint?: Point;
     movingPointRole?: 'anchor' | 'control-start' | 'control-end' | 'anchor-convert';
     movingLine?: Line;
+    movingLines?: Line[];
     convertingIncomingLine?: Line;
     convertingOutgoingLine?: Line;
     transformDrag?: TransformDrag;
@@ -76,8 +77,22 @@ export class SelectTool extends Tool {
     }
 
     private findLine(path: Path, id?: string): Line | undefined {
-        return path.lines.find((line) => {
+        return this.allLines(path).find((line) => {
             return line.id == id;
+        });
+    }
+
+    private allLines(path: Path): Line[] {
+        return path.contours.flatMap((contour) => contour.lines);
+    }
+
+    private contourForLine(path: Path, line: Line): PathContour | undefined {
+        return path.contours.find((contour) => contour.lines.includes(line));
+    }
+
+    private contourForAnchor(path: Path, anchor: Point): PathContour | undefined {
+        return path.contours.find((contour) => {
+            return contour.lines.some((line) => line.points[0] == anchor || line.points[1] == anchor);
         });
     }
 
@@ -272,7 +287,7 @@ export class SelectTool extends Tool {
         const moved: Point[] = [anchor];
         anchor.addTo(delta);
 
-        path.lines.forEach((line) => {
+        this.allLines(path).forEach((line) => {
             if(line.points[0] == anchor && line.controlStart && !moved.includes(line.controlStart)) {
                 line.controlStart.addTo(delta);
                 moved.push(line.controlStart);
@@ -292,26 +307,42 @@ export class SelectTool extends Tool {
     private findOppositeHandle(path: Path, line: Line, role: 'control-start' | 'control-end') {
         if(role == 'control-start') {
             const anchor = line.points[0];
-            return path.lines.find((candidate) => {
+            return this.allLines(path).find((candidate) => {
                 return candidate.points[1] == anchor && !!candidate.controlEnd;
             })?.controlEnd;
         }
 
         const anchor = line.points[1];
-        return path.lines.find((candidate) => {
+        return this.allLines(path).find((candidate) => {
             return candidate.points[0] == anchor && !!candidate.controlStart;
         })?.controlStart;
     }
 
     private findIncomingLine(path: Path, anchor: Point) {
-        return path.lines.find((line) => {
+        return this.allLines(path).find((line) => {
             return line.points[1] == anchor;
         });
     }
 
     private findOutgoingLine(path: Path, anchor: Point) {
-        return path.lines.find((line) => {
+        return this.allLines(path).find((line) => {
             return line.points[0] == anchor;
+        });
+    }
+
+    private moveLines(lines: Line[], delta: Point) {
+        const moved: Point[] = [];
+        lines.forEach((line) => {
+            [
+                ...line.points,
+                ...(line.controlStart ? [line.controlStart] : []),
+                ...(line.controlEnd ? [line.controlEnd] : []),
+            ].forEach((point) => {
+                if(!moved.includes(point)) {
+                    point.addTo(delta);
+                    moved.push(point);
+                }
+            });
         });
     }
 
@@ -329,7 +360,7 @@ export class SelectTool extends Tool {
         }
 
         if(pointRole == 'anchor') {
-            for(const line of this._editor.selectedElement.lines) {
+            for(const line of this.allLines(this._editor.selectedElement)) {
                 for(const point of line.points) {
                     if(point.id == pointId) {
                         return {
@@ -399,7 +430,9 @@ export class SelectTool extends Tool {
     }
 
     private insertPoint(path: Path, line: Line, targetPoint?: Point) {
-        const index = path.lines.indexOf(line);
+        const contour = this.contourForLine(path, line);
+        const lines = contour?.lines;
+        const index = lines?.indexOf(line) ?? -1;
         if(index < 0 || line.points.length < 2) {
             return;
         }
@@ -429,7 +462,7 @@ export class SelectTool extends Tool {
                 controlEnd: q2,
             });
 
-            path.lines.splice(index + 1, 0, next);
+            lines!.splice(index + 1, 0, next);
             this._editor.selectedPathAnchor = midpoint;
             this._editor.selectedPathLine = next;
             return;
@@ -442,21 +475,27 @@ export class SelectTool extends Tool {
             points: [midpoint, end],
         });
 
-        path.lines.splice(index + 1, 0, next);
+        lines!.splice(index + 1, 0, next);
         this._editor.selectedPathAnchor = midpoint;
         this._editor.selectedPathLine = next;
     }
 
     private deleteAnchor(path: Path, anchor: Point) {
-        const anchorCount = path.lines.length + (path.closed ? 0 : 1);
+        const contour = this.contourForAnchor(path, anchor);
+        if(!contour) {
+            return;
+        }
+
+        const lines = contour.lines;
+        const anchorCount = lines.length + (contour.closed ? 0 : 1);
         if(anchorCount <= 2) {
             return;
         }
 
-        const isClosedBoundaryAnchor = path.closed && path.lines.length > 1 && path.lines[0].points[0] == anchor;
+        const isClosedBoundaryAnchor = contour.closed && lines.length > 1 && lines[0].points[0] == anchor;
         if(isClosedBoundaryAnchor) {
-            const firstLine = path.lines[0];
-            const lastLine = path.lines[path.lines.length - 1];
+            const firstLine = lines[0];
+            const lastLine = lines[lines.length - 1];
             const nextAnchor = firstLine.points[1];
             const previousAnchor = lastLine.points[0];
             const mergedIsBezier = lastLine.type == 'bezier' || firstLine.type == 'bezier';
@@ -467,17 +506,17 @@ export class SelectTool extends Tool {
                 controlEnd: firstLine.type == 'bezier' ? firstLine.controlEnd : (mergedIsBezier ? this.clonePoint(nextAnchor) : undefined),
             });
 
-            path.lines.splice(path.lines.length - 1, 1);
-            path.lines.splice(0, 1, merged);
+            lines.splice(lines.length - 1, 1);
+            lines.splice(0, 1, merged);
             this._editor.selectedPathAnchor = undefined;
             this._editor.selectedPathLine = merged;
             return;
         }
 
-        const incomingIndex = path.lines.findIndex((line) => {
+        const incomingIndex = lines.findIndex((line) => {
             return line.points[1] == anchor;
         });
-        const outgoingIndex = path.lines.findIndex((line) => {
+        const outgoingIndex = lines.findIndex((line) => {
             return line.points[0] == anchor;
         });
 
@@ -486,14 +525,14 @@ export class SelectTool extends Tool {
         }
 
         if(incomingIndex < 0) {
-            path.lines.splice(outgoingIndex, 1);
-            this._editor.selectedPathLine = path.lines[outgoingIndex] ?? path.lines[outgoingIndex - 1];
+            lines.splice(outgoingIndex, 1);
+            this._editor.selectedPathLine = lines[outgoingIndex] ?? lines[outgoingIndex - 1];
         } else if(outgoingIndex < 0) {
-            path.lines.splice(incomingIndex, 1);
-            this._editor.selectedPathLine = path.lines[incomingIndex] ?? path.lines[incomingIndex - 1];
+            lines.splice(incomingIndex, 1);
+            this._editor.selectedPathLine = lines[incomingIndex] ?? lines[incomingIndex - 1];
         } else {
-            const incoming = path.lines[incomingIndex];
-            const outgoing = path.lines[outgoingIndex];
+            const incoming = lines[incomingIndex];
+            const outgoing = lines[outgoingIndex];
             const mergedStart = incoming.points[0];
             const mergedEnd = outgoing.points[1];
             const isBezier = incoming.type == 'bezier' || outgoing.type == 'bezier';
@@ -504,8 +543,8 @@ export class SelectTool extends Tool {
                 controlEnd: outgoing.type == 'bezier' ? outgoing.controlEnd : (isBezier ? this.clonePoint(mergedEnd) : undefined),
             });
 
-            path.lines.splice(incomingIndex, 1, merged);
-            path.lines.splice(outgoingIndex > incomingIndex ? outgoingIndex : outgoingIndex + 1, 1);
+            lines.splice(incomingIndex, 1, merged);
+            lines.splice(outgoingIndex > incomingIndex ? outgoingIndex : outgoingIndex + 1, 1);
             this._editor.selectedPathLine = merged;
         }
 
@@ -521,6 +560,7 @@ export class SelectTool extends Tool {
         if(transformHandle && this.beginTransformDrag(transformHandle, event)) {
             this._editor.selectedPathAnchor = undefined;
             this._editor.selectedPathLine = undefined;
+            this._editor.selectedPathLines = [];
             return;
         }
 
@@ -538,6 +578,7 @@ export class SelectTool extends Tool {
                 this.convertingOutgoingLine = this.findOutgoingLine(this._editor.selectedElement, overlayPoint.point);
                 this._editor.selectedPathAnchor = overlayPoint.point;
                 this._editor.selectedPathLine = undefined;
+                this._editor.selectedPathLines = [];
                 this.canDeselect = false;
                 return;
             }
@@ -547,13 +588,24 @@ export class SelectTool extends Tool {
             this.movingLine = overlayPoint.line;
             this._editor.selectedPathAnchor = overlayPoint.role == 'anchor' ? overlayPoint.point : undefined;
             this._editor.selectedPathLine = overlayPoint.line;
+            this._editor.selectedPathLines = [];
             this.canDeselect = false;
             return;
         }
 
         const overlaySegment = this.findOverlaySegment(target);
         if(overlaySegment) {
+            if(this._editor.selectedElement) {
+                pinAncestorTransformOrigins(this.rootElements(), this._editor.selectedElement);
+                pinTransformOrigin(this._editor.selectedElement);
+            }
+            this.moveStart = this.canvasToSelectedLocal(canvasPoint);
+            const selectedGroup = this._editor.selectedPathLines.includes(overlaySegment)
+                ? this._editor.selectedPathLines
+                : [overlaySegment];
+            this.movingLines = selectedGroup;
             this._editor.selectedPathLine = overlaySegment;
+            this._editor.selectedPathLines = selectedGroup;
             this._editor.selectedPathAnchor = undefined;
             this.canDeselect = false;
             return;
@@ -574,6 +626,7 @@ export class SelectTool extends Tool {
                 this._editor.selectedElement = foundElement;
                 this._editor.selectedPathAnchor = undefined;
                 this._editor.selectedPathLine = undefined;
+                this._editor.selectedPathLines = [];
             }
         } else {
             this.canDeselect = true;
@@ -648,6 +701,16 @@ export class SelectTool extends Tool {
             return;
         }
 
+        if(this.moveStart && this.movingLines?.length && this._editor.selectedElement instanceof Path) {
+            let pos = this.canvasToSelectedLocal(this._editor.toCanvasPoint(event.clientX, event.clientY));
+            let delta = pos.subtract(this.moveStart);
+            this.moveStart = pos;
+            this.moveLines(this.movingLines, delta);
+            this.movedElement = true;
+            this.canDeselect = false;
+            return;
+        }
+
         if(this.moveStart && this.movingElement && this._editor.selectedElement && this._editor.selectedSVG) {
             let pos = this.canvasToParentLocal(this._editor.selectedElement, this._editor.toCanvasPoint(event.clientX, event.clientY));
             let delta = pos.subtract(this.moveStart);
@@ -665,15 +728,39 @@ export class SelectTool extends Tool {
         this.movingPoint = undefined;
         this.movingPointRole = undefined;
         this.movingLine = undefined;
+        this.movingLines = undefined;
         this.convertingIncomingLine = undefined;
         this.convertingOutgoingLine = undefined;
         if(!this.movedElement && this.canDeselect) {
             this._editor.selectedElement = undefined;
             this._editor.selectedPathAnchor = undefined;
             this._editor.selectedPathLine = undefined;
+            this._editor.selectedPathLines = [];
             this.canDeselect = false;
         }
         this.movedElement = false;
+    }
+
+    override doubleClick(event: MouseEvent): void {
+        const target = <HTMLElement>event.target;
+        if(!(this._editor.selectedElement instanceof Path) || this._editor.selectedElement.locked || !this._editor.selectedElement.visible) {
+            return;
+        }
+
+        const overlaySegment = this.findOverlaySegment(target);
+        if(!overlaySegment) {
+            return;
+        }
+
+        const contour = this.contourForLine(this._editor.selectedElement, overlaySegment);
+        if(!contour) {
+            return;
+        }
+
+        this._editor.selectedPathLine = overlaySegment;
+        this._editor.selectedPathLines = contour.lines.filter((line) => line.points.length >= 2);
+        this._editor.selectedPathAnchor = undefined;
+        this.canDeselect = false;
     }
 
     override contextMenu(event: MouseEvent): void {
@@ -690,6 +777,7 @@ export class SelectTool extends Tool {
         if(overlayPoint?.role == 'anchor') {
             this._editor.selectedPathAnchor = overlayPoint.point;
             this._editor.selectedPathLine = undefined;
+            this._editor.selectedPathLines = [];
             this._editor.openContextMenu(menuPosition.x, menuPosition.y, [
                 {
                     label: 'Delete Point',
@@ -710,6 +798,7 @@ export class SelectTool extends Tool {
         const overlaySegment = this.findOverlaySegment(target);
         if(overlaySegment) {
             this._editor.selectedPathLine = overlaySegment;
+            this._editor.selectedPathLines = [overlaySegment];
             this._editor.selectedPathAnchor = undefined;
             this._editor.openContextMenu(menuPosition.x, menuPosition.y, [
                 {

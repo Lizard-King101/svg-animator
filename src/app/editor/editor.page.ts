@@ -24,7 +24,9 @@ import { Shape } from "./objects/elements/shape.object";
 import { TextElement } from "./objects/elements/text.object";
 import { AnyElement, CanvasGuide } from "./objects/svg.object";
 import { buildSVGMarkup } from "./svg-markup";
-import { pinTransformOrigin, resolvedOrigin } from "./objects/element-bounds";
+import { combinedMatrixFor, pinTransformOrigin, resolvedOrigin } from "./objects/element-bounds";
+import { applyMatrix, invertMatrix, multiplyMatrix } from "./objects/transform.object";
+import { canConvertStrokeToPath, convertStrokeToPath, StrokeToPathProfile } from "./objects/stroke-outline.object";
 import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, createAnimationColorValue } from "./objects/animation.object";
 import { pathPointAnimationProperty, readAnimationProperty } from "./objects/animation-targets";
 
@@ -282,6 +284,16 @@ export class EditorPage implements AfterViewInit {
                 this.editor.closeContextMenu();
                 if (this.editor.selectedTool && event.button == 0) {
                     this.editor.selectedTool.click(event);
+                    this.snapshotAndSave();
+                }
+            });
+        });
+
+        viewport.addEventListener('dblclick', (event: MouseEvent) => {
+            this.ngZone.run(() => {
+                this.editor.closeContextMenu();
+                if (this.editor.selectedTool && event.button == 0) {
+                    this.editor.selectedTool.doubleClick(event);
                     this.snapshotAndSave();
                 }
             });
@@ -916,6 +928,12 @@ export class EditorPage implements AfterViewInit {
         this.snapshotAndSaveIfChanged(beforeState, beforeRevision);
     }
 
+    contextMenuOpensLeft(): boolean {
+        return !!this.editor.contextMenu
+            && typeof window !== 'undefined'
+            && this.editor.contextMenu.x > window.innerWidth / 2;
+    }
+
     // ── Export ───────────────────────────────────────────────────────
 
     openExportDialog() {
@@ -1111,6 +1129,24 @@ export class EditorPage implements AfterViewInit {
         this.scheduleAttributeSnapshot();
     }
 
+    flipElement(element: AnyElement | undefined, axis: 'x' | 'y') {
+        if(!element) {
+            return;
+        }
+
+        if(element.transform.originX == null || element.transform.originY == null) {
+            pinTransformOrigin(element);
+        }
+
+        if(axis === 'x') {
+            element.transform.scaleX = -element.transform.scaleX;
+        } else {
+            element.transform.scaleY = -element.transform.scaleY;
+        }
+
+        this.scheduleAttributeSnapshot();
+    }
+
     shapeFrameValue(shape: Shape, field: ShapeFrameField): number {
         switch(field) {
             case 'x': return shape.position.x;
@@ -1188,7 +1224,7 @@ export class EditorPage implements AfterViewInit {
         const moved: Point[] = [anchor];
         anchor.addTo(delta);
 
-        path.lines.forEach((line) => {
+        path.contours.flatMap((contour) => contour.lines).forEach((line) => {
             if(line.points[0] == anchor && line.controlStart && !moved.includes(line.controlStart)) {
                 line.controlStart.addTo(delta);
                 moved.push(line.controlStart);
@@ -1427,6 +1463,7 @@ export class EditorPage implements AfterViewInit {
         this.editor.selectedElement = this.selectedLayers.length == 1 ? this.selectedLayers[0] : undefined;
         this.editor.selectedPathAnchor = undefined;
         this.editor.selectedPathLine = undefined;
+        this.editor.selectedPathLines = [];
     }
 
     private clonePoint(point: Point, pointMap: Map<string, Point>) {
@@ -1452,6 +1489,7 @@ export class EditorPage implements AfterViewInit {
         clone.locked = false;
         clone.opacity = path.opacity;
         clone.closed = path.closed;
+        clone.fillRule = path.fillRule;
         clone.transform = { ...path.transform };
         clone.motion = { ...path.motion };
         clone.settings = {
@@ -1459,22 +1497,24 @@ export class EditorPage implements AfterViewInit {
             stroke: this.cloneColor(path.settings.stroke),
             fill: this.cloneColor(path.settings.fill),
         };
-        clone.lines = path.lines.map((line) => {
-            return new Line(this.editor, {
-                type: line.type,
-                points: line.points.map((point) => this.clonePoint(point, pointMap)),
-                controlStart: line.controlStart ? this.clonePoint(line.controlStart, pointMap) : undefined,
-                controlEnd: line.controlEnd ? this.clonePoint(line.controlEnd, pointMap) : undefined,
-            });
-        });
-        clone.moveElement(new Point(12, 12));
+        clone.contours = path.contours.map((contour) => clone.createContour(
+            contour.lines.map((line) => {
+                return new Line(this.editor, {
+                    type: line.type,
+                    points: line.points.map((point) => this.clonePoint(point, pointMap)),
+                    controlStart: line.controlStart ? this.clonePoint(line.controlStart, pointMap) : undefined,
+                    controlEnd: line.controlEnd ? this.clonePoint(line.controlEnd, pointMap) : undefined,
+                });
+            }),
+            contour.closed
+        ));
         return clone;
     }
 
     private cloneShape(shape: Shape) {
         const clone = new Shape(this.editor, {
             type: shape.type,
-            position: new Point(shape.position.x + 12, shape.position.y + 12),
+            position: new Point(shape.position.x, shape.position.y),
             width: shape.width,
             height: shape.height,
         });
@@ -1494,7 +1534,7 @@ export class EditorPage implements AfterViewInit {
     }
 
     private cloneText(text: TextElement) {
-        const clone = new TextElement(this.editor, new Point(text.position.x + 12, text.position.y + 12));
+        const clone = new TextElement(this.editor, new Point(text.position.x, text.position.y));
         clone.name = `${text.name} Copy`;
         clone.visible = text.visible;
         clone.locked = false;
@@ -1551,7 +1591,7 @@ export class EditorPage implements AfterViewInit {
     private findLayerContext(elements: AnyElement[], element: AnyElement, parent?: Group): LayerContext | undefined {
         const index = elements.indexOf(element);
         if(index >= 0) {
-            return { elements, index, parent };
+            return { element, elements, index, parent };
         }
 
         for(const candidate of elements) {
@@ -1593,6 +1633,88 @@ export class EditorPage implements AfterViewInit {
 
         const parentElements = contexts[0].elements;
         return contexts.every((context) => context.elements === parentElements);
+    }
+
+    canCombineSelectedPaths(target: AnyElement): target is Path {
+        if(!(target instanceof Path) || this.selectedLayers.length < 2 || !this.selectedLayers.includes(target)) {
+            return false;
+        }
+
+        if(!this.selectedLayers.every((element) => element instanceof Path)) {
+            return false;
+        }
+
+        const contexts = this.selectedLayerContexts();
+        if(contexts.length !== this.selectedLayers.length) {
+            return false;
+        }
+
+        const parentElements = contexts[0].elements;
+        return contexts.every((context) => context.elements === parentElements);
+    }
+
+    combineSelectedPaths(target: Path) {
+        if(!this.canCombineSelectedPaths(target) || !this.editor.selectedSVG) {
+            return;
+        }
+
+        const contexts = this.selectedLayerContexts();
+        const targetContext = contexts.find((context) => context.element === target);
+        if(!targetContext) {
+            return;
+        }
+
+        const sources = contexts
+            .filter((context) => context.element !== target && context.element instanceof Path)
+            .sort((a, b) => a.index - b.index);
+
+        sources.forEach((context) => {
+            this.appendPathContours(target, context.element as Path);
+        });
+
+        [...sources]
+            .sort((a, b) => b.index - a.index)
+            .forEach((context) => {
+                context.elements.splice(context.index, 1);
+            });
+
+        target.fillRule = 'evenodd';
+        this.selectLayer(target);
+        this.snapshotAndSave();
+    }
+
+    private appendPathContours(target: Path, source: Path) {
+        if(!this.editor.selectedSVG) {
+            return;
+        }
+
+        const targetInverse = invertMatrix(combinedMatrixFor(this.editor.selectedSVG.elements, target));
+        const sourceMatrix = combinedMatrixFor(this.editor.selectedSVG.elements, source);
+        const sourceToTarget = multiplyMatrix(targetInverse, sourceMatrix);
+
+        source.contours.forEach((contour) => {
+            const pointMap = new Map<string, Point>();
+            const clonePoint = (point: Point) => {
+                let cloned = pointMap.get(point.id);
+                if(!cloned) {
+                    const transformed = applyMatrix(sourceToTarget, point.x, point.y);
+                    cloned = new Point(transformed.x, transformed.y);
+                    cloned.cornerRadius = point.cornerRadius;
+                    pointMap.set(point.id, cloned);
+                }
+                return cloned;
+            };
+
+            target.contours.push(target.createContour(
+                contour.lines.map((line) => new Line(this.editor, {
+                    type: line.type,
+                    points: line.points.map(clonePoint),
+                    controlStart: line.controlStart ? clonePoint(line.controlStart) : undefined,
+                    controlEnd: line.controlEnd ? clonePoint(line.controlEnd) : undefined,
+                })),
+                contour.closed
+            ));
+        });
     }
 
     groupSelectedLayers() {
@@ -1666,6 +1788,22 @@ export class EditorPage implements AfterViewInit {
         this.snapshotAndSave();
     }
 
+    convertLayerStrokeToPath(path: Path, profile: StrokeToPathProfile) {
+        const context = this.layerContext(path);
+        if(!context) {
+            return;
+        }
+
+        const converted = convertStrokeToPath(path, this.editor, profile);
+        if(!converted) {
+            return;
+        }
+
+        context.elements.splice(context.index, 1, converted);
+        this.selectLayer(converted);
+        this.snapshotAndSave();
+    }
+
     deleteLayer(element: AnyElement) {
         if(!this.editor.selectedSVG) return;
         const context = this.layerContext(element);
@@ -1675,6 +1813,7 @@ export class EditorPage implements AfterViewInit {
             this.editor.selectedElement = undefined;
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
+            this.editor.selectedPathLines = [];
         }
         this.removeLayerFromSelection(element);
         this.snapshotAndSave();
@@ -1701,6 +1840,7 @@ export class EditorPage implements AfterViewInit {
         this.editor.selectedElement = undefined;
         this.editor.selectedPathAnchor = undefined;
         this.editor.selectedPathLine = undefined;
+        this.editor.selectedPathLines = [];
         this.snapshotAndSave();
     }
 
@@ -1784,6 +1924,7 @@ export class EditorPage implements AfterViewInit {
             this.editor.selectedElement = undefined;
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
+            this.editor.selectedPathLines = [];
         }
         this.snapshotAndSave();
     }
@@ -1884,6 +2025,26 @@ export class EditorPage implements AfterViewInit {
                     this.detachMotionPath(element);
                 }
             }] : []),
+            ...(element instanceof Path && canConvertStrokeToPath(element) ? [{
+                label: 'Convert Stroke To Path',
+                children: [{
+                    label: 'Optimized',
+                    action: () => {
+                        this.convertLayerStrokeToPath(element, 'optimized');
+                    }
+                }, {
+                    label: 'Precise',
+                    action: () => {
+                        this.convertLayerStrokeToPath(element, 'precise');
+                    }
+                }]
+            }] : []),
+            ...(this.canCombineSelectedPaths(element) ? [{
+                label: 'Combine Selected Paths',
+                action: () => {
+                    this.combineSelectedPaths(element);
+                }
+            }] : []),
             ...(this.canGroupSelectedLayers() ? [{
                 label: 'Group Selection',
                 shortcut: 'Ctrl+G',
@@ -1975,6 +2136,7 @@ export class EditorPage implements AfterViewInit {
         if(!element.visible && this.editor.selectedElement && (this.editor.selectedElement == element || this.elementContains(element, this.editor.selectedElement))) {
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
+            this.editor.selectedPathLines = [];
         }
         this.snapshotAndSave();
     }
@@ -1985,6 +2147,7 @@ export class EditorPage implements AfterViewInit {
         if(element.locked && this.editor.selectedElement && (this.editor.selectedElement == element || this.elementContains(element, this.editor.selectedElement))) {
             this.editor.selectedPathAnchor = undefined;
             this.editor.selectedPathLine = undefined;
+            this.editor.selectedPathLines = [];
         }
         this.snapshotAndSave();
     }
@@ -2201,6 +2364,7 @@ interface LayerRow {
 }
 
 interface LayerContext {
+    element: AnyElement;
     elements: AnyElement[];
     index: number;
     parent?: Group;

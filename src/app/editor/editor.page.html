@@ -176,6 +176,7 @@
       </ng-template>
 
       <div class="context-menu" *ngIf="editor.contextMenu"
+           [class.open-left]="contextMenuOpensLeft()"
            (mousedown)="$event.stopPropagation()"
            (click)="$event.stopPropagation()"
            (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
@@ -295,6 +296,10 @@
                      [ngModel]="transformValue(editor.inspectedElement, 'originY')"
                      (ngModelChange)="setTransformValue(editor.inspectedElement, 'originY', $event)" />
             </label>
+          </div>
+          <div class="transform-actions">
+            <button type="button" (click)="flipElement(editor.inspectedElement, 'x')">Flip X</button>
+            <button type="button" (click)="flipElement(editor.inspectedElement, 'y')">Flip Y</button>
           </div>
         </div>
         <div class="attr-list">
@@ -534,6 +539,7 @@
   </ng-template>
 
   <div class="context-menu" *ngIf="editor.contextMenu"
+       [class.open-left]="contextMenuOpensLeft()"
        (mousedown)="$event.stopPropagation()"
        (click)="$event.stopPropagation()"
        (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
