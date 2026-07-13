@@ -15,14 +15,14 @@ A browser-based motion SVG studio for drawing, editing, and keyframe animation.
 - Select tool — move elements, drag anchors and bezier handles, convert straight ↔ curve, insert/delete points
 - Layers panel — nested groups, clipping, visibility, lock, rename, duplicate, drag-reorder, and delete
 - Properties panel — per-element attributes (stroke, fill, width/height, caps/joins)
-- Project gallery — auto-saves to `localStorage`, thumbnail previews, project name + dimensions picker
+- Project gallery — asynchronous IndexedDB autosave, thumbnail previews, project name + dimensions picker, and resilient localStorage/in-memory fallbacks
 - SVG import — safe native conversion with full path-command, clipping, and editable gradient support plus opaque preservation
-- Timeline — property keyframes, easing, playback, selection, clipboard, and motion paths
+- Animation workspace — virtualized timeline, speed graph, per-axis keyframe retiming, velocity/influence handles, easing presets, playback, selection, clipboard, and motion paths
 - Export — clean static `.svg` file download
-- Undo / redo — per-document history (50 steps)
+- Undo / redo — per-document, section-shared history (50 entries with a 64 MiB unique-section budget)
 - Hosted on Cloudflare Pages, routed with SPA fallback
 
-See [`FEATURES.md`](FEATURES.md) for shipped behavior, [`ARCHITECTURE.md`](ARCHITECTURE.md) for ownership rules, and [`ROADMAP.md`](ROADMAP.md) for what comes next.
+See [`FEATURES.md`](FEATURES.md) for shipped behavior, [`ANIMATION_GUIDE.md`](ANIMATION_GUIDE.md) for animation controls and a first-project walkthrough, [`ARCHITECTURE.md`](ARCHITECTURE.md) for ownership rules, and [`ROADMAP.md`](ROADMAP.md) for what comes next.
 
 ---
 
@@ -57,4 +57,5 @@ npx wrangler deploy
 | Build | `@angular-devkit/build-angular:application` (esbuild) |
 | Icons | FontAwesome 7 via `@fortawesome/angular-fontawesome` |
 | Hosting | Cloudflare Pages |
-| Persistence | `localStorage` (project save/load) |
+| Persistence | IndexedDB (`projects`, `documents`, `thumbnails`, `meta`) with localStorage and in-memory fallbacks |
+| Animation | Compiled evaluation plans with retained imperative SVG preview/playback |

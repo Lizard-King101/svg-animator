@@ -1,88 +1,33 @@
-# Animation MVP Roadmap
+# Animation System Status
 
-Planning reference for the animation side of SVG Animator. This document tracks the intended model, runtime strategy, UI direction, compatibility rules, and phased implementation status.
+This document records the shipped animation architecture and compatibility contract. For day-to-day controls and an example project, start with [ANIMATION_GUIDE.md](ANIMATION_GUIDE.md).
 
-Status legend:
+## Current boundary
 
-| Status | Meaning |
-|---|---|
-| Done | Implemented and merged |
-| In progress | Partially implemented; known checklist items remain |
-| Planned | Intended for the MVP or a named later phase |
-| Deferred | Valuable, but intentionally outside the first animation release |
-| Open | Needs a product or technical decision |
+The authoring system is implemented end to end inside the editor:
 
----
+- property keyframes and preset easing
+- numeric temporal speed/influence handles
+- Timeline and Graph editing surfaces
+- compiled track evaluation
+- retained imperative SVG playback and scrubbing
+- project migration, history, autosave, and reload
+- a deterministic compiler contract for future runtime export
 
-## Guiding Model
+Static SVG export remains available. Animated JSON publishing, an embedded/external export UI, and the standalone player are not shipped.
 
-SVG Animator should treat a document as two connected layers:
+## Model
 
-1. **Artwork model**
-   Paths, shapes, text, groups, clipping, base geometry, styles, and base transform channels.
+An editor document has two connected layers:
 
-2. **Animation model**
-   Timeline data that targets stable element IDs and property paths over time.
+1. The artwork model owns shapes, paths, text, groups, clipping, gradients, base geometry/styles, and base transform channels.
+2. The animation model targets stable element IDs and property paths without destructively rewriting the artwork.
 
-Animation should evaluate on top of the base artwork. It should not destroy or rewrite the drawing source. For example, a rectangle can keep its geometry at `x=120`, `y=80`, while animation tracks drive `transform.translateX`, `transform.rotation`, or `opacity`.
-
-This preserves editability and makes animation data portable to external webpages.
-
----
-
-## Current Foundation
-
-| Area | Status | Notes |
-|---|---|---|
-| Persistent element IDs | Done | Existing element IDs are used as animation targets |
-| Transform channels | Done | Paths, shapes, text, and groups have translate, scale, rotation, and origin |
-| Transform rendering | Done | Editor and export use generated SVG matrix transforms |
-| Group wrapper transforms | Done | Groups transform as wrappers rather than rewriting children |
-| Shape frame editing | Done | Rectangles and ellipses expose geometry `X/Y/W/H` for alignment |
-| Clip/group movement UX | Done | Selected groups and clip shapes can be moved via selection bounds |
-| Stable transform origins | Done | Origins are pinned when needed to avoid group bounds drift |
-| Legacy save compatibility | Done | Missing transform data defaults safely |
-| Animation schema | Done | Versioned animation document now lives on `SVGSave` |
-| Keyframe/track model | Done | Tracks target `elementId + propertyPath` |
-| Interpolation helpers | Done | Number, color, boolean/string stepped values, and easing helpers |
-
----
-
-## MVP Scope
-
-The MVP should prove the full animation loop with the smallest stable property set:
-
-| Feature | Status | Notes |
-|---|---|---|
-| Animation schema | Done | Versioned JSON stored with project saves |
-| Timeline state | Planned | Duration, current time, playback state, loop settings |
-| Keyframe model | Done | Timestamped values with easing metadata |
-| Track targeting | Done | Tracks target `elementId + propertyPath` |
-| Interpolation engine | Done | Number, color, boolean/discrete, and easing helpers |
-| Editor playback | Done | Service owns current time, play/pause/seek, loop, and preview restore |
-| Timeline panel | In progress | Bottom panel has layer rows, property lanes, playback controls, scrubber, and key diamonds |
-| Auto-key mode | Planned | Property edits at the playhead create/update keyframes |
-| Manual key controls | Planned | Add/remove keyframe for selected property |
-| Transform animation | Planned | Translate X/Y, scale X/Y, rotation, origin X/Y |
-| Opacity animation | Done | Element/group opacity is in the model, render path, export, and property resolver |
-| SVG export with animation data | Planned | Embed JSON payload or export JSON beside SVG |
-| Lightweight runtime | Planned | External script evaluates animation data against SVG DOM |
-
-MVP exit criteria:
-
-- A user can create a drawing, switch to Animate mode, keyframe a transform, preview it, save/load it, export it, and run the animation on an external webpage with the runtime.
-- Unknown future animation data does not break older projects or the editor.
-- Runtime failure is graceful when a target element/property no longer exists.
-
----
-
-## Animation Data Shape
-
-Initial schema should be explicit and versioned:
+The persisted document envelope is version 4. Its animation document is version 2:
 
 ```ts
-interface AnimationDocumentV1 {
-  version: 1;
+interface AnimationDocument {
+  version: 2;
   duration: number;
   fpsHint?: number;
   loop?: boolean;
@@ -105,364 +50,138 @@ interface Keyframe {
   time: number;
   value: unknown;
   easing?: EasingSpec;
+  temporal?: TemporalTangents;
+}
+
+interface TemporalHandle {
+  speed: number;      // property units per second
+  influence: number;  // 0–1 of the adjacent segment duration
+}
+
+interface TemporalTangents {
+  in?: TemporalHandle;
+  out?: TemporalHandle;
+  linked: boolean;
 }
 ```
 
-Example property paths:
+Tracks are normalized into time order with one keyframe per timestamp. Retiming collisions replace the destination key deterministically.
+
+When `temporal` is absent, the evaluator uses the saved easing preset exactly. Editing a preset in the graph initializes equivalent temporal handles; reapplying a preset clears custom temporal data for the affected segment. Linked handles share speed continuity only, while incoming and outgoing influences remain independent.
+
+Numeric temporal segments are time/value cubics constructed from the source's outgoing handle and destination's incoming handle. Signed speed and overshoot are valid. Property adapters clamp bounded outputs such as opacity, progress, and gradient offsets at the application boundary.
+
+## Animatable properties
+
+The authoring evaluator and runtime compiler support:
+
+- Transform: translate X/Y, scale X/Y, rotation, and origin X/Y
+- Style: opacity, fill/stroke color, and stroke width
+- Visibility: stepped boolean visibility
+- Path: draw progress and stable path-point X/Y positions
+- Motion path: progress, rotate-to-path, offset angle, and offset X/Y
+- Gradients: linear/radial geometry, stop offset, stop color, and stop opacity
+- Grouped path-shape and gradient editing surfaces composed from their underlying tracks
+
+Numeric graph pairing is semantic rather than name-only. Translate, scale, origin, motion offset, each path point, and compatible gradient coordinates automatically overlay their X/Y partner. Other numeric properties use a single-channel speed graph.
+
+## Editing behavior
+
+The animation timeline component uses `OnPush` change detection and keeps the layer/property list aligned with either surface:
+
+- Timeline mode displays property lanes, real keys on expanded properties, and non-interactive aggregate diamonds on collapsed layers.
+- Graph mode displays numeric speed curves, separate X/Y colors and node shapes, roots that retime an individual channel, and incoming/outgoing temporal handles.
+- Wheel over the lane side zooms time around the pointer.
+- Middle-mouse drag pans time and either scrolls timeline rows or pans the graph's vertical speed range.
+- Ctrl/Command + wheel over the graph zooms speed around the pointer.
+- Horizontal and vertical Fit commands restore useful visible ranges.
+
+Pointer gestures retain global tracking after they leave a handle. High-frequency scrubbing, graph editing, numeric scrubbing, panning, and key retiming are coalesced through `requestAnimationFrame`. A live gesture commits one mutation on pointer-up, Escape restores the captured state, and a no-op produces no history/autosave entry.
+
+Timeline numeric fields preserve both direct entry and scrubbing: click without movement focuses/selects the input; horizontal drag changes its value. History restoration invalidates timeline projections and refreshes the displayed values.
+
+Rows are fixed-height and virtualized with overscan. Each sorted track is binary-searched for the visible time range, so the surface creates DOM only for visible rows and keys rather than all stored keyframes. Layer summary projections and graph paths are revision-keyed caches.
+
+## Evaluation plan
+
+`AnimationEvaluationPlan` is compiled when document structure changes or affected tracks are invalidated. Compilation:
+
+- flattens stable target IDs once
+- indexes tracks by target/property
+- normalizes and validates keyframes once
+- compiles times and numeric values into typed arrays
+- compiles colors, discrete values, segment modes, and temporal coefficients
+- retains target/property metadata for the render-domain adapter
+
+Forward playback advances a per-track active-segment cursor. Seeking and reverse movement use binary search. Frame evaluation does not sort keyframes, recursively search the element tree, or create a new array for every track.
+
+Property/render adapters combine related channels before output. Transform components generate one final transform write, path-point channels generate one path-data write, and gradient/paint channels share their applicable output boundary.
+
+## Preview and rendering
+
+Angular owns edit-mode artwork. Playback and scrubbing use `ImperativeSvgRenderer`, which retains SVG element/gradient/stop references by stable ID and batches direct DOM changes outside Angular's zone.
+
+The renderer handles transforms, opacity, visibility, paint, gradient geometry/stops, stroke width, path data, draw progress, and motion-path transforms. The playhead and time display receive lightweight imperative frame updates. Angular is re-entered for play/pause/end state changes and paused editing refreshes.
+
+Preview base values are captured for the entire preview session and restored when preview ends. The model may expose evaluated values for paused authoring and overlays, but preview-mutated state is excluded from serialization. Selection/path overlays are hidden during active playback and restored when playback pauses.
+
+## History and persistence
+
+`DocumentMutationService` is the persistent change boundary. Mutation domains distinguish artwork, animation, guides, metadata, and thumbnail-affecting artwork. One committed change captures one plain base-state save, then reuses it for history and persistence.
+
+History shares unchanged identity, artwork, animation, and guide sections. A document retains at most 50 entries and 64 MiB of unique serialized section data. Undo/redo restores stable element/point/line selections, resets the mutation baseline, persists the restored document, and refreshes animation/UI projections.
+
+`ProjectRepository` is asynchronous. IndexedDB is primary and separates:
+
+- `projects`: lightweight metadata and revision
+- `documents`: versioned document envelopes
+- `thumbnails`: SVG thumbnail strings and revision
+- `meta`: database/migration state
+
+Document and metadata updates use one transaction. Autosaves are coalesced to the newest pending revision. Thumbnails are generated during idle time only after artwork changes.
+
+Existing localStorage projects migrate once, are validated by the sequential document migrators, and leave a read-only legacy backup. If IndexedDB fails, the service tries the legacy localStorage format. If that fails, it retains an in-memory session and exposes a persistent warning that changes are not being saved.
+
+## Runtime compiler contract
+
+`compileRuntimeAnimation(document)` is pure and deterministic. It emits:
 
 ```ts
-transform.translateX
-transform.translateY
-transform.scaleX
-transform.scaleY
-transform.rotation
-transform.originX
-transform.originY
-settings.fill
-settings.stroke
-settings.stroke_width
-opacity
-visible
+interface CompiledAnimationV1 {
+  kind: "svg-animator/compiled-animation";
+  version: 1;
+  targets: string[];
+  properties: string[];
+  duration: number;
+  loop: boolean;
+  markers: TimelineMarker[];
+  variables: RuntimeVariable[];
+  tracks: CompiledRuntimeTrackV1[];
+  diagnostics: RuntimeCompileDiagnostic[];
+}
 ```
 
-Compatibility rules:
+The payload interns target/property strings, stores numeric time/value arrays with segment modes and temporal coefficients, packs colors with interpolation-space metadata, and preserves discrete boolean/string tracks. Diagnostics report orphaned targets, unsupported properties, invalid values, and skipped tracks.
 
-- Always include an animation schema version.
-- Ignore unknown fields.
-- Skip unknown track types or property paths without crashing.
-- Keep target element IDs stable across save/load.
-- Avoid destructive migrations. Prefer additive migrations.
-- Preserve orphaned tracks when possible so users can recover if an element returns.
+Compiled caches are never persisted in editable project documents. Golden tests compare compiled evaluation with authoring evaluation at endpoints and sampled intermediate times. A later export cut will combine the static base SVG with this payload for embedded JSON, external JSON, and the lightweight player.
 
----
+## Compatibility rules
 
-## Runtime Strategy
+- Keep element, path-point, gradient-stop, track, and keyframe IDs stable.
+- Ignore unknown fields and skip unsupported runtime tracks without crashing.
+- Preserve orphaned authoring tracks when possible so a restored target can recover them.
+- Add sequential migration fixtures before changing document or animation versions.
+- Never add temporal data while migrating v1 animation presets to v2.
+- Never serialize preview-applied values or compiled runtime caches.
+- Keep static SVG export free of editor handles, hit targets, and runtime data.
 
-External webpage support should use a lightweight JavaScript runtime rather than relying only on SMIL or CSS generation.
+## Verification
 
-The runtime should:
+Run the deterministic suite and production build:
 
-- discover animation JSON embedded in an SVG or accept JSON passed by the host page
-- resolve target element IDs
-- evaluate tracks at the current time
-- apply SVG attributes, style values, and transform matrices
-- expose playback controls
-- emit lifecycle and marker events
-- fail gracefully when targets are missing
-
-Suggested public API:
-
-```ts
-const player = createSvgAnimator(svgElement, animationData);
-
-player.play();
-player.pause();
-player.seek(1.25);
-player.setSpeed(0.5);
-player.playSegment("hoverIn");
-player.trigger("open");
-player.setVariable("isHovered", true);
-player.destroy();
+```bash
+npm test -- --watch=false
+npm run build
 ```
 
-Export formats to support over time:
-
-| Format | Status | Notes |
-|---|---|---|
-| SVG with embedded animation JSON | Planned | Best single-file authoring export |
-| SVG plus external JSON | Planned | Better for production caching/versioning |
-| Runtime JS bundle | Planned | Small player script loaded by host page |
-| Pure CSS/SMIL export | Deferred | Useful, but less flexible for interactivity |
-| PNG/video sequence export | Deferred | Different rendering/export pipeline |
-
----
-
-## Animatable Properties
-
-### MVP Properties
-
-| Property group | Status | Notes |
-|---|---|---|
-| Transform translate | Planned | Core motion property |
-| Transform scale | Planned | Uses existing transform channels |
-| Transform rotation | Planned | Uses pinned origin |
-| Transform origin | Planned | Advanced but already part of transform model |
-| Opacity | Done | Element/group opacity support is in model/render/export |
-| Fill color | In progress | Structured color keyframes preserve RGB/HSL interpolation intent |
-| Stroke color | In progress | Structured color keyframes preserve RGB/HSL interpolation intent |
-| Stroke width | Planned | Number interpolation |
-| Visibility | Planned | Discrete/stepped interpolation |
-
-### Later Properties
-
-| Property group | Status | Notes |
-|---|---|---|
-| Text content | Deferred | Discrete keyframes only |
-| Stroke dash offset/array | Deferred | Needs dashed stroke attributes first |
-| Filters/effects | Deferred | Depends on future effect model |
-| Path points and handles | Deferred | Powerful, but topology-sensitive |
-| Path morphing | Deferred | Requires matching point/segment topology |
-
----
-
-## Path, Point, And Rig Animation
-
-Direct line/point animation should not be part of the first MVP, but the model should not block it.
-
-Recommended progression:
-
-1. **Direct point tracks**
-   Animate stable point IDs and control handle coordinates.
-
-2. **Topology safeguards**
-   Warn before deleting points with animation tracks. Preserve orphaned tracks where possible.
-
-3. **Named proxy controls**
-   User-facing controls such as `mouthCorner`, `tailTip`, or `waveAmount` drive multiple point offsets.
-
-4. **Bones/deformers**
-   Weighted bindings from proxy bones to path points.
-
-5. **Constraints**
-   Higher-level behavior like follow, aim, squash, or pinned anchors.
-
-Rationale:
-
-- Direct point animation is expressive but hard to manage.
-- Proxy controls make complex path animation usable.
-- Bones/deformers should be built on top of stable point identity and track targeting, not mixed into the MVP.
-
----
-
-## Runtime Functions And Modifiers
-
-Built-in modifiers are useful, but arbitrary inline JavaScript should not be part of the default export path.
-
-Planned built-in functions:
-
-| Function | Status | Notes |
-|---|---|---|
-| sine | Deferred | Oscillation, hover motion, floating effects |
-| triangle | Deferred | Mechanical looping motion |
-| noise | Deferred | Seeded procedural variation |
-| random | Deferred | Seeded and deterministic where possible |
-| spring | Deferred | Secondary motion |
-| bounce | Deferred | Preset easing/modifier |
-| decay | Deferred | Damped motion |
-| loop | Planned | Repeat timeline or segment |
-| ping-pong | Planned | Alternate repeated playback |
-| clamp/map | Deferred | Utility modifiers |
-| follow path | Deferred | Needs path sampling utilities |
-
-Runtime extension rule:
-
-```ts
-player.registerFunction("customWave", fn);
-```
-
-Custom functions should be registered by the host page, not embedded as arbitrary code in exported SVG by default.
-
----
-
-## Trigger Hooks And Interactivity
-
-Interactive SVGs should communicate with parent pages through DOM events and a small runtime API.
-
-Planned emitted events:
-
-| Event | Status | Notes |
-|---|---|---|
-| animation start | Planned | Runtime lifecycle |
-| animation end | Planned | Runtime lifecycle |
-| loop | Planned | Fired when loop restarts |
-| marker reached | Planned | Timeline marker callbacks |
-| segment start/end | Deferred | Useful once named segments exist |
-| element click | Planned | Optional runtime event bridge |
-| hover enter/exit | Planned | Optional runtime event bridge |
-| custom trigger | Planned | Parent page can trigger named animation behavior |
-
-DOM event naming:
-
-```ts
-svg.dispatchEvent(new CustomEvent("svganimator:marker", {
-  detail: { name: "introDone", time: 1.2 }
-}));
-```
-
-Parent page input examples:
-
-```ts
-player.trigger("open");
-player.playSegment("hoverIn");
-player.setVariable("expanded", true);
-```
-
----
-
-## UI/UX Direction
-
-The editor should have distinct **Edit** and **Animate** modes.
-
-### Edit Mode
-
-Purpose: create stable artwork.
-
-Expected tools:
-
-- drawing tools
-- path point editing
-- shape frame editing
-- group/clip/layer operations
-- base style editing
-- base transform setup
-
-### Animate Mode
-
-Purpose: keyframe and preview property changes over time.
-
-Expected tools:
-
-- timeline panel
-- playhead and playback controls
-- selected element track list
-- keyframe creation/removal
-- auto-key toggle
-- easing controls
-- marker controls
-- loop/segment controls
-
-Rules:
-
-- In Animate mode, property edits at the playhead should create or update keyframes when auto-key is enabled.
-- If auto-key is disabled, edits should either change the base value clearly or require an explicit base-edit action.
-- Timeline scrubbing should be non-destructive.
-- The user should always be able to return to the base pose.
-
-Open UX decisions:
-
-| Decision | Status | Notes |
-|---|---|---|
-| Auto-key default | Open | Safer default may be off |
-| Timeline placement | Open | Bottom panel is conventional |
-| Track filtering | Open | Selected element only vs full layer tree |
-| Keyframe density | Open | Compact track rows vs full property rows |
-| Edit while previewing | Open | Needs clear rules to avoid accidental keyframes |
-
----
-
-## Implementation Phases
-
-### Phase 0: Transform Foundation
-
-Status: Done
-
-- Persistent transforms
-- Group wrapper transforms
-- Transform handles
-- Transform export
-- Shape frame controls
-- Stable origins
-
-### Phase 1: Animation Model
-
-Status: In progress
-
-- Add `animation` to `SVGSave` - Done
-- Define versioned schema - Done
-- Add track/keyframe classes or plain model helpers - Done
-- Add interpolation utilities - Done
-- Add migration/restore defaults - Done
-- Add tests for save/load and legacy compatibility
-
-### Phase 2: Editor Playback
-
-Status: In progress
-
-- Timeline state in editor service or a dedicated animation service - Done
-- Play, pause, seek, loop - Done
-- Evaluate animation state into rendered SVG preview - Done
-- Keep base document state separate from evaluated preview state - Done
-- Add focused tests for preview restore and missing targets
-
-### Phase 3: Timeline UI
-
-Status: In progress
-
-- Animate mode toggle - Done
-- Header playback shell - Replaced by bottom timeline
-- Bottom timeline panel - Done
-- Playhead - Done
-- Duration controls - Done
-- Keyframe buttons - Done
-- Auto-key toggle
-- Track rows for expanded layer properties - Done
-- Basic easing selection
-
-### Phase 4: Transform And Opacity Tracks
-
-Status: Planned
-
-- Translate, scale, rotation, origin
-- Add opacity to element model/render/export
-- Number interpolation
-- Discrete visibility interpolation
-
-### Phase 5: Runtime And Export
-
-Status: Planned
-
-- Runtime evaluator package/file
-- Embedded animation JSON export
-- External JSON export path
-- Public player API
-- Marker/lifecycle events
-- Basic webpage integration example
-
-### Phase 6: Style Tracks
-
-Status: Planned
-
-- Fill color
-- Stroke color
-- Stroke width
-- Easing and interpolation polish
-
-### Phase 7: Interaction Hooks
-
-Status: Planned
-
-- Click/hover triggers
-- Named markers and segments
-- Parent page event bridge
-- Runtime variables
-
-### Phase 8: Advanced Motion
-
-Status: Deferred
-
-- Path point animation
-- Path morphing
-- Proxy controls
-- Bones/deformers
-- Procedural modifiers
-- Physics-like runtime functions
-
----
-
-## Near-Term Checklist
-
-| Task | Status |
-|---|---|
-| Create animation MVP planning doc | Done |
-| Update README to link animation MVP plan | Done |
-| Add animation schema types | Done |
-| Add animation defaults to new SVGs | Done |
-| Preserve animation data in project save/load | Done |
-| Add interpolation utilities | Done |
-| Add editor playback service | Done |
-| Add Animate mode shell | Done |
-| Add timeline panel shell | Done |
-| Add transform keyframe UI | Done |
-| Add selected-element property key rows | Done |
-| Add opacity model/render/export support | Done |
-| Add runtime export spike | Planned |
+Tests cover migration, temporal math, property clamping, track invalidation, cursor/binary-search selection, base-state restoration, timeline/graph gestures, imperative DOM output, history sharing, repository fallbacks, and compiler equivalence. Performance measurements use the repeatable Chrome workflow in [ANIMATION_PERFORMANCE.md](ANIMATION_PERFORMANCE.md), not wall-clock CI assertions.

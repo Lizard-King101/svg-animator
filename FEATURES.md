@@ -4,8 +4,10 @@ SVG Animator is a motion SVG studio: a browser-based drawing, editing, and keyfr
 
 ## Documents and persistence
 
-- Multi-document tabs with per-document undo/redo history (50 snapshots).
-- Local project gallery, thumbnails, autosave, dimension presets, and versioned, backward-compatible `localStorage` saves.
+- Multi-document tabs with per-document undo/redo history. Unchanged identity, artwork, animation, and guide sections are shared across entries; history retains up to 50 entries and 64 MiB of unique section data.
+- Asynchronous local project gallery, explicit loading/error states, dimension presets, and versioned document envelopes.
+- IndexedDB persistence separates project metadata, documents, and thumbnails. A one-time localStorage migration retains a read-only legacy backup; localStorage and then in-memory repositories are used if IndexedDB is unavailable.
+- Coalesced autosaves write only the newest pending revision. Artwork thumbnails are generated during idle time and animation-only edits reuse the existing thumbnail.
 - Safe SVG file import from the project gallery with editable/preserved/removed-content reporting.
 - Native editable linear/radial gradient import with inherited definitions, transforms, spread modes, translucent stops, direct canvas handles, and grouped timeline animation.
 - `DOMParser` ingestion for groups, paths, rectangles, circles/ellipses, lines, polylines, polygons, and basic text.
@@ -35,14 +37,19 @@ SVG Animator is a motion SVG studio: a browser-based drawing, editing, and keyfr
 ## Animation
 
 - Versioned animation document with duration, loop, tracks, markers, and runtime-variable storage.
-- Edit/animate modes, playback, scrubbing, timeline zoom/fit, nested rows, and per-property tracks.
-- Keyframe add/remove, multi-selection, marquee, drag/nudge, copy/paste/delete, and easing choices.
-- Numeric, boolean, string, and color evaluation; deterministic interpolation and preview base-state restoration.
+- Edit/animate modes, playback, scrubbing, timeline zoom/fit, nested rows, per-property tracks, and non-interactive summary diamonds on collapsed layers.
+- Virtualized fixed-height rows and visible-time key filtering keep timeline DOM proportional to the viewport rather than the document's total key count.
+- Keyframe add/remove, multi-selection, marquee, drag/nudge, copy/paste/delete, individual graph-key retiming, and easing presets.
+- AE-style numeric speed graphs with signed property-units-per-second, independent influence lengths, linked speed continuity, exact fields, vertical fit/pan/zoom, and paired X/Y overlays for compatible properties.
+- Numeric, boolean, string, and color evaluation; deterministic interpolation, temporal cubic overshoot, bounded-property clamping, and retained preview base-state restoration.
 - Animatable transforms, visibility, opacity, fill/stroke, stroke width, draw progress, motion progress/orientation/offsets, and path-point positions.
+- Compiled evaluation plans sort and validate tracks once, use active-segment cursors for forward playback, and binary search for seeks/reverse movement.
+- Playback and scrubbing use a retained direct-SVG renderer outside Angular, while edit-mode artwork remains Angular-rendered.
+- A pure deterministic `compileRuntimeAnimation(document)` boundary produces versioned, compact numeric/color/discrete tracks and diagnostics for the future player/export pipeline.
 
 ## Current limits
 
-- Animated/runtime publishing is not shipped yet.
+- Animated/runtime publishing UI and the standalone player are not shipped yet; the runtime compiler contract is present.
 - Complex imported transforms with skew, patterns, effects, rich text, and other non-native features are preserved but are not directly editable.
 - Multi-layer canvas marquee and multi-object transforms are not yet available.
 - Boolean editing is currently used by stroke conversion rather than exposed as a complete user-facing boolean toolset.
