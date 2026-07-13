@@ -56,6 +56,7 @@ export class TimelineEditingService {
             timeOffset: keyframe.time - earliest,
             value: cloneValue(keyframe.value),
             easing: cloneValue(keyframe.easing),
+            temporal: cloneValue(keyframe.temporal),
         }));
         return true;
     }
@@ -92,6 +93,7 @@ export class TimelineEditingService {
             if(existing) {
                 existing.value = cloneValue(copied.value);
                 existing.easing = cloneValue(copied.easing);
+                existing.temporal = cloneValue(copied.temporal);
                 this.selectedKeyframeIds.add(existing.id);
             } else {
                 const pasted: Keyframe = {
@@ -99,6 +101,7 @@ export class TimelineEditingService {
                     time,
                     value: cloneValue(copied.value),
                     easing: cloneValue(copied.easing),
+                    temporal: cloneValue(copied.temporal),
                 };
                 track.keyframes.push(pasted);
                 this.selectedKeyframeIds.add(pasted.id);
@@ -137,6 +140,8 @@ export function snapTimelineTime(time: number, duration: number): number {
 }
 
 export function timelineRulerInterval(pixelsPerSecond: number): number {
+    if(pixelsPerSecond >= 1200) return 0.05;
+    if(pixelsPerSecond >= 600) return 0.1;
     if(pixelsPerSecond >= 220) return 0.25;
     if(pixelsPerSecond >= 120) return 0.5;
     if(pixelsPerSecond >= 70) return 1;
@@ -144,7 +149,15 @@ export function timelineRulerInterval(pixelsPerSecond: number): number {
 }
 
 export function clampTimelineScale(value: number): number {
-    return Math.round(Math.max(40, Math.min(360, value)));
+    return Math.round(Math.max(10, Math.min(2000, value)));
+}
+
+/** Clamps one shared retiming delta so a multi-key selection keeps its spacing at the document bounds. */
+export function clampKeyframeTimeDelta(startTimes: readonly number[], requestedDelta: number, duration: number): number {
+    if(startTimes.length === 0) return 0;
+    const earliest = Math.min(...startTimes);
+    const latest = Math.max(...startTimes);
+    return Math.max(-earliest, Math.min(Math.max(0, duration) - latest, requestedDelta));
 }
 
 export function timelineTimesMatch(a: number, b: number): boolean { return Math.abs(a - b) < 0.0005; }
@@ -158,6 +171,28 @@ interface CopiedKeyframe {
     timeOffset: number;
     value: unknown;
     easing: Keyframe["easing"];
+    temporal?: Keyframe["temporal"];
 }
 
 function cloneValue<T>(value: T): T { return value == null ? value : JSON.parse(JSON.stringify(value)); }
+
+/** Returns the numeric channel displayed alongside a selected speed curve. */
+export function semanticPartnerProperty(property: string): string | undefined {
+    const fixed: Record<string, string> = {
+        "transform.translateX": "transform.translateY",
+        "transform.translateY": "transform.translateX",
+        "transform.scaleX": "transform.scaleY",
+        "transform.scaleY": "transform.scaleX",
+        "transform.originX": "transform.originY",
+        "transform.originY": "transform.originX",
+        "motion.offsetX": "motion.offsetY",
+        "motion.offsetY": "motion.offsetX",
+    };
+    if(fixed[property]) return fixed[property];
+    const point = /^(path\.points\.[^.]+)\.(x|y)$/.exec(property);
+    if(point) return `${point[1]}.${point[2] === "x" ? "y" : "x"}`;
+    const gradient = /^(settings\.(?:fill|stroke)\.gradient\.)(x1|y1|x2|y2|cx|cy|fx|fy)$/.exec(property);
+    if(!gradient) return undefined;
+    const pairs: Record<string, string> = { x1: "y1", y1: "x1", x2: "y2", y2: "x2", cx: "cy", cy: "cx", fx: "fy", fy: "fx" };
+    return `${gradient[1]}${pairs[gradient[2]]}`;
+}

@@ -20,6 +20,14 @@
 
   <div class="gallery-section">
 
+    <div class="import-notice error" *ngIf="projectService.savingWarning">
+      <fa-icon icon="triangle-exclamation"></fa-icon><span>{{ projectService.savingWarning }}</span>
+    </div>
+
+    <div class="gallery-empty" *ngIf="loading">
+      <fa-icon icon="spinner" animation="spin"></fa-icon><p>Loading projects…</p>
+    </div>
+
     <div class="import-notice success" *ngIf="importMessage">
       <fa-icon icon="circle-check"></fa-icon>
       <span>{{ importMessage }}</span>
@@ -31,13 +39,13 @@
       <button (click)="importError = undefined" title="Dismiss"><fa-icon icon="times"></fa-icon></button>
     </div>
 
-    <div class="gallery-empty" *ngIf="projects.length === 0">
+    <div class="gallery-empty" *ngIf="!loading && projects.length === 0">
       <fa-icon icon="pen-fancy"></fa-icon>
       <p>No projects yet</p>
       <span>Click <strong>New Project</strong> to start drawing</span>
     </div>
 
-    <div class="gallery-grid" *ngIf="projects.length > 0">
+    <div class="gallery-grid" *ngIf="!loading && projects.length > 0">
       <div class="project-card" *ngFor="let project of projects" (click)="openProject(project)">
         <div class="card-preview">
           <img [src]="thumbnailUrl(project)" [alt]="project.name" />

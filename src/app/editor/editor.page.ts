@@ -209,17 +209,18 @@ export class EditorPage implements AfterViewInit {
         private cdr: ChangeDetectorRef
     ) {}
 
-    ngAfterViewInit() {
+    async ngAfterViewInit() {
         // Load project from query params, or auto-open new-project dialog
         const params = this.route.snapshot.queryParamMap;
         const projectId = params.get('id');
         if (projectId) {
-            const record = this.projectService.get(projectId);
+            const record = await this.projectService.getAsync(projectId);
             if (record) {
                 this.editor.loadSVG(record.svgData);
                 this.restoreAnimationPreview();
                 this.mutations.resetBaseline();
             }
+            this.cdr.detectChanges();
         } else {
             this.openNewDialog();
         }
@@ -878,16 +879,18 @@ export class EditorPage implements AfterViewInit {
         }
 
         this.animation.setDuration(numeric);
-        this.scheduleAttributeSnapshot();
+        this.mutations.schedule(250, 'animation');
     }
 
     setAnimationLoop(value: boolean) {
         this.animation.setLoop(value);
-        this.scheduleAttributeSnapshot();
+        this.mutations.schedule(250, 'animation');
     }
 
     handleTimelineChange() {
-        this.snapshotAndSave();
+        this.animation.invalidate();
+        this.animation.previewAt(this.animation.currentTime);
+        this.mutations.commit('animation');
     }
 
     selectSVGTab(id: string) {

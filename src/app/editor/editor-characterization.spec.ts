@@ -304,6 +304,7 @@ describe("editor topology boundaries", () => {
     it("creates one history snapshot and autosave for a change and neither for a no-op", () => {
         const { editor, svg, path } = documentWithPath();
         (editor as any).selectedSVG = svg;
+        (editor as any).selectedPathLines = [];
         const animation = {
             withBaseState: <T>(callback: () => T) => callback(),
         } as AnimationPlaybackService;
@@ -313,6 +314,8 @@ describe("editor topology boundaries", () => {
         } as unknown as ProjectService;
         spyOn(history, "snapshot").and.callThrough();
         const mutations = new DocumentMutationService(editor, animation, history, projects);
+        let historyRestores = 0;
+        mutations.historyRestored.subscribe(() => historyRestores++);
         mutations.resetBaseline();
 
         mutations.mutate(() => { path.opacity = 0.5; });
@@ -322,6 +325,11 @@ describe("editor topology boundaries", () => {
         mutations.mutate(() => undefined);
         expect(history.snapshot).toHaveBeenCalledTimes(1);
         expect(projects.upsert).toHaveBeenCalledTimes(1);
+
+        mutations.undo();
+        expect(historyRestores).toBe(1);
+        mutations.redo();
+        expect(historyRestores).toBe(2);
     });
 
     it("edits path topology through pure helpers while preserving shared endpoints", () => {

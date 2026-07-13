@@ -2,6 +2,7 @@ import legacyProjects from "./fixtures/legacy-projects.json";
 import currentProjects from "./fixtures/current-projects-v1.json";
 import futureProjects from "./fixtures/future-projects.json";
 import invalidProjects from "./fixtures/invalid-projects.json";
+import documentV3AnimationV1 from "./fixtures/document-v3-animation-v1.json";
 import {
     CURRENT_DOCUMENT_VERSION,
     CURRENT_PROJECT_DATABASE_VERSION,
@@ -59,7 +60,7 @@ describe("document migrations", () => {
         expect(result.status).toBe("ok");
         if(result.status !== "ok") return;
         expect(result.migrated).toBeTrue();
-        expect(result.value.version).toBe(3);
+        expect(result.value.version).toBe(4);
         expect(result.value.data.importedSourceNodes).toEqual([]);
     });
 
@@ -78,8 +79,18 @@ describe("document migrations", () => {
 
         expect(result.status).toBe("ok");
         if(result.status !== "ok") return;
-        expect(result.value.version).toBe(3);
-        expect(result.value.data).toEqual(data as any);
+        expect(result.value.version).toBe(4);
+        expect(result.value.data.animation?.version).toBe(2);
+        expect(result.value.data.animation?.tracks).toEqual(data.animation.tracks as any);
+    });
+
+    it("migrates document v3 and animation v1 sequentially without changing key semantics", () => {
+        const result = migrateDocument(documentV3AnimationV1);
+        expect(result.status).toBe("ok");
+        if(result.status !== "ok") return;
+        expect(result.value.version).toBe(4);
+        expect(result.value.data.animation?.version).toBe(2);
+        expect(result.value.data.animation?.tracks[0].keyframes).toEqual((documentV3AnimationV1.data.animation.tracks[0].keyframes as any));
     });
 
     it("isolates invalid records while retaining valid projects", () => {
@@ -116,28 +127,27 @@ describe("ProjectService migration boundary", () => {
         }
     });
 
-    it("rewrites legacy localStorage once and exposes the unchanged runtime record", () => {
-        localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(legacyProjects));
+    it("leaves legacy localStorage read-only while exposing the migrated runtime record", () => {
+        const raw = JSON.stringify(legacyProjects);
+        localStorage.setItem(PROJECT_STORAGE_KEY, raw);
         const service = new ProjectService();
 
         expect(service.list()[0].svgData).toEqual({ ...legacyProjects[0].svgData, importedSourceNodes: [] } as any);
-        const persisted = JSON.parse(localStorage.getItem(PROJECT_STORAGE_KEY)!);
-        expect(persisted.kind).toBe(PROJECT_DATABASE_KIND);
-        expect(persisted.version).toBe(CURRENT_PROJECT_DATABASE_VERSION);
-        expect(persisted.projects[0].document.kind).toBe(DOCUMENT_ENVELOPE_KIND);
+        expect(localStorage.getItem(PROJECT_STORAGE_KEY)).toBe(raw);
     });
 
-    it("writes all subsequent saves through the current envelopes", () => {
+    it("writes all subsequent saves through the async repository", async () => {
         localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(currentProjects));
         const service = new ProjectService();
         const document = { ...service.list()[0].svgData, name: "Updated name" };
 
         service.upsert(document, "<svg>updated</svg>");
+        await service.ready;
 
-        const persisted = JSON.parse(localStorage.getItem(PROJECT_STORAGE_KEY)!);
-        expect(persisted.projects[0].name).toBe("Updated name");
-        expect(persisted.projects[0].document.data.name).toBe("Updated name");
-        expect(persisted.projects[0].createdAt).toBe(300);
+        const persisted = service.get("current-doc")!;
+        expect(persisted.name).toBe("Updated name");
+        expect(persisted.svgData.name).toBe("Updated name");
+        expect(persisted.createdAt).toBe(300);
     });
 
     it("does not overwrite data from a future application version", () => {

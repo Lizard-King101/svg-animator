@@ -6,6 +6,13 @@ import {
     runtimeProjects,
     storeRuntimeProjects,
 } from '../editor/migrations/document-migrations';
+import {
+    createResilientProjectRepository,
+    LocalStorageProjectRepository,
+    MemoryProjectRepository,
+    ProjectRepository,
+    RepositoryProjectRecord,
+} from './project-repository';
 
 export interface ProjectRecord {
     id: string;
@@ -14,6 +21,7 @@ export interface ProjectRecord {
     createdAt: number;
     updatedAt: number;
     svgData: SVGSave;
+    revision?: number;
 }
 
 const DEFAULT_PROJECT = [
@@ -24,65 +32,135 @@ export const PROJECT_STORAGE_KEY = 'svg-animator-projects';
 
 @Injectable({ providedIn: 'root' })
 export class ProjectService {
+    loading = true;
+    error?: string;
+    savingWarning?: string;
+    readonly ready: Promise<void>;
+    private projects: ProjectRecord[] = [];
+    private repository?: ProjectRepository;
+    private pending = new Map<string, { record: RepositoryProjectRecord; thumbnailChanged: boolean }>();
+    private draining = false;
 
     constructor() {
         const stored = this.readStorage();
-        if(stored.status === 'ok' && stored.migrated) {
-            this.writeDatabase(stored.database);
+        if(stored.status === 'ok') this.projects = runtimeProjects(stored.database);
+        if(stored.status === 'missing' || (stored.status === 'ok' && this.projects.length === 0)) {
+            this.projects = DEFAULT_PROJECT.map((project, index) => ({ ...project, revision: DEFAULT_PROJECT.length - index }));
         }
-        if (stored.status === 'missing' || (stored.status === 'ok' && stored.database.projects.length === 0)) {
-            DEFAULT_PROJECT.forEach((proj) => {
-                this.upsert(proj.svgData, proj.thumbnail);
-            })
-        }
+        this.ready = this.initializeRepository();
     }
 
     list(): ProjectRecord[] {
-        const stored = this.readStorage();
-        if(stored.status !== 'ok') {
-            return [];
-        }
-        if(stored.migrated) this.writeDatabase(stored.database);
-        return runtimeProjects(stored.database);
+        return [...this.projects];
     }
+
+    async listAsync(): Promise<ProjectRecord[]> { await this.ready; return this.list(); }
 
     get(id: string): ProjectRecord | null {
-        return this.list().find(p => p.id === id) ?? null;
+        return this.projects.find(p => p.id === id) ?? null;
     }
 
-    upsert(svgData: SVGSave, thumbnail: string): void {
-        const projects = this.mutableProjects();
-        if(!projects) return;
-        const idx = projects.findIndex(p => p.id === svgData.id);
+    async getAsync(id: string): Promise<ProjectRecord | null> { await this.ready; return this.get(id); }
+
+    upsert(svgData: SVGSave, thumbnail: string, options: { thumbnailChanged?: boolean } = {}): void {
+        const idx = this.projects.findIndex(p => p.id === svgData.id);
         const now = Date.now();
         const record: ProjectRecord = {
             id: svgData.id,
             name: svgData.name,
             thumbnail,
-            createdAt: idx >= 0 ? projects[idx].createdAt : now,
+            createdAt: idx >= 0 ? this.projects[idx].createdAt : now,
             updatedAt: now,
             svgData,
+            revision: (idx >= 0 ? this.projects[idx].revision ?? 0 : 0) + 1,
         };
         if (idx >= 0) {
-            projects[idx] = record;
+            this.projects[idx] = record;
         } else {
-            projects.unshift(record);
+            this.projects.unshift(record);
         }
-        this.writeDatabase(storeRuntimeProjects(projects));
+        this.pending.set(record.id, { record: record as RepositoryProjectRecord, thumbnailChanged: options.thumbnailChanged !== false });
+        void this.drainPending();
     }
 
     remove(id: string): void {
-        const existing = this.mutableProjects();
-        if(!existing) return;
-        const projects = existing.filter(p => p.id !== id);
-        this.writeDatabase(storeRuntimeProjects(projects));
+        this.projects = this.projects.filter(p => p.id !== id);
+        this.pending.delete(id);
+        void this.ready.then(() => this.repository?.remove(id)).catch(() => this.failToMemory());
     }
 
-    private mutableProjects(): ProjectRecord[] | null {
-        const stored = this.readStorage();
-        if(stored.status === 'missing') return [];
-        if(stored.status !== 'ok') return null;
-        return runtimeProjects(stored.database);
+    updateThumbnail(id: string, thumbnail: string, revision?: number): void {
+        const record = this.projects.find((candidate) => candidate.id === id);
+        if(!record || (revision != null && (record.revision ?? 0) > revision)) return;
+        record.thumbnail = thumbnail;
+        void this.ready.then(() => this.repository?.putThumbnail(id, record.revision ?? revision ?? 0, thumbnail)).catch(() => this.failToMemory());
+    }
+
+    private async initializeRepository(): Promise<void> {
+        try {
+            this.repository = await createResilientProjectRepository(PROJECT_STORAGE_KEY);
+            const records = await this.repository.list();
+            if(records.length) {
+                this.projects = records;
+                this.pending.forEach(({ record }) => {
+                    const index = this.projects.findIndex((candidate) => candidate.id === record.id);
+                    if(index >= 0) this.projects[index] = record; else this.projects.unshift(record);
+                });
+            }
+            else this.projects.forEach((record) => this.pending.set(record.id, { record: record as RepositoryProjectRecord, thumbnailChanged: true }));
+            if(!this.repository.persistent) this.savingWarning = 'Changes are not being saved. They will be lost when this tab closes.';
+            await this.drainPending();
+        } catch(error) {
+            this.error = error instanceof Error ? error.message : 'Unable to initialize project storage.';
+            this.failToMemory();
+        } finally {
+            this.loading = false;
+        }
+    }
+
+    private async drainPending(): Promise<void> {
+        if(this.draining) return;
+        await this.readyIfAssigned();
+        if(!this.repository) return;
+        this.draining = true;
+        try {
+            while(this.pending.size) {
+                const entry = [...this.pending.values()].sort((a, b) => a.record.revision - b.record.revision).at(-1)!;
+                this.pending.delete(entry.record.id);
+                try {
+                    await this.repository.put(entry.record, entry.thumbnailChanged);
+                } catch {
+                    await this.fallbackRepository();
+                    await this.repository.put(entry.record, entry.thumbnailChanged);
+                }
+            }
+        } catch {
+            this.failToMemory();
+        } finally {
+            this.draining = false;
+        }
+    }
+
+    private async fallbackRepository(): Promise<void> {
+        if(this.repository?.kind === 'indexeddb') {
+            const fallback = new LocalStorageProjectRepository(PROJECT_STORAGE_KEY);
+            await fallback.initialize();
+            for(const record of this.projects) await fallback.put(record as RepositoryProjectRecord);
+            this.repository = fallback;
+            return;
+        }
+        this.failToMemory();
+    }
+
+    private failToMemory(): void {
+        this.repository = new MemoryProjectRepository(this.projects as RepositoryProjectRecord[]);
+        this.savingWarning = 'Changes are not being saved. They will be lost when this tab closes.';
+    }
+
+    private async readyIfAssigned(): Promise<void> {
+        // Constructor writes can arrive before `ready` is assigned. A microtask
+        // lets assignment complete without recursively awaiting `ready` itself.
+        if(!this.repository) await Promise.resolve();
     }
 
     private readStorage(): StorageReadResult {
@@ -103,13 +181,6 @@ export class ProjectService {
         }
     }
 
-    private writeDatabase(database: ProjectDatabaseV1): void {
-        try {
-            localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(database));
-        } catch {
-            // Storage can be unavailable or full. The in-memory editor remains usable.
-        }
-    }
 }
 
 type StorageReadResult = {

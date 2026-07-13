@@ -1,0 +1,34 @@
+{
+  "kind": "svg-animator/document",
+  "version": 3,
+  "data": {
+    "id": "animation-v1-fixture",
+    "name": "Animation v1 fixture",
+    "width": 100,
+    "height": 100,
+    "elements": [],
+    "animation": {
+      "version": 1,
+      "duration": 2,
+      "fpsHint": 60,
+      "loop": false,
+      "tracks": [
+        {
+          "id": "track-1",
+          "targetId": "shape-1",
+          "property": "opacity",
+          "valueType": "number",
+          "keyframes": [
+            { "id": "key-1", "time": 0, "value": 0, "easing": { "type": "ease-in-out" } },
+            { "id": "key-2", "time": 2, "value": 1 }
+          ]
+        }
+      ],
+      "markers": [],
+      "variables": []
+    },
+    "guides": [],
+    "guidesLocked": false,
+    "importedSourceNodes": []
+  }
+}

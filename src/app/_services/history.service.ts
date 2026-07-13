@@ -2,6 +2,7 @@ import { Injectable } from "@angular/core";
 import { Group } from "../editor/objects/elements/group.object";
 import { Path } from "../editor/objects/elements/path.object";
 import { AnyElement } from "../editor/objects/svg.object";
+import { SVGSave } from "../editor/objects/svg.object";
 import { EditorService } from "./editor.service";
 
 @Injectable()
@@ -17,8 +18,8 @@ export class HistoryService {
         this._editor = editor;
     }
 
-    snapshot(editor: EditorService) {
-        editor.selectedSVG?.snapshot();
+    snapshot(editor: EditorService, save?: SVGSave) {
+        editor.selectedSVG?.snapshot(save);
     }
 
     undo(editor: EditorService) {

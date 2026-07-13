@@ -1,19 +1,22 @@
 import { NgClass, NgFor, NgIf, NgStyle } from "@angular/common";
-import { Component, ElementRef, EventEmitter, HostBinding, HostListener, Output } from "@angular/core";
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, EventEmitter, HostBinding, HostListener, NgZone, OnDestroy, Output } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { AnimationPlaybackService } from "src/app/_services/animation-playback.service";
 import { EditorService } from "src/app/_services/editor.service";
 import { EditorPreferencesService } from "src/app/_services/editor-preferences.service";
 import { ColorAttribute } from "../attributes/color/color.component";
-import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, AnimationTrack, EasingType, Keyframe, makeAnimationId } from "src/app/editor/objects/animation.object";
+import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, AnimationTrack, EasingType, evaluateTemporalSpeed, Keyframe, makeAnimationId, temporalTangentsForPreset, TemporalHandle } from "src/app/editor/objects/animation.object";
 import { findAnimationTarget, matchingAnimationProperty, parsePathPointProperty, pathPointAnimationProperty, readAnimationProperty } from "src/app/editor/objects/animation-targets";
 import { Color } from "src/app/editor/objects/color.object";
+import { DocumentMutationService } from "src/app/_services/document-mutation.service";
+import { Subscription } from "rxjs";
 import { Group } from "src/app/editor/objects/elements/group.object";
 import { Path } from "src/app/editor/objects/elements/path.object";
 import { AnyElement } from "src/app/editor/objects/svg.object";
 import { GradientPaint, GradientStop, gradientAnimationProperties, isGradientPaint } from "src/app/editor/objects/paint.object";
 import {
+    clampKeyframeTimeDelta,
     clampTimelineScale,
     KeyframeEntry,
     PropertyTimelineRow,
@@ -24,6 +27,7 @@ import {
     timelineTimesMatch,
     timelineTimeToX,
     timelineXToTime,
+    semanticPartnerProperty,
 } from "src/app/_services/timeline-editing.service";
 
 const PATH_SHAPE_PROPERTY: AnimatablePropertyDefinition = {
@@ -41,14 +45,16 @@ const PATH_SHAPE_PROPERTY: AnimatablePropertyDefinition = {
     templateUrl: "animation-timeline.component.html",
     styleUrls: ["animation-timeline.component.scss"],
     providers: [TimelineEditingService],
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AnimationTimelineComponent {
+export class AnimationTimelineComponent implements OnDestroy {
     @Output() animationChange = new EventEmitter<void>();
     @HostBinding("style.flex-basis.px") timelineHeight = 310;
     @HostBinding("class.resizing") resizingTimeline = false;
     @HostBinding("class.dragging-keyframe") get draggingKeyframe() { return !!this.keyframeDrag; }
     @HostBinding("class.dragging-number") get draggingNumber() { return !!this.numberDrag; }
     @HostBinding("class.selecting-keyframes") get selectingKeyframes() { return !!this.marquee; }
+    @HostBinding("class.panning-timeline") get panningTimeline() { return !!this.viewportPan; }
 
     readonly properties = ANIMATABLE_PROPERTIES;
     readonly easingOptions: readonly EasingToolbarOption[] = [
@@ -60,18 +66,46 @@ export class AnimationTimelineComponent {
     readonly timePadding = 28;
     expandedLayerIds = new Set<string>();
     selectedRowKey?: string;
+    selectedGraphTargetId?: string;
+    selectedGraphProperty?: string;
     get selectedKeyframeIds(): Set<string> { return this.editing.selectedKeyframeIds; }
     set selectedKeyframeIds(value: Set<string>) { this.editing.selectedKeyframeIds = value; }
     openColorEditorKey?: string;
     paintPopoverPosition?: { left: number; top: number };
     pixelsPerSecond = 120;
+    surfaceMode: "timeline" | "graph" = "timeline";
+    graphSpeedMin = -1;
+    graphSpeedMax = 1;
+    activeGraphHandle?: GraphHandle;
+    selectedGraphHandleKeys = new Set<string>();
+    virtualStart = 0;
+    virtualCount = 80;
+    visibleTimeStart = 0;
+    visibleTimeEnd = Number.POSITIVE_INFINITY;
     private scrubbing = false;
+    private scrubPointerId?: number;
+    private scrubRect?: DOMRect;
+    private scrubClientX = 0;
+    private scrubFrame?: number;
+    private scrubCapture?: HTMLElement;
     private resizeStartY = 0;
     private resizeStartHeight = 310;
     private keyframeDrag?: KeyframeDrag;
+    private keyframeFrame?: number;
+    private viewportPan?: TimelineViewportPan;
+    private viewportPanFrame?: number;
     private numberDrag?: NumberDrag;
+    private numberDragFrame?: number;
     marquee?: KeyframeMarquee;
     private colorCache = new Map<string, { source: string; color: Color }>();
+    private graphDrag?: GraphHandleDrag;
+    private graphFrame?: number;
+    private globalPointerCleanup?: () => void;
+    private speedCurveCache = new Map<string, { key: string; path: string }>();
+    private layerSummaryCache = new Map<string, { revision: number; keyframes: TimelineKeyframe[] }>();
+    private rowCacheKey = "";
+    private rowCache: TimelineRow[] = [];
+    private historyRestoreSubscription: Subscription;
 
     constructor(
         public editor: EditorService,
@@ -79,18 +113,43 @@ export class AnimationTimelineComponent {
         private host: ElementRef<HTMLElement>,
         private preferences: EditorPreferencesService,
         private editing: TimelineEditingService,
+        private zone: NgZone,
+        private mutations: DocumentMutationService,
+        private changeDetector: ChangeDetectorRef,
     ) {
         this.timelineHeight = this.clampTimelineHeight(this.preferences.timelineHeight);
+        this.historyRestoreSubscription = this.mutations.historyRestored.subscribe(() => {
+            this.rowCacheKey = "";
+            this.layerSummaryCache.clear();
+            this.speedCurveCache.clear();
+            this.colorCache.clear();
+            this.changeDetector.markForCheck();
+        });
+    }
+
+    ngOnDestroy(): void {
+        this.historyRestoreSubscription.unsubscribe();
+        this.clearGlobalPointerTracking();
+        if(this.graphFrame != null) cancelAnimationFrame(this.graphFrame);
+        if(this.keyframeFrame != null) cancelAnimationFrame(this.keyframeFrame);
+        if(this.viewportPanFrame != null) cancelAnimationFrame(this.viewportPanFrame);
+        if(this.numberDragFrame != null) cancelAnimationFrame(this.numberDragFrame);
+        if(this.scrubFrame != null) cancelAnimationFrame(this.scrubFrame);
     }
 
     get rows(): TimelineRow[] {
-        return this.editing.projectRows(
-            this.editor.selectedSVG?.elements ?? [],
+        const elements = this.editor.selectedSVG?.elements ?? [];
+        const cacheKey = `${this.editor.selectedSVG?.id ?? ""}|${[...this.expandedLayerIds].sort().join(",")}|${this.rowStructureKey(elements)}`;
+        if(cacheKey === this.rowCacheKey) return this.rowCache;
+        this.rowCacheKey = cacheKey;
+        this.rowCache = this.editing.projectRows(
+            elements,
             this.expandedLayerIds,
             this.properties,
             (element, property) => this.propertySupported(element, property),
             PATH_SHAPE_PROPERTY,
         );
+        return this.rowCache;
     }
 
     trackRow(_index: number, row: TimelineRow): string {
@@ -116,10 +175,37 @@ export class AnimationTimelineComponent {
 
     selectTimelineRow(row: TimelineRow) {
         this.selectLayer(row.element);
+        if(row.type === "layer" && this.surfaceMode === "graph") {
+            const first = this.animation.tracksForElement(row.element).find((track) => track.valueType === "number");
+            if(first) {
+                this.selectedGraphTargetId = row.element.id;
+                this.selectedGraphProperty = first.property;
+                this.fitSpeed();
+            }
+        }
         if(row.type === "property") {
+            this.selectedRowKey = `${row.element.id}:${row.property.property}`;
+            if(row.property.valueType === "number") {
+                this.selectedGraphTargetId = row.element.id;
+                this.selectedGraphProperty = row.property.property;
+            } else if(this.isGradientGroupRow(row)) {
+                const first = this.gradientPropertiesForRow(row).find((property) => property.valueType === "number"
+                    && !!this.animation.trackFor(row.element, property.property));
+                if(first) {
+                    this.selectedGraphTargetId = row.element.id;
+                    this.selectedGraphProperty = first.property;
+                }
+            } else if(this.isPathShapeRow(row)) {
+                const first = this.pathPointTracks(row.element)[0];
+                if(first) {
+                    this.selectedGraphTargetId = row.element.id;
+                    this.selectedGraphProperty = first.property;
+                }
+            }
             const match = /^settings\.(fill|stroke)\.gradient\./.exec(row.property.property);
             if(match) this.editor.selectedGradientPaintKey = match[1] as "fill" | "stroke";
         }
+        if(this.surfaceMode === "graph") this.fitSpeed();
     }
 
     openRowContextMenu(row: TimelineRow, event: MouseEvent) {
@@ -166,8 +252,318 @@ export class AnimationTimelineComponent {
             return this.animation.trackFor(row.element, row.property.property)?.keyframes ?? [];
         }
 
-        return this.animation.tracksForElement(row.element)
-            .flatMap((track) => track.keyframes);
+        if(this.expandedLayerIds.has(row.element.id)) return [];
+        const cacheKey = `${this.editor.selectedSVG?.id ?? ""}:${row.element.id}`;
+        const cached = this.layerSummaryCache.get(cacheKey);
+        if(cached?.revision === this.animation.revision) return cached.keyframes;
+        const summaries: TimelineKeyframe[] = [];
+        this.animation.tracksForElement(row.element)
+            .flatMap((track) => track.keyframes)
+            .sort((a, b) => a.time - b.time)
+            .forEach((keyframe) => {
+                const existing = summaries.at(-1);
+                if(existing && this.timesMatch(existing.time, keyframe.time)) {
+                    existing.summaryCount = (existing.summaryCount ?? 1) + 1;
+                    return;
+                }
+                summaries.push({
+                    id: `summary:${row.element.id}:${keyframe.time}`,
+                    time: keyframe.time,
+                    value: undefined,
+                    summaryCount: 1,
+                });
+            });
+        this.layerSummaryCache.set(cacheKey, { revision: this.animation.revision, keyframes: summaries });
+        return summaries;
+    }
+
+    get visibleRows(): TimelineRow[] {
+        const rows = this.rows;
+        if(rows.length <= this.virtualCount) return rows;
+        return rows.slice(this.virtualStart, Math.min(rows.length, this.virtualStart + this.virtualCount));
+    }
+
+    get virtualTopHeight(): number { return this.rows.length > this.virtualCount ? this.virtualStart * 30 : 0; }
+    get virtualBottomHeight(): number {
+        return this.rows.length > this.virtualCount
+            ? Math.max(0, (this.rows.length - this.virtualStart - this.visibleRows.length) * 30)
+            : 0;
+    }
+
+    updateTimelineViewport(event: Event): void {
+        const viewport = event.currentTarget as HTMLElement;
+        const rowStart = Math.max(0, Math.floor((viewport.scrollTop - 30) / 30) - 8);
+        this.virtualStart = Math.min(rowStart, Math.max(0, this.rows.length - this.virtualCount));
+        this.virtualCount = Math.max(40, Math.ceil(viewport.clientHeight / 30) + 16);
+        const timelineLeft = Math.max(0, viewport.scrollLeft - 360 - this.timePadding);
+        this.visibleTimeStart = Math.max(0, timelineLeft / this.pixelsPerSecond - 0.5);
+        this.visibleTimeEnd = (timelineLeft + viewport.clientWidth + 360) / this.pixelsPerSecond + 0.5;
+    }
+
+    visibleKeyframes(row: TimelineRow): TimelineKeyframe[] {
+        const keys = this.keyframes(row);
+        if(!Number.isFinite(this.visibleTimeEnd) || keys.length < 80) return keys;
+        const sorted = keys.length > 1 && keys[0].time > keys[keys.length - 1].time ? [...keys].sort((a, b) => a.time - b.time) : keys;
+        let low = lowerBound(sorted, this.visibleTimeStart);
+        let high = lowerBound(sorted, this.visibleTimeEnd);
+        low = Math.max(0, low - 1);
+        high = Math.min(sorted.length, high + 1);
+        return sorted.slice(low, high);
+    }
+
+    toggleSurfaceMode(mode: "timeline" | "graph"): void {
+        this.surfaceMode = mode;
+        if(mode === "graph") {
+            if(!this.selectedNumericRow()) {
+                const first = this.rows.find((row): row is PropertyTimelineRow => row.type === "property" && row.property.valueType === "number"
+                    && !!this.animation.trackFor(row.element, row.property.property));
+                if(first) this.selectedRowKey = `${first.element.id}:${first.property.property}`;
+                if(first) {
+                    this.selectedGraphTargetId = first.element.id;
+                    this.selectedGraphProperty = first.property.property;
+                } else {
+                    const track = this.editor.selectedSVG?.animation.tracks.find((candidate) => candidate.valueType === "number");
+                    if(track) {
+                        this.selectedGraphTargetId = track.targetId;
+                        this.selectedGraphProperty = track.property;
+                    }
+                }
+            }
+            this.fitSpeed();
+        }
+    }
+
+    selectedNumericRow(): PropertyTimelineRow | undefined {
+        const direct = this.rows.find((row): row is PropertyTimelineRow => row.type === "property"
+            && row.property.valueType === "number"
+            && row.element.id === this.selectedGraphTargetId
+            && row.property.property === this.selectedGraphProperty);
+        if(direct) return direct;
+        const element = findAnimationTarget(this.editor.selectedSVG?.elements ?? [], this.selectedGraphTargetId ?? "");
+        const track = this.editor.selectedSVG?.animation.tracks.find((candidate) => candidate.targetId === this.selectedGraphTargetId
+            && candidate.property === this.selectedGraphProperty && candidate.valueType === "number");
+        if(!element || !track) return undefined;
+        return {
+            type: "property",
+            element,
+            depth: 1,
+            property: { property: track.property, label: this.propertyLabel(track.property), valueType: "number", group: "path", mvp: true },
+        };
+    }
+
+    graphTracks(): GraphTrack[] {
+        const row = this.selectedNumericRow();
+        if(!row) return [];
+        const primary = this.animation.trackFor(row.element, row.property.property);
+        const partnerProperty = semanticPartnerProperty(row.property.property);
+        const partner = partnerProperty ? this.animation.trackFor(row.element, partnerProperty) : undefined;
+        return [primary, partner].flatMap((track) => track ? [this.graphTrackDescriptor(track, track === primary
+            ? row.property.label : this.propertyLabel(track.property), track === primary)] : []);
+    }
+
+    graphTrackOptions(): { property: string; label: string }[] {
+        const targetId = this.selectedGraphTargetId ?? this.editor.selectedElement?.id;
+        const seen = new Set<string>();
+        return (this.editor.selectedSVG?.animation.tracks ?? []).flatMap((track) => {
+            if(track.targetId !== targetId || track.valueType !== "number" || seen.has(track.property)) return [];
+            seen.add(track.property);
+            return [{ property: track.property, label: this.propertyLabel(track.property) }];
+        });
+    }
+
+    graphRenderTracks(): GraphTrack[] {
+        return [...this.graphTracks()].sort((a, b) => Number(a.selected) - Number(b.selected));
+    }
+
+    selectGraphProperty(property: string): void {
+        this.selectedGraphProperty = property;
+        this.fitSpeed();
+    }
+
+    graphHeight(): number { return Math.max(120, this.timelineHeight - 72); }
+    graphZeroY(): number { return this.graphSpeedY(0); }
+    graphPlayheadX(): number { return this.timeToX(this.animation.currentTime); }
+
+    speedCurvePath(track: AnimationTrack): string {
+        const keys = track.keyframes;
+        if(keys.length < 2) return "";
+        const cacheKey = `${this.pixelsPerSecond}:${this.graphSpeedMin}:${this.graphSpeedMax}:${this.graphHeight()}:${keys.map((key) => `${key.time}:${key.value}:${key.easing?.type ?? "linear"}:${key.temporal?.in?.speed ?? ""}:${key.temporal?.in?.influence ?? ""}:${key.temporal?.out?.speed ?? ""}:${key.temporal?.out?.influence ?? ""}`).join("|")}`;
+        const cached = this.speedCurveCache.get(track.id);
+        if(cached?.key === cacheKey) return cached.path;
+        const parts: string[] = [];
+        for(let index = 0; index < keys.length - 1; index++) {
+            const from = keys[index];
+            const to = keys[index + 1];
+            const samples = Math.max(24, Math.min(512, Math.ceil(Math.abs(to.time - from.time) * this.pixelsPerSecond / 4)));
+            for(let sample = 0; sample <= samples; sample++) {
+                const time = from.time + (to.time - from.time) * (sample / samples);
+                const speed = this.segmentSpeed(from, to, time);
+                parts.push(`${parts.length ? "L" : "M"}${this.timeToX(time).toFixed(2)},${this.graphSpeedY(speed).toFixed(2)}`);
+            }
+        }
+        const path = parts.join(" ");
+        this.speedCurveCache.set(track.id, { key: cacheKey, path });
+        return path;
+    }
+
+    graphHandles(track: AnimationTrack): GraphHandle[] {
+        const handles: GraphHandle[] = [];
+        for(let index = 0; index < track.keyframes.length - 1; index++) {
+            const from = track.keyframes[index];
+            const to = track.keyframes[index + 1];
+            const preset = temporalTangentsForPreset(from.easing, Number(from.value), Number(to.value), to.time - from.time);
+            handles.push({ track, keyframe: from, other: to, side: "out", speed: from.temporal?.out?.speed ?? preset.out.speed, influence: from.temporal?.out?.influence ?? preset.out.influence });
+            handles.push({ track, keyframe: to, other: from, side: "in", speed: to.temporal?.in?.speed ?? preset.in.speed, influence: to.temporal?.in?.influence ?? preset.in.influence });
+        }
+        return handles;
+    }
+
+    graphHandleX(handle: GraphHandle): number {
+        const duration = Math.abs(handle.other.time - handle.keyframe.time);
+        const time = handle.side === "out"
+            ? handle.keyframe.time + duration * handle.influence
+            : handle.keyframe.time - duration * handle.influence;
+        return this.timeToX(time);
+    }
+
+    graphKeyX(handle: GraphHandle): number { return this.timeToX(handle.keyframe.time); }
+
+    graphHandleY(handle: GraphHandle): number { return this.graphSpeedY(handle.speed); }
+    graphHandleDisplayY(handle: GraphHandle): number {
+        const axis = this.graphAxis(handle.track.property);
+        return this.graphHandleY(handle) + (axis === "x" ? -5 : axis === "y" ? 5 : 0);
+    }
+    graphAxis(property: string): GraphAxis {
+        if(/(?:X|\.x|\.x1|\.x2|\.cx|\.fx)$/.test(property)) return "x";
+        if(/(?:Y|\.y|\.y1|\.y2|\.cy|\.fy)$/.test(property)) return "y";
+        return "scalar";
+    }
+    graphHandleKey(handle: GraphHandle): string { return `${handle.track.id}:${handle.keyframe.id}:${handle.side}`; }
+    graphHandleSelected(handle: GraphHandle): boolean { return this.selectedGraphHandleKeys.has(this.graphHandleKey(handle)); }
+    graphKeyframeSelected(handle: GraphHandle): boolean { return this.selectedKeyframeIds.has(handle.keyframe.id); }
+
+    fitSpeed(): void {
+        const speeds = this.graphTracks().flatMap(({ track }) => track.keyframes.slice(0, -1).flatMap((from, index) => {
+            const to = track.keyframes[index + 1];
+            return Array.from({ length: 17 }, (_unused, sample) => this.segmentSpeed(from, to, from.time + (to.time - from.time) * sample / 16));
+        })).filter(Number.isFinite);
+        const min = speeds.length ? Math.min(0, ...speeds) : -1;
+        const max = speeds.length ? Math.max(0, ...speeds) : 1;
+        const padding = Math.max(0.1, (max - min) * 0.12);
+        this.graphSpeedMin = min - padding;
+        this.graphSpeedMax = max + padding;
+    }
+
+    zoomSpeed(factor: number, anchorSpeed = (this.graphSpeedMin + this.graphSpeedMax) / 2): void {
+        this.graphSpeedMin = anchorSpeed + (this.graphSpeedMin - anchorSpeed) * factor;
+        this.graphSpeedMax = anchorSpeed + (this.graphSpeedMax - anchorSpeed) * factor;
+        if(this.graphSpeedMax - this.graphSpeedMin < 0.0002) {
+            this.graphSpeedMin = anchorSpeed - 0.0001;
+            this.graphSpeedMax = anchorSpeed + 0.0001;
+        }
+    }
+
+    beginGraphHandleDrag(handle: GraphHandle, event: PointerEvent): void {
+        if(event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const key = this.graphHandleKey(handle);
+        if(event.shiftKey) {
+            if(this.selectedGraphHandleKeys.has(key)) this.selectedGraphHandleKeys.delete(key); else this.selectedGraphHandleKeys.add(key);
+        } else if(!this.selectedGraphHandleKeys.has(key)) {
+            this.selectedGraphHandleKeys.clear();
+            this.selectedGraphHandleKeys.add(key);
+        }
+        const selected = this.graphTracks().flatMap(({ track }) => this.graphHandles(track)).filter((candidate) => this.selectedGraphHandleKeys.has(this.graphHandleKey(candidate)));
+        const originalTemporal = new Map(selected.map((candidate) => [this.graphHandleKey(candidate), this.cloneValue(candidate.keyframe.temporal)]));
+        selected.forEach((candidate) => this.initializeGraphHandle(candidate));
+        if(event.altKey) selected.forEach((candidate) => candidate.keyframe.temporal!.linked = false);
+        this.activeGraphHandle = handle;
+        this.graphDrag = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            latestX: event.clientX,
+            latestY: event.clientY,
+            moved: false,
+            capture: (event.currentTarget as Element).closest<HTMLElement>(".speed-graph-surface") ?? undefined,
+            snapshots: selected.map((candidate) => ({ handle: candidate, temporal: originalTemporal.get(this.graphHandleKey(candidate)) })),
+        };
+        try { this.graphDrag.capture?.setPointerCapture(event.pointerId); } catch {}
+        this.installGlobalPointerTracking(
+            event.pointerId,
+            (pointerEvent) => this.updateGraphHandleDrag(pointerEvent),
+            (pointerEvent) => this.zone.run(() => this.endGraphHandleDrag(pointerEvent)),
+        );
+    }
+
+    updateGraphHandleDrag(event: PointerEvent): void {
+        if(!this.graphDrag || this.graphDrag.pointerId !== event.pointerId) return;
+        event.preventDefault();
+        this.graphDrag.latestX = event.clientX;
+        this.graphDrag.latestY = event.clientY;
+        if(Math.hypot(event.clientX - this.graphDrag.startX, event.clientY - this.graphDrag.startY) > 1) this.graphDrag.moved = true;
+        if(this.graphFrame == null) {
+            this.zone.runOutsideAngular(() => this.graphFrame = requestAnimationFrame(() => this.zone.run(() => this.applyGraphDragFrame())));
+        }
+    }
+
+    endGraphHandleDrag(event: PointerEvent): void {
+        if(!this.graphDrag || this.graphDrag.pointerId !== event.pointerId) return;
+        if(this.graphFrame != null) { cancelAnimationFrame(this.graphFrame); this.graphFrame = undefined; this.applyGraphDragFrame(); }
+        const drag = this.graphDrag;
+        const moved = drag.moved;
+        if(!moved) {
+            drag.snapshots.forEach((snapshot) => snapshot.handle.keyframe.temporal = this.cloneValue(snapshot.temporal));
+            this.animation.invalidate(new Set(drag.snapshots.map((snapshot) => snapshot.handle.track.id)));
+            this.animation.previewAt(this.animation.currentTime);
+        }
+        try { drag.capture?.releasePointerCapture(event.pointerId); } catch {}
+        this.graphDrag = undefined;
+        this.clearGlobalPointerTracking();
+        if(moved) this.animationChange.emit();
+    }
+
+    setActiveHandleValue(field: "speed" | "influence", value: number | string): void {
+        if(!this.activeGraphHandle) return;
+        const numeric = Number(value);
+        if(!Number.isFinite(numeric)) return;
+        const handle = this.initializeGraphHandle(this.activeGraphHandle);
+        handle[field] = field === "influence" ? Math.max(0, Math.min(1, numeric)) : numeric;
+        this.linkGraphHandleSpeed(this.activeGraphHandle);
+        this.animation.invalidate([this.activeGraphHandle.track.id]);
+        this.animation.previewAt(this.animation.currentTime);
+        this.animationChange.emit();
+    }
+
+    relinkActiveHandle(): void {
+        const active = this.activeGraphHandle;
+        if(!active) return;
+        this.initializeGraphHandle(active);
+        const temporal = active.keyframe.temporal ??= { linked: true };
+        temporal.linked = true;
+        const source = temporal[active.side];
+        const opposite = active.side === "in" ? temporal.out : temporal.in;
+        if(source && opposite) opposite.speed = source.speed;
+        this.animationChange.emit();
+    }
+
+    activeHandleSpeed(): number | undefined {
+        const active = this.activeGraphHandle;
+        return active?.keyframe.temporal?.[active.side]?.speed ?? active?.speed;
+    }
+
+    activeHandleInfluence(): number | undefined {
+        const active = this.activeGraphHandle;
+        return active?.keyframe.temporal?.[active.side]?.influence ?? active?.influence;
+    }
+
+    activeHandleLinked(): boolean { return this.activeGraphHandle?.keyframe.temporal?.linked ?? true; }
+    activeHandleAxisLabel(): string {
+        const active = this.activeGraphHandle;
+        if(!active) return "";
+        const axis = this.graphAxis(active.track.property);
+        return axis === "scalar" ? this.propertyLabel(active.track.property) : `${axis.toUpperCase()} · ${this.propertyLabel(active.track.property)}`;
     }
 
     get timelineContentWidth(): number {
@@ -192,7 +588,104 @@ export class AnimationTimelineComponent {
     }
 
     zoomTimeline(delta: number) {
-        this.pixelsPerSecond = this.clampTimelineScale(this.pixelsPerSecond + delta);
+        this.zoomTimelineAt(delta > 0 ? 1.25 : 0.8);
+    }
+
+    setTimelineZoom(value: number | string): void {
+        const numeric = Number(value);
+        if(!Number.isFinite(numeric) || numeric <= 0) return;
+        this.zoomTimelineAt(numeric / this.pixelsPerSecond);
+    }
+
+    timelineWheel(event: WheelEvent): void {
+        const target = event.target as Element | null;
+        if(!target?.closest(".timeline-time-cell")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const graph = target.closest<HTMLElement>(".speed-graph-surface");
+        if(graph && (event.ctrlKey || event.metaKey)) {
+            const rect = graph.getBoundingClientRect();
+            const y = Math.max(0, Math.min(this.graphHeight(), event.clientY - rect.top));
+            const anchor = this.graphSpeedMax - (y - 10) / Math.max(1, this.graphHeight() - 20) * (this.graphSpeedMax - this.graphSpeedMin);
+            this.zoomSpeed(event.deltaY > 0 ? 1.12 : 0.88, anchor);
+            return;
+        }
+        this.zoomTimelineAt(event.deltaY > 0 ? 0.84 : 1.19, event.clientX);
+    }
+
+    beginViewportPan(event: PointerEvent): void {
+        if(event.button !== 1) return;
+        const target = event.target as Element | null;
+        if(!target?.closest(".timeline-time-cell")) return;
+        const viewport = event.currentTarget as HTMLElement;
+        event.preventDefault();
+        event.stopPropagation();
+        this.viewportPan = {
+            pointerId: event.pointerId,
+            viewport,
+            startX: event.clientX,
+            startY: event.clientY,
+            latestX: event.clientX,
+            latestY: event.clientY,
+            startScrollLeft: viewport.scrollLeft,
+            startScrollTop: viewport.scrollTop,
+            startSpeedMin: this.graphSpeedMin,
+            startSpeedMax: this.graphSpeedMax,
+            graph: this.surfaceMode === "graph" && !!target.closest(".speed-graph-surface"),
+        };
+        try { viewport.setPointerCapture(event.pointerId); } catch {}
+        this.installGlobalPointerTracking(
+            event.pointerId,
+            (pointerEvent) => this.updateViewportPan(pointerEvent),
+            (pointerEvent) => this.zone.run(() => this.endViewportPan(pointerEvent)),
+        );
+    }
+
+    updateViewportPan(event: PointerEvent): void {
+        const pan = this.viewportPan;
+        if(!pan || pan.pointerId !== event.pointerId) return;
+        event.preventDefault();
+        pan.latestX = event.clientX;
+        pan.latestY = event.clientY;
+        if(this.viewportPanFrame == null) {
+            this.zone.runOutsideAngular(() => this.viewportPanFrame = requestAnimationFrame(() => this.zone.run(() => this.applyViewportPanFrame())));
+        }
+    }
+
+    endViewportPan(event: PointerEvent): void {
+        const pan = this.viewportPan;
+        if(!pan || pan.pointerId !== event.pointerId) return;
+        if(this.viewportPanFrame != null) {
+            cancelAnimationFrame(this.viewportPanFrame);
+            this.viewportPanFrame = undefined;
+            this.applyViewportPanFrame();
+        }
+        try { pan.viewport.releasePointerCapture(event.pointerId); } catch {}
+        this.viewportPan = undefined;
+        this.clearGlobalPointerTracking();
+    }
+
+    zoomTimelineAt(factor: number, clientX?: number): void {
+        const table = this.host.nativeElement.querySelector<HTMLElement>(".timeline-table");
+        const oldScale = this.pixelsPerSecond;
+        const nextScale = this.clampTimelineScale(oldScale * factor);
+        if(nextScale === oldScale) return;
+        if(!table) {
+            this.pixelsPerSecond = nextScale;
+            return;
+        }
+        const rect = table.getBoundingClientRect();
+        let anchorScreen = clientX == null ? 360 + (table.clientWidth - 360) / 2 : clientX - rect.left;
+        let anchorTime: number;
+        if(clientX == null) {
+            anchorTime = this.animation.currentTime;
+            const playheadScreen = 360 + this.timePadding + anchorTime * oldScale - table.scrollLeft;
+            if(playheadScreen >= 360 && playheadScreen <= table.clientWidth) anchorScreen = playheadScreen;
+        } else {
+            anchorTime = Math.max(0, (table.scrollLeft + anchorScreen - 360 - this.timePadding) / oldScale);
+        }
+        this.pixelsPerSecond = nextScale;
+        table.scrollLeft = Math.max(0, 360 + this.timePadding + anchorTime * nextScale - anchorScreen);
     }
 
     fitTimeline() {
@@ -301,7 +794,17 @@ export class AnimationTimelineComponent {
 
         entries.forEach((entry) => {
             entry.keyframe.easing = { type };
+            entry.keyframe.temporal = undefined;
+            const index = entry.track.keyframes.indexOf(entry.keyframe);
+            if(index >= 0 && index + 1 < entry.track.keyframes.length) {
+                const next = entry.track.keyframes[index + 1];
+                if(next.temporal?.in) {
+                    delete next.temporal.in;
+                    if(!next.temporal.out) next.temporal = undefined;
+                }
+            }
         });
+        this.animation.invalidate(new Set(entries.map((entry) => entry.track.id)));
         this.animation.previewAt(this.animation.currentTime);
         this.animationChange.emit();
     }
@@ -332,10 +835,37 @@ export class AnimationTimelineComponent {
     }
 
     beginKeyframeDrag(keyframe: TimelineKeyframe, event: PointerEvent) {
+        if(event.button !== 0) return;
         event.preventDefault();
         event.stopPropagation();
         this.scrubbing = false;
         const ids = keyframe.groupedKeyframeIds?.length ? keyframe.groupedKeyframeIds : [keyframe.id];
+
+        this.startKeyframeDrag(ids, event, (event.currentTarget as HTMLElement).closest<HTMLElement>(".timeline-lane"));
+    }
+
+    beginGraphKeyframeDrag(handle: GraphHandle, event: PointerEvent): void {
+        if(event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        this.scrubbing = false;
+        this.activeGraphHandle = handle;
+        this.startKeyframeDrag(
+            [handle.keyframe.id],
+            event,
+            (event.currentTarget as Element).closest<HTMLElement>(".speed-graph-surface"),
+            true,
+            true,
+        );
+    }
+
+    private startKeyframeDrag(
+        ids: readonly string[],
+        event: PointerEvent,
+        capture?: HTMLElement | null,
+        preview = false,
+        isolateSelection = false,
+    ): void {
 
         if(event.shiftKey) {
             if(ids.some((id) => this.selectedKeyframeIds.has(id))) {
@@ -343,7 +873,7 @@ export class AnimationTimelineComponent {
             } else {
                 ids.forEach((id) => this.selectedKeyframeIds.add(id));
             }
-        } else if(!ids.some((id) => this.selectedKeyframeIds.has(id))) {
+        } else if(isolateSelection || !ids.some((id) => this.selectedKeyframeIds.has(id))) {
             this.selectedKeyframeIds.clear();
             ids.forEach((id) => this.selectedKeyframeIds.add(id));
         }
@@ -356,13 +886,21 @@ export class AnimationTimelineComponent {
         this.keyframeDrag = {
             pointerId: event.pointerId,
             startX: event.clientX,
+            latestX: event.clientX,
             moved: false,
+            preview,
+            capture: capture ?? undefined,
             entries: entries.map((entry) => ({
                 ...entry,
                 startTime: entry.keyframe.time,
             })),
         };
-        (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+        try { this.keyframeDrag.capture?.setPointerCapture(event.pointerId); } catch {}
+        this.installGlobalPointerTracking(
+            event.pointerId,
+            (pointerEvent) => this.updateKeyframeDrag(pointerEvent),
+            (pointerEvent) => this.zone.run(() => this.endKeyframeDrag(pointerEvent)),
+        );
     }
 
     clearKeyframeSelection() {
@@ -379,15 +917,13 @@ export class AnimationTimelineComponent {
         event.preventDefault();
         event.stopPropagation();
 
-        const deltaTime = (event.clientX - this.keyframeDrag.startX) / this.pixelsPerSecond;
+        this.keyframeDrag.latestX = event.clientX;
         if(Math.abs(event.clientX - this.keyframeDrag.startX) > 2) {
             this.keyframeDrag.moved = true;
         }
-
-        this.keyframeDrag.entries.forEach((entry) => {
-            entry.keyframe.time = this.snapTime(entry.startTime + deltaTime);
-        });
-        this.sortDraggedTracks();
+        if(this.keyframeDrag.moved && this.keyframeFrame == null) {
+            this.zone.runOutsideAngular(() => this.keyframeFrame = requestAnimationFrame(() => this.zone.run(() => this.applyKeyframeDragFrame())));
+        }
     }
 
     endKeyframeDrag(event: PointerEvent) {
@@ -398,13 +934,21 @@ export class AnimationTimelineComponent {
         event.preventDefault();
         event.stopPropagation();
 
-        const moved = this.keyframeDrag.moved;
+        const drag = this.keyframeDrag;
+        if(this.keyframeFrame != null) {
+            cancelAnimationFrame(this.keyframeFrame);
+            this.keyframeFrame = undefined;
+            this.applyKeyframeDragFrame();
+        }
+        const moved = drag.moved && drag.entries.some((entry) => !this.timesMatch(entry.keyframe.time, entry.startTime));
+        if(moved) this.resolveKeyframeCollisions(drag.entries);
         this.keyframeDrag = undefined;
-        try {
-            (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
-        } catch {}
+        try { drag.capture?.releasePointerCapture(event.pointerId); } catch {}
+        this.clearGlobalPointerTracking();
 
         if(moved) {
+            this.animation.invalidate(new Set(drag.entries.map((entry) => entry.track.id)));
+            this.animation.previewAt(this.animation.currentTime);
             this.animationChange.emit();
         }
     }
@@ -426,6 +970,7 @@ export class AnimationTimelineComponent {
         )) {
             return false;
         }
+        this.animation.invalidate();
         this.animation.previewAt(this.animation.currentTime);
         this.animationChange.emit();
         return true;
@@ -436,6 +981,7 @@ export class AnimationTimelineComponent {
         if(!svg || !this.editing.delete(svg.animation)) {
             return false;
         }
+        this.animation.invalidate();
         this.animation.previewAt(this.animation.currentTime);
         this.animationChange.emit();
         return true;
@@ -614,14 +1160,23 @@ export class AnimationTimelineComponent {
 
         event.preventDefault();
         event.stopPropagation();
+        const capture = event.currentTarget as HTMLInputElement;
         this.numberDrag = {
             row,
             pointerId: event.pointerId,
             startX: event.clientX,
+            latestX: event.clientX,
             startValue,
             moved: false,
+            step: this.numericDragStep(row.property, event),
+            capture,
         };
-        (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+        try { capture.setPointerCapture(event.pointerId); } catch {}
+        this.installGlobalPointerTracking(
+            event.pointerId,
+            (pointerEvent) => this.updateNumberDrag(pointerEvent),
+            (pointerEvent) => this.zone.run(() => this.endNumberDrag(pointerEvent)),
+        );
     }
 
     updateNumberDrag(event: PointerEvent) {
@@ -629,17 +1184,17 @@ export class AnimationTimelineComponent {
             return;
         }
 
+        const deltaX = event.clientX - this.numberDrag.startX;
+        if(!this.numberDrag.moved && Math.abs(deltaX) <= 3) return;
+        if(!this.numberDrag.moved) this.numberDrag.capture.blur();
+        this.numberDrag.moved = true;
+        this.numberDrag.latestX = event.clientX;
+        this.numberDrag.step = this.numericDragStep(this.numberDrag.row.property, event);
         event.preventDefault();
         event.stopPropagation();
-
-        const deltaX = event.clientX - this.numberDrag.startX;
-        if(Math.abs(deltaX) > 2) {
-            this.numberDrag.moved = true;
+        if(this.numberDragFrame == null) {
+            this.zone.runOutsideAngular(() => this.numberDragFrame = requestAnimationFrame(() => this.zone.run(() => this.applyNumberDragFrame())));
         }
-
-        const step = this.numericDragStep(this.numberDrag.row.property, event);
-        const value = this.normalizeDraggedNumber(this.numberDrag.row.property, this.numberDrag.startValue + (deltaX * step));
-        this.setPropertyValueInternal(this.numberDrag.row, value, false);
     }
 
     endNumberDrag(event: PointerEvent) {
@@ -647,17 +1202,24 @@ export class AnimationTimelineComponent {
             return;
         }
 
-        event.preventDefault();
-        event.stopPropagation();
-
-        const moved = this.numberDrag.moved;
+        const drag = this.numberDrag;
+        if(this.numberDragFrame != null) {
+            cancelAnimationFrame(this.numberDragFrame);
+            this.numberDragFrame = undefined;
+            this.applyNumberDragFrame();
+        }
+        const moved = drag.moved;
+        if(moved) event.preventDefault();
+        if(moved) event.stopPropagation();
         this.numberDrag = undefined;
-        try {
-            (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
-        } catch {}
+        try { drag.capture.releasePointerCapture(event.pointerId); } catch {}
+        this.clearGlobalPointerTracking();
 
         if(moved) {
             this.animationChange.emit();
+        } else {
+            drag.capture.focus({ preventScroll: true });
+            drag.capture.select();
         }
     }
 
@@ -674,22 +1236,41 @@ export class AnimationTimelineComponent {
     }
 
     beginScrub(event: PointerEvent) {
+        if(event.button !== 0) return;
+        event.preventDefault();
         this.scrubbing = true;
-        (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-        this.scrubToEvent(event);
+        this.scrubPointerId = event.pointerId;
+        this.scrubRect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        this.scrubCapture = event.currentTarget as HTMLElement;
+        try { this.scrubCapture.setPointerCapture(event.pointerId); } catch {}
+        this.scrubClientX = event.clientX;
+        this.installGlobalPointerTracking(
+            event.pointerId,
+            (pointerEvent) => this.updateScrub(pointerEvent),
+            (pointerEvent) => this.endScrub(pointerEvent),
+        );
+        this.queueScrubFrame();
     }
 
     updateScrub(event: PointerEvent) {
-        if(this.scrubbing) {
-            this.scrubToEvent(event);
-        }
+        if(!this.scrubbing || event.pointerId !== this.scrubPointerId) return;
+        event.preventDefault();
+        this.scrubClientX = event.clientX;
+        this.queueScrubFrame();
     }
 
     endScrub(event: PointerEvent) {
+        if(!this.scrubbing || event.pointerId !== this.scrubPointerId) return;
+        this.scrubClientX = event.clientX;
+        if(this.scrubFrame != null) cancelAnimationFrame(this.scrubFrame);
+        this.scrubFrame = undefined;
+        this.applyScrubFrame();
         this.scrubbing = false;
-        try {
-            (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
-        } catch {}
+        this.scrubPointerId = undefined;
+        this.scrubRect = undefined;
+        try { this.scrubCapture?.releasePointerCapture(event.pointerId); } catch {}
+        this.scrubCapture = undefined;
+        this.clearGlobalPointerTracking();
     }
 
     beginLaneGesture(row: TimelineRow, event: PointerEvent) {
@@ -816,6 +1397,16 @@ export class AnimationTimelineComponent {
 
     @HostListener("document:keydown", ["$event"])
     handleTimelineShortcut(event: KeyboardEvent) {
+        if(event.key === "Escape" && this.keyframeDrag) {
+            this.cancelKeyframeDrag();
+            this.consumeShortcut(event);
+            return;
+        }
+        if(event.key === "Escape" && this.graphDrag) {
+            this.cancelGraphDrag();
+            this.consumeShortcut(event);
+            return;
+        }
         if(this.shouldIgnoreShortcut(event)) {
             return;
         }
@@ -870,7 +1461,142 @@ export class AnimationTimelineComponent {
         return paths;
     }
 
+    private rowStructureKey(elements: readonly AnyElement[]): string {
+        const parts: string[] = [];
+        const append = (items: readonly AnyElement[]) => items.forEach((element) => {
+            const settings = element.settings as Record<string, unknown>;
+            const fill = isGradientPaint(settings["fill"]) ? settings["fill"].id : "";
+            const stroke = isGradientPaint(settings["stroke"]) ? settings["stroke"].id : "";
+            parts.push(`${element.id}:${element.motion.pathId ?? ""}:${fill}:${stroke}`);
+            if(element instanceof Group) append(element.elements);
+        });
+        append(elements);
+        return parts.join("|");
+    }
+
+    private graphSpeedY(speed: number): number {
+        const range = Math.max(1e-9, this.graphSpeedMax - this.graphSpeedMin);
+        return 10 + (this.graphSpeedMax - speed) / range * Math.max(1, this.graphHeight() - 20);
+    }
+
+    private segmentSpeed(from: Keyframe, to: Keyframe, time: number): number {
+        if(from.temporal?.out || to.temporal?.in) return evaluateTemporalSpeed(from, to, time);
+        const duration = to.time - from.time;
+        if(duration <= 0) return 0;
+        const base = (Number(to.value) - Number(from.value)) / duration;
+        const t = Math.max(0, Math.min(1, (time - from.time) / duration));
+        switch(from.easing?.type ?? "linear") {
+            case "hold": return 0;
+            case "ease-in": return base * 2 * t;
+            case "ease-out": return base * 2 * (1 - t);
+            case "ease-in-out": return base * (t < 0.5 ? 4 * t : 4 * (1 - t));
+            default: return base;
+        }
+    }
+
+    private propertyLabel(property: string): string {
+        return this.properties.find((definition) => definition.property === property)?.label
+            ?? property.split(".").at(-1) ?? property;
+    }
+
+    private initializeGraphHandle(handle: GraphHandle): TemporalHandle {
+        const from = handle.side === "out" ? handle.keyframe : handle.other;
+        const to = handle.side === "out" ? handle.other : handle.keyframe;
+        const preset = temporalTangentsForPreset(from.easing, Number(from.value), Number(to.value), to.time - from.time);
+        from.temporal ??= { linked: true };
+        to.temporal ??= { linked: true };
+        from.temporal.out ??= { ...preset.out };
+        to.temporal.in ??= { ...preset.in };
+        const keyIndex = handle.track.keyframes.indexOf(handle.keyframe);
+        if(handle.keyframe.temporal?.linked && handle.side === "out" && keyIndex > 0 && !handle.keyframe.temporal.in) {
+            const previous = handle.track.keyframes[keyIndex - 1];
+            const incomingPreset = temporalTangentsForPreset(previous.easing, Number(previous.value), Number(handle.keyframe.value), handle.keyframe.time - previous.time);
+            handle.keyframe.temporal.in = { ...incomingPreset.in, speed: handle.keyframe.temporal.out!.speed };
+        }
+        if(handle.keyframe.temporal?.linked && handle.side === "in" && keyIndex >= 0 && keyIndex < handle.track.keyframes.length - 1 && !handle.keyframe.temporal.out) {
+            const next = handle.track.keyframes[keyIndex + 1];
+            const outgoingPreset = temporalTangentsForPreset(handle.keyframe.easing, Number(handle.keyframe.value), Number(next.value), next.time - handle.keyframe.time);
+            handle.keyframe.temporal.out = { ...outgoingPreset.out, speed: handle.keyframe.temporal.in!.speed };
+        }
+        return handle.side === "out" ? from.temporal.out : to.temporal.in;
+    }
+
+    private linkGraphHandleSpeed(handle: GraphHandle): void {
+        const temporal = handle.keyframe.temporal;
+        if(!temporal?.linked) return;
+        const active = temporal[handle.side];
+        const opposite = handle.side === "in" ? temporal.out : temporal.in;
+        if(active && opposite) opposite.speed = active.speed;
+    }
+
+    private applyGraphDragFrame(): void {
+        this.graphFrame = undefined;
+        const drag = this.graphDrag;
+        if(!drag) return;
+        const speedPerPixel = (this.graphSpeedMax - this.graphSpeedMin) / Math.max(1, this.graphHeight() - 20);
+        const deltaSpeed = (drag.startY - drag.latestY) * speedPerPixel;
+        const restored = new Set<Keyframe>();
+        drag.snapshots.forEach((snapshot) => {
+            if(restored.has(snapshot.handle.keyframe)) return;
+            snapshot.handle.keyframe.temporal = this.cloneValue(snapshot.temporal);
+            restored.add(snapshot.handle.keyframe);
+        });
+        drag.snapshots.forEach((snapshot) => {
+            const value = this.initializeGraphHandle(snapshot.handle);
+            const original = snapshot.temporal?.[snapshot.handle.side] ?? { speed: snapshot.handle.speed, influence: snapshot.handle.influence };
+            const duration = Math.max(1e-9, Math.abs(snapshot.handle.other.time - snapshot.handle.keyframe.time));
+            const direction = snapshot.handle.side === "out" ? 1 : -1;
+            value.speed = original.speed + deltaSpeed;
+            value.influence = Math.max(0, Math.min(1, original.influence + direction * (drag.latestX - drag.startX) / (duration * this.pixelsPerSecond)));
+            this.linkGraphHandleSpeed(snapshot.handle);
+        });
+        this.animation.invalidate(new Set(drag.snapshots.map((snapshot) => snapshot.handle.track.id)));
+        this.animation.previewAt(this.animation.currentTime);
+    }
+
+    private cancelGraphDrag(): void {
+        const drag = this.graphDrag;
+        if(!drag) return;
+        if(this.graphFrame != null) cancelAnimationFrame(this.graphFrame);
+        this.graphFrame = undefined;
+        drag.snapshots.forEach((snapshot) => snapshot.handle.keyframe.temporal = this.cloneValue(snapshot.temporal));
+        try { drag.capture?.releasePointerCapture(drag.pointerId); } catch {}
+        this.graphDrag = undefined;
+        this.clearGlobalPointerTracking();
+        this.animation.invalidate(new Set(drag.snapshots.map((snapshot) => snapshot.handle.track.id)));
+        this.animation.previewAt(this.animation.currentTime);
+    }
+
+    private applyKeyframeDragFrame(): void {
+        this.keyframeFrame = undefined;
+        const drag = this.keyframeDrag;
+        if(!drag?.moved) return;
+        const requestedDelta = (drag.latestX - drag.startX) / this.pixelsPerSecond;
+        const deltaTime = clampKeyframeTimeDelta(drag.entries.map((entry) => entry.startTime), requestedDelta, this.animation.duration);
+        drag.entries.forEach((entry) => entry.keyframe.time = this.snapTime(entry.startTime + deltaTime));
+        this.sortDraggedTracks();
+        if(drag.preview) {
+            this.animation.invalidate(new Set(drag.entries.map((entry) => entry.track.id)));
+            this.animation.previewAt(this.animation.currentTime);
+        }
+    }
+
+    private cancelKeyframeDrag(): void {
+        const drag = this.keyframeDrag;
+        if(!drag) return;
+        if(this.keyframeFrame != null) cancelAnimationFrame(this.keyframeFrame);
+        this.keyframeFrame = undefined;
+        drag.entries.forEach((entry) => entry.keyframe.time = entry.startTime);
+        this.sortDraggedTracks();
+        try { drag.capture?.releasePointerCapture(drag.pointerId); } catch {}
+        this.keyframeDrag = undefined;
+        this.clearGlobalPointerTracking();
+        this.animation.invalidate(new Set(drag.entries.map((entry) => entry.track.id)));
+        this.animation.previewAt(this.animation.currentTime);
+    }
+
     private attachMotionPath(element: AnyElement, path: Path) {
+        this.animation.invalidate();
         element.motion.pathId = path.id;
         element.motion.progress = 0;
         element.motion.offsetX = 0;
@@ -881,6 +1607,7 @@ export class AnimationTimelineComponent {
     }
 
     private detachMotionPath(element: AnyElement) {
+        this.animation.invalidate();
         element.motion.pathId = null;
         this.animation.previewAt(this.animation.currentTime);
         this.animationChange.emit();
@@ -980,10 +1707,78 @@ export class AnimationTimelineComponent {
         return Math.round(normalized * precision) / precision;
     }
 
-    private scrubToEvent(event: PointerEvent) {
-        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        this.animation.seek(this.xToTime(x));
+    private queueScrubFrame(): void {
+        if(this.scrubFrame != null) return;
+        this.zone.runOutsideAngular(() => this.scrubFrame = requestAnimationFrame(() => this.applyScrubFrame()));
+    }
+
+    private applyScrubFrame(): void {
+        this.scrubFrame = undefined;
+        if(!this.scrubRect) return;
+        this.animation.seek(this.xToTime(this.scrubClientX - this.scrubRect.left));
+    }
+
+    private applyViewportPanFrame(): void {
+        this.viewportPanFrame = undefined;
+        const pan = this.viewportPan;
+        if(!pan) return;
+        const deltaX = pan.latestX - pan.startX;
+        const deltaY = pan.latestY - pan.startY;
+        pan.viewport.scrollLeft = Math.max(0, pan.startScrollLeft - deltaX);
+        if(pan.graph) {
+            const range = pan.startSpeedMax - pan.startSpeedMin;
+            const speedDelta = deltaY * range / Math.max(1, this.graphHeight() - 20);
+            this.graphSpeedMin = pan.startSpeedMin + speedDelta;
+            this.graphSpeedMax = pan.startSpeedMax + speedDelta;
+        } else {
+            pan.viewport.scrollTop = Math.max(0, pan.startScrollTop - deltaY);
+        }
+    }
+
+    private applyNumberDragFrame(): void {
+        this.numberDragFrame = undefined;
+        const drag = this.numberDrag;
+        if(!drag?.moved) return;
+        const deltaX = drag.latestX - drag.startX;
+        const value = this.normalizeDraggedNumber(drag.row.property, drag.startValue + (deltaX * drag.step));
+        this.setPropertyValueInternal(drag.row, value, false);
+        drag.capture.value = String(value);
+    }
+
+    private installGlobalPointerTracking(
+        pointerId: number,
+        moveCallback: (event: PointerEvent) => void,
+        endCallback: (event: PointerEvent) => void,
+    ): void {
+        this.clearGlobalPointerTracking();
+        this.zone.runOutsideAngular(() => {
+            const move = (event: PointerEvent) => { if(event.pointerId === pointerId) moveCallback(event); };
+            const end = (event: PointerEvent) => { if(event.pointerId === pointerId) endCallback(event); };
+            document.addEventListener("pointermove", move, { capture: true, passive: false });
+            document.addEventListener("pointerup", end, true);
+            document.addEventListener("pointercancel", end, true);
+            this.globalPointerCleanup = () => {
+                document.removeEventListener("pointermove", move, true);
+                document.removeEventListener("pointerup", end, true);
+                document.removeEventListener("pointercancel", end, true);
+                this.globalPointerCleanup = undefined;
+            };
+        });
+    }
+
+    private clearGlobalPointerTracking(): void {
+        this.globalPointerCleanup?.();
+    }
+
+    private graphTrackDescriptor(track: AnimationTrack, label: string, selected: boolean): GraphTrack {
+        const axis = this.graphAxis(track.property);
+        return {
+            track,
+            label,
+            axis,
+            selected,
+            color: axis === "x" ? "#2dd4bf" : axis === "y" ? "#f59e0b" : "#a78bfa",
+        };
     }
 
     private clampTimelineHeight(value: number): number {
@@ -1033,6 +1828,24 @@ export class AnimationTimelineComponent {
         tracks.forEach((track) => track.keyframes.sort((a, b) => a.time - b.time));
     }
 
+    private resolveKeyframeCollisions(entries: readonly KeyframeEntry[]): void {
+        const movedIds = new Set(entries.map((entry) => entry.keyframe.id));
+        const tracks = new Set(entries.map((entry) => entry.track));
+        tracks.forEach((track) => {
+            const ordered = [
+                ...track.keyframes.filter((keyframe) => !movedIds.has(keyframe.id)),
+                ...entries.filter((entry) => entry.track === track).map((entry) => entry.keyframe),
+            ].sort((a, b) => a.time - b.time);
+            const unique: Keyframe[] = [];
+            ordered.forEach((keyframe) => {
+                if(unique.length && this.timesMatch(unique[unique.length - 1].time, keyframe.time)) unique[unique.length - 1] = keyframe;
+                else unique.push(keyframe);
+            });
+            track.keyframes = unique;
+        });
+        this.pruneKeyframeSelection();
+    }
+
     private nudgeSelectedKeyframes(direction: -1 | 1, largeStep: boolean): boolean {
         const entries = this.selectedKeyframeEntries();
         if(entries.length === 0) {
@@ -1046,6 +1859,8 @@ export class AnimationTimelineComponent {
 
         const tracks = new Set(entries.map((entry) => entry.track));
         tracks.forEach((track) => track.keyframes.sort((a, b) => a.time - b.time));
+        this.resolveKeyframeCollisions(entries);
+        this.animation.invalidate(new Set(entries.map((entry) => entry.track.id)));
         this.animation.previewAt(this.animation.currentTime);
         this.animationChange.emit();
         return true;
@@ -1115,10 +1930,12 @@ export class AnimationTimelineComponent {
     }
 
     private removeGradientGroupKeyframesAtCurrentTime(row: PropertyTimelineRow) {
-        this.gradientGroupTracks(row).forEach((track) => {
+        const tracks = this.gradientGroupTracks(row);
+        tracks.forEach((track) => {
             track.keyframes = track.keyframes.filter((keyframe) => !this.timesMatch(keyframe.time, this.animation.currentTime));
         });
         if(this.editor.selectedSVG) this.editor.selectedSVG.animation.tracks = this.editor.selectedSVG.animation.tracks.filter((track) => track.keyframes.length > 0);
+        this.animation.invalidate(new Set(tracks.map((track) => track.id)));
         this.animation.previewAt(this.animation.currentTime);
     }
 
@@ -1182,7 +1999,8 @@ export class AnimationTimelineComponent {
     }
 
     private removePathShapeKeyframesAtCurrentTime(path: Path) {
-        this.pathPointTracks(path).forEach((track) => {
+        const tracks = this.pathPointTracks(path);
+        tracks.forEach((track) => {
             track.keyframes = track.keyframes.filter((keyframe) => !this.timesMatch(keyframe.time, this.animation.currentTime));
         });
 
@@ -1190,6 +2008,7 @@ export class AnimationTimelineComponent {
             this.editor.selectedSVG.animation.tracks = this.editor.selectedSVG.animation.tracks.filter((track) => track.keyframes.length > 0);
         }
 
+        this.animation.invalidate(new Set(tracks.map((track) => track.id)));
         this.animation.previewAt(this.animation.currentTime);
     }
 
@@ -1286,6 +2105,7 @@ interface TimelineRulerMark {
 
 interface TimelineKeyframe extends Keyframe {
     groupedKeyframeIds?: string[];
+    summaryCount?: number;
 }
 
 interface KeyframeDragEntry extends KeyframeEntry {
@@ -1295,7 +2115,10 @@ interface KeyframeDragEntry extends KeyframeEntry {
 interface KeyframeDrag {
     pointerId: number;
     startX: number;
+    latestX: number;
     moved: boolean;
+    preview: boolean;
+    capture?: HTMLElement;
     entries: KeyframeDragEntry[];
 }
 
@@ -1303,8 +2126,25 @@ interface NumberDrag {
     row: PropertyTimelineRow;
     pointerId: number;
     startX: number;
+    latestX: number;
     startValue: number;
     moved: boolean;
+    step: number;
+    capture: HTMLInputElement;
+}
+
+interface TimelineViewportPan {
+    pointerId: number;
+    viewport: HTMLElement;
+    startX: number;
+    startY: number;
+    latestX: number;
+    latestY: number;
+    startScrollLeft: number;
+    startScrollTop: number;
+    startSpeedMin: number;
+    startSpeedMax: number;
+    graph: boolean;
 }
 
 interface KeyframeMarquee {
@@ -1325,4 +2165,39 @@ interface EasingToolbarOption {
     label: string;
     icon: string;
     className?: string;
+}
+
+type GraphAxis = "x" | "y" | "scalar";
+interface GraphTrack { track: AnimationTrack; color: string; label: string; axis: GraphAxis; selected: boolean; }
+
+interface GraphHandle {
+    track: AnimationTrack;
+    keyframe: Keyframe;
+    other: Keyframe;
+    side: "in" | "out";
+    speed: number;
+    influence: number;
+}
+
+interface GraphHandleSnapshot { handle: GraphHandle; temporal?: Keyframe["temporal"]; }
+
+interface GraphHandleDrag {
+    pointerId: number;
+    startX: number;
+    startY: number;
+    latestX: number;
+    latestY: number;
+    moved: boolean;
+    capture?: HTMLElement;
+    snapshots: GraphHandleSnapshot[];
+}
+
+function lowerBound(keys: readonly TimelineKeyframe[], time: number): number {
+    let low = 0;
+    let high = keys.length;
+    while(low < high) {
+        const middle = (low + high) >>> 1;
+        if(keys[middle].time < time) low = middle + 1; else high = middle;
+    }
+    return low;
 }

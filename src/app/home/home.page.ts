@@ -14,17 +14,24 @@ import { SVGImporterService } from "../editor/import/svg-importer.service";
 export class HomePage implements OnInit {
     projects: ProjectRecord[] = [];
     importing = false;
+    loading = true;
     importMessage?: string;
     importError?: string;
 
     constructor(
-        private projectService: ProjectService,
+        public projectService: ProjectService,
         private svgImporter: SVGImporterService,
         private router: Router,
     ) {}
 
-    ngOnInit() {
-        this.projects = this.projectService.list();
+    async ngOnInit() {
+        try {
+            this.projects = await this.projectService.listAsync();
+        } catch(error) {
+            this.importError = error instanceof Error ? error.message : 'Unable to load projects.';
+        } finally {
+            this.loading = false;
+        }
     }
 
     newProject() {
@@ -48,7 +55,7 @@ export class HomePage implements OnInit {
         try {
             const result = this.svgImporter.import(await file.text(), { name: file.name });
             this.projectService.upsert(result.document, result.sanitizedMarkup);
-            this.projects = this.projectService.list();
+            this.projects = await this.projectService.listAsync();
             const details = [
                 `${result.nativeElementCount} editable element${result.nativeElementCount === 1 ? '' : 's'}`,
                 `${result.preservedNodeCount} non-editable preserved node${result.preservedNodeCount === 1 ? '' : 's'}`,

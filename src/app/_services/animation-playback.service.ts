@@ -6,7 +6,9 @@ import {
     readAnimationProperty,
     writeAnimationProperty,
 } from "../editor/objects/animation-targets";
-import { AnimationTrack, AnimationValueType, colorValueSpace, createAnimationColorValue, evaluateTrack, makeAnimationId } from "../editor/objects/animation.object";
+import { AnimationTrack, AnimationValueType, colorValueSpace, createAnimationColorValue, makeAnimationId } from "../editor/objects/animation.object";
+import { AnimationEvaluationPlan } from "../editor/animation/animation-evaluation-plan";
+import { ImperativeSvgRenderer } from "../editor/animation/imperative-svg-renderer";
 import { AnyElement, SVG } from "../editor/objects/svg.object";
 import { EditorService } from "./editor.service";
 import { EditorPreferencesService } from "./editor-preferences.service";
@@ -19,11 +21,14 @@ export class AnimationPlaybackService implements OnDestroy {
     currentTime = 0;
     speed = 1;
     playing = false;
+    revision = 0;
 
     private frameId?: number;
     private lastFrameTime?: number;
     private previewSVG?: SVG;
     private previewBaseValues = new Map<string, AppliedAnimationValue>();
+    private evaluationPlan?: AnimationEvaluationPlan;
+    private renderer?: ImperativeSvgRenderer;
 
     constructor(
         private editor: EditorService,
@@ -147,6 +152,7 @@ export class AnimationPlaybackService implements OnDestroy {
         }
 
         track.keyframes.sort((a, b) => a.time - b.time);
+        this.invalidate([track.id]);
 
         if(this.mode === "animate") {
             this.previewAt(this.currentTime);
@@ -165,6 +171,7 @@ export class AnimationPlaybackService implements OnDestroy {
         if(track.keyframes.length === 0 && this.editor.selectedSVG) {
             this.editor.selectedSVG.animation.tracks = this.editor.selectedSVG.animation.tracks.filter((candidate) => candidate !== track);
         }
+        this.invalidate([track.id]);
 
         if(this.mode === "animate") {
             this.previewAt(this.currentTime);
@@ -182,10 +189,14 @@ export class AnimationPlaybackService implements OnDestroy {
 
         this.setMode("animate");
         this.playing = true;
+        this.setOverlaysVisible(false);
+        this.ensureEvaluationPlan(true);
         this.lastFrameTime = undefined;
-        this.zone.runOutsideAngular(() => {
-            this.frameId = requestAnimationFrame((time) => this.tick(time));
-        });
+        if(this.playing) {
+            this.zone.runOutsideAngular(() => this.frameId = requestAnimationFrame((time) => this.tick(time)));
+        } else {
+            this.frameId = undefined;
+        }
     }
 
     pause() {
@@ -196,6 +207,7 @@ export class AnimationPlaybackService implements OnDestroy {
 
         this.playing = false;
         this.lastFrameTime = undefined;
+        this.setOverlaysVisible(true);
     }
 
     togglePlayback() {
@@ -225,33 +237,26 @@ export class AnimationPlaybackService implements OnDestroy {
             return [];
         }
 
-        const appliedValues = this.evaluate(svg, time);
-        this.restorePreview();
+        const plan = this.ensureEvaluationPlan();
+        const appliedValues = plan.evaluate(time);
         this.previewSVG = svg;
-
-        appliedValues.forEach((appliedValue) => {
-            if(!appliedValue.applied) {
-                return;
-            }
-
-            const target = findAnimationTarget(svg.elements, appliedValue.targetId);
-            if(!target) {
-                return;
-            }
-
-            const key = animationPropertyKey(appliedValue.targetId, appliedValue.property);
+        const renderer = this.renderer!;
+        plan.tracks.forEach((track, index) => {
+            const appliedValue = appliedValues[index];
+            if(!appliedValue?.applied || !track.target) return;
+            const key = animationPropertyKey(track.targetId, track.property);
             if(!this.previewBaseValues.has(key)) {
                 this.previewBaseValues.set(key, {
-                    targetId: appliedValue.targetId,
-                    property: appliedValue.property,
-                    value: readAnimationProperty(target, appliedValue.property),
+                    targetId: track.targetId,
+                    property: track.property,
+                    value: readAnimationProperty(track.target, track.property),
                     applied: true,
                 });
             }
-
-            writeAnimationProperty(target, appliedValue.property, appliedValue.value);
+            renderer.apply(track, appliedValue.value);
         });
-
+        renderer.flush();
+        this.updateImperativeTimeline();
         return appliedValues;
     }
 
@@ -271,6 +276,7 @@ export class AnimationPlaybackService implements OnDestroy {
         });
         this.previewBaseValues.clear();
         this.previewSVG = undefined;
+        this.renderer?.clear();
     }
 
     withBaseState<T>(callback: () => T): T {
@@ -288,22 +294,20 @@ export class AnimationPlaybackService implements OnDestroy {
     }
 
     evaluate(svg: SVG, time: number): AppliedAnimationValue[] {
-        return svg.animation.tracks
-            .filter((track) => track.enabled !== false)
-            .map((track) => this.evaluateTrack(svg, track, time));
+        if(this.editor.selectedSVG === svg) return this.ensureEvaluationPlan().evaluate(time);
+        return new AnimationEvaluationPlan(svg.animation, svg.elements).evaluate(time);
     }
 
-    private evaluateTrack(svg: SVG, track: AnimationTrack, time: number): AppliedAnimationValue {
-        const target = findAnimationTarget(svg.elements, track.targetId);
-        const value = evaluateTrack(track, time);
-        const readable = target ? readAnimationProperty(target, track.property) !== undefined : false;
-
-        return {
-            targetId: track.targetId,
-            property: track.property,
-            value,
-            applied: !!target && readable && value !== undefined,
-        };
+    invalidate(trackIds?: Iterable<string>): void {
+        this.revision++;
+        const svg = this.editor.selectedSVG;
+        this.restorePreview();
+        if(trackIds && this.evaluationPlan && this.evaluationPlan.animation === svg?.animation) {
+            this.evaluationPlan.invalidateTracks(trackIds);
+        } else {
+            this.evaluationPlan = undefined;
+            this.renderer = undefined;
+        }
     }
 
     private ensureTrack(svg: SVG, element: AnyElement, property: string, valueType: AnimationValueType): AnimationTrack {
@@ -345,13 +349,13 @@ export class AnimationPlaybackService implements OnDestroy {
         const deltaSeconds = ((frameTime - previous) / 1000) * this.speed;
         this.lastFrameTime = frameTime;
 
-        this.zone.run(() => {
-            this.advance(deltaSeconds);
-        });
+        this.advance(deltaSeconds);
 
-        this.zone.runOutsideAngular(() => {
-            this.frameId = requestAnimationFrame((time) => this.tick(time));
-        });
+        if(this.playing) {
+            this.zone.runOutsideAngular(() => this.frameId = requestAnimationFrame((time) => this.tick(time)));
+        } else {
+            this.frameId = undefined;
+        }
     }
 
     private advance(deltaSeconds: number) {
@@ -368,7 +372,7 @@ export class AnimationPlaybackService implements OnDestroy {
                 nextTime = nextTime % duration;
             } else {
                 nextTime = duration;
-                this.pause();
+                this.zone.run(() => this.pause());
             }
         }
 
@@ -378,6 +382,37 @@ export class AnimationPlaybackService implements OnDestroy {
 
         this.currentTime = this.clampTime(nextTime);
         this.previewAt(this.currentTime);
+    }
+
+    private ensureEvaluationPlan(force = false): AnimationEvaluationPlan {
+        const svg = this.editor.selectedSVG;
+        if(!svg) throw new Error("Cannot compile animation without an active document.");
+        if(force || !this.evaluationPlan || this.evaluationPlan.animation !== svg.animation) {
+            this.evaluationPlan = new AnimationEvaluationPlan(svg.animation, svg.elements);
+            this.renderer = new ImperativeSvgRenderer(svg);
+        }
+        return this.evaluationPlan;
+    }
+
+    private updateImperativeTimeline(): void {
+        document.querySelectorAll<HTMLElement>(".animation-playhead").forEach((playhead) => {
+            const padding = Number(playhead.dataset["timePadding"] ?? 28);
+            const scale = Number(playhead.dataset["pixelsPerSecond"] ?? 120);
+            playhead.style.left = `${padding + this.currentTime * scale}px`;
+        });
+        document.querySelectorAll<SVGLineElement>(".animation-graph-playhead").forEach((playhead) => {
+            const padding = Number(playhead.dataset["timePadding"] ?? 28);
+            const scale = Number(playhead.dataset["pixelsPerSecond"] ?? 120);
+            const x = padding + this.currentTime * scale;
+            playhead.setAttribute("x1", String(x));
+            playhead.setAttribute("x2", String(x));
+        });
+        const input = document.querySelector<HTMLInputElement>(".timeline-current-time");
+        if(input && document.activeElement !== input) input.value = String(Math.round(this.currentTime * 1000) / 1000);
+    }
+
+    private setOverlaysVisible(visible: boolean): void {
+        document.querySelectorAll<SVGElement>(".editor-overlay").forEach((overlay) => overlay.style.display = visible ? "" : "none");
     }
 
     private clampTime(time: number): number {
