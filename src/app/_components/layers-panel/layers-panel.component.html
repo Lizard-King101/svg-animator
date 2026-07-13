@@ -1,0 +1,81 @@
+<div class="panel-header">Layers</div>
+<div class="layer-list" *ngIf="commands.layerRows.length; else emptyLayers">
+  <div class="layer-row"
+       *ngFor="let row of commands.layerRows; trackBy: commands.trackLayerRow"
+       [attr.data-layer-id]="row.element.id"
+       [style.padding-left.px]="12 + (row.depth * 18)"
+       [ngClass]="{
+         'selected': commands.isLayerSelected(row.element),
+         'hidden': !row.element.visible,
+         'locked': row.element.locked,
+         'dragging': commands.draggingLayer == row.element,
+         'clipping-mask': commands.isClippingMask(row.element),
+         'drop-before': commands.dragTargetLayer == row.element && commands.dragTargetPosition == 'before',
+         'drop-after': commands.dragTargetLayer == row.element && commands.dragTargetPosition == 'after',
+         'drop-inside': commands.dragTargetLayer == row.element && commands.dragTargetPosition == 'inside'
+       }"
+       (click)="commands.selectLayer(row.element, $event)"
+       (dblclick)="commands.beginLayerRename($event, row.element)"
+       (contextmenu)="commands.openLayerContextMenu($event, row.element)"
+       (pointermove)="commands.updateLayerPointerDrag($event)"
+       (pointerup)="commands.finishLayerPointerDrag($event)"
+       (pointercancel)="commands.cancelLayerPointerDrag($event)">
+    <span class="layer-meta">
+      <button class="layer-drag-handle"
+              (click)="$event.stopPropagation()"
+              (dblclick)="$event.stopPropagation()"
+              (pointerdown)="commands.beginLayerPointerDrag($event, row.element)"
+              title="Drag layer">
+        <fa-icon icon="grip-vertical"></fa-icon>
+      </button>
+      <button class="layer-expander"
+              *ngIf="commands.asGroup(row.element) as group"
+              (click)="commands.toggleGroupCollapsed($event, group)"
+              [title]="commands.groupIsCollapsed(group) ? 'Expand group' : 'Collapse group'">
+        <fa-icon [icon]="commands.groupIsCollapsed(group) ? 'angle-right' : 'angle-down'"></fa-icon>
+      </button>
+      <span class="layer-expander-placeholder" *ngIf="!commands.asGroup(row.element)"></span>
+      <fa-icon [icon]="commands.layerIcon(row.element)"></fa-icon>
+      <span class="layer-name" *ngIf="commands.renamingLayer != row.element">{{ row.element.name }}</span>
+      <span class="layer-badge" *ngIf="commands.isClippingMask(row.element)">Clip</span>
+      <input class="layer-name-input"
+             *ngIf="commands.renamingLayer == row.element"
+             [(ngModel)]="row.element.name"
+             (click)="$event.stopPropagation()"
+             (keydown.enter)="commands.finishLayerRename()"
+             (keydown.escape)="commands.finishLayerRename()"
+             (blur)="commands.finishLayerRename()"
+             maxlength="60"
+             autofocus />
+    </span>
+    <span class="layer-actions">
+      <button class="layer-toggle"
+              (pointerdown)="$event.stopPropagation()"
+              (pointerup)="$event.stopPropagation()"
+              (click)="commands.toggleLayerVisibility($event, row.element)"
+              [title]="row.element.visible ? 'Hide layer' : 'Show layer'">
+        <fa-icon [icon]="row.element.visible ? 'eye' : 'eye-slash'"></fa-icon>
+      </button>
+      <button class="layer-toggle"
+              (pointerdown)="$event.stopPropagation()"
+              (pointerup)="$event.stopPropagation()"
+              (click)="commands.toggleLayerLock($event, row.element)"
+              [title]="row.element.locked ? 'Unlock layer' : 'Lock layer'">
+        <fa-icon [icon]="row.element.locked ? 'lock' : 'lock-open'"></fa-icon>
+      </button>
+      <button class="layer-toggle layer-delete"
+              (pointerdown)="$event.stopPropagation()"
+              (pointerup)="$event.stopPropagation()"
+              (click)="$event.stopPropagation(); commands.deleteLayer(row.element)"
+              title="Delete layer">
+        <fa-icon icon="trash"></fa-icon>
+      </button>
+    </span>
+  </div>
+</div>
+<ng-template #emptyLayers>
+  <div class="panel-empty layers-empty">
+    <fa-icon icon="shapes"></fa-icon>
+    <span>No layers yet</span>
+  </div>
+</ng-template>

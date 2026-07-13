@@ -2,15 +2,15 @@ import { NgClass, NgFor, NgIf } from "@angular/common";
 import { Component } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
-import { LayerCommandService } from "../../_services/layer-command.service";
+import { TimelineEditorService } from "../../_services/timeline-editor.service";
 
 @Component({
-    selector: "app-layers-panel",
+    selector: "app-timeline-toolbar",
     standalone: true,
     imports: [FormsModule, NgClass, NgFor, NgIf, FaIconComponent],
-    templateUrl: "layers-panel.component.html",
+    templateUrl: "timeline-toolbar.component.html",
     styles: [":host { display: contents; }"],
 })
-export class LayersPanelComponent {
-    constructor(public commands: LayerCommandService) {}
+export class TimelineToolbarComponent {
+    constructor(public timeline: TimelineEditorService) {}
 }

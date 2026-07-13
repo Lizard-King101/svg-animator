@@ -5,19 +5,22 @@
 | Area | Owner | Responsibilities |
 |---|---|---|
 | Persisted model | `editor/objects` | Document/element state, stable IDs, save/restore, geometry, animation evaluation |
-| Session | `EditorService` | Open documents, active document, selection, tools, viewport conversion, keyboard and context-menu state |
+| Session | `EditorService`, `EditorUiStateService` | Open documents, active document, primary selection, tools, viewport conversion, context menus, and ephemeral shell/dialog state |
 | Mutation | `DocumentMutationService` | Compare base state, classify mutation domains, create one shared history entry, and schedule persistence/thumbnail work |
 | Construction | `ElementFactory` | Element/group construction and deep cloning while model constructors still require `EditorService` |
 | Layer structure | `LayerOperationsService` | Group/combine/clip/duplicate/delete/order/visibility/lock/motion-path structural operations |
+| Layer commands | `LayerCommandService` | Multi-selection, rename/collapse state, mutation-aware layer commands, context actions, and reorder gestures shared with global shortcuts |
+| Property editing | `PropertiesPanelComponent` | Frame, anchor, transform, attribute, paint, and gradient editing with animation-aware writes |
+| Animation gestures | `AnimationGestureService` | Capture canvas transform/path/gradient baselines and create animation keys once at gesture completion |
 | Rendering | `SVGDisplay`, `SVGEditorOverlayComponent`, `svg-markup.ts` | Interactive artwork, editor-only handles/hit targets, and export-oriented static markup respectively |
 | Tools | `_services/tools` | Pointer gesture coordination; transform and path-edit algorithms live in interactions/pure helpers |
-| Timeline | `TimelineEditingService`, timeline utilities | Row projection, keyframe selection/clipboard/editing, and time/scale math |
+| Timeline | `TimelineEditorService`, `TimelineEditingService`, timeline surfaces | Timeline-lifetime interaction state; row/keyframe domain editing; toolbar, dope-sheet, and graph composition |
 | Animation evaluation | `AnimationEvaluationPlan`, animation property adapters | Compile/invalidate tracks, evaluate values, and coalesce render-domain outputs |
 | Playback rendering | `AnimationPlaybackService`, `ImperativeSvgRenderer` | Retain preview base values, drive playback outside Angular, and batch direct SVG writes |
 | Runtime compilation | `compileRuntimeAnimation()` | Produce the deterministic, versioned payload shared by authoring tests and future export/player work |
 | Persistence | `ProjectService`, `ProjectRepository` implementations | Async project lifecycle, IndexedDB transactions, legacy migration, save coalescing, and fallback state |
-| UI shell | `EditorPage` | Project/tab lifecycle, mode switching, dialogs, and composing workspace/panels/timeline |
-| UI surfaces | `CanvasWorkspaceComponent`, `PropertiesPanelComponent`, `LayersPanelComponent` | Viewport lifecycle/gestures and named panel composition boundaries |
+| UI shell | `EditorPage` | Route-driven project loading, provider lifetime, global shortcut precedence, and surface composition |
+| UI surfaces | Header, tool palette, dialogs, context menu, guides, panels, and timeline components | Own their templates, local form/gesture state, and feature-specific interaction methods |
 
 ## Mutation contract
 

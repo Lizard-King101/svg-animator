@@ -1,4 +1,5 @@
-import { AfterViewInit, Component, ElementRef, EventEmitter, NgZone, OnDestroy, Output } from "@angular/core";
+import { AfterViewInit, Component, ElementRef, NgZone, OnDestroy } from "@angular/core";
+import { AnimationGestureService } from "../../_services/animation-gesture.service";
 import { DocumentMutationService } from "../../_services/document-mutation.service";
 import { EditorService } from "../../_services/editor.service";
 import { Point } from "../../editor/objects/point.object";
@@ -9,9 +10,6 @@ import { Point } from "../../editor/objects/point.object";
     template: '<ng-content />',
 })
 export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
-    @Output() interactionStart = new EventEmitter<void>();
-    @Output() interactionEnd = new EventEmitter<void>();
-
     private readonly listeners = new AbortController();
     private movingView = false;
     private moveStart = new Point(0, 0);
@@ -23,6 +21,7 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
         private mutations: DocumentMutationService,
         private zone: NgZone,
         private host: ElementRef<HTMLElement>,
+        private animationGestures: AnimationGestureService,
     ) {}
 
     ngAfterViewInit(): void {
@@ -34,7 +33,7 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
             const start = this.editor.toViewportPoint(event.x, event.y);
             if(event.button === 0 && this.editor.selectedTool) {
                 this.editor.selectedTool.down(event);
-                this.interactionStart.emit();
+                this.animationGestures.begin();
             } else if(event.button === 1) {
                 this.movingView = true;
                 this.moveStart = start;
@@ -46,7 +45,7 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
         viewport.addEventListener("mouseup", (event) => this.zone.run(() => {
             const wasMovingView = this.movingView;
             this.editor.selectedTool?.up(event);
-            this.interactionEnd.emit();
+            this.animationGestures.end();
             this.movingView = false;
             if(wasMovingView && this.editor.selectedSVG) this.editor.rememberCanvasView(this.editor.selectedSVG);
             if(event.button !== 2) this.mutations.commit();

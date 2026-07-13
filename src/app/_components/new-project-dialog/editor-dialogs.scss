@@ -1,0 +1,243 @@
+@use "../../editor/editor-tokens" as *;
+
+// ── New SVG dialog ────────────────────────────────────────────────────────────
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+}
+
+.dialog {
+  width: 420px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-bright);
+  border-radius: 10px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  .dialog-header {
+    padding: 16px 20px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 18px 20px;
+  }
+
+  .dialog-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .dialog-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      height: 32px;
+      padding: 0 10px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-bright);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+
+      &:focus { border-color: var(--accent); }
+    }
+  }
+
+  .input-unit {
+    display: flex;
+    align-items: center;
+    gap: 0;
+
+    input { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+
+    span {
+      display: flex;
+      align-items: center;
+      height: 32px;
+      padding: 0 10px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-bright);
+      border-left: none;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+  }
+
+  .preset-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .preset-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 8px 4px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+
+    .preset-size {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .preset-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    &:hover {
+      background: var(--bg-base);
+      border-color: var(--border-bright);
+    }
+
+    &.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      .preset-size { color: var(--accent); }
+      .preset-sub  { color: var(--accent); opacity: 0.7; }
+    }
+  }
+
+  .dialog-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 20px 16px;
+    border-top: 1px solid var(--border);
+
+    .btn-cancel {
+      padding: 6px 14px;
+      background: transparent;
+      border: 1px solid var(--border-bright);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+
+      &:hover { background: var(--bg-elevated); color: var(--text-primary); }
+    }
+
+    .btn-create {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 16px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-sm);
+      color: var(--accent);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, box-shadow 0.15s;
+
+      fa-icon { font-size: 10px; }
+
+      &:hover {
+        background: rgba(45, 212, 191, 0.2);
+        box-shadow: 0 0 12px var(--accent-glow);
+      }
+    }
+  }
+}
+
+.export-dialog {
+  width: 440px;
+
+  .export-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .export-option,
+  .export-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 40px;
+    padding: 8px 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+
+    input {
+      flex: 0 0 auto;
+      accent-color: var(--accent);
+    }
+
+    span {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+      font-size: 12px;
+    }
+
+    strong {
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    small {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+  }
+
+  .export-option.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .export-check {
+    background: transparent;
+  }
+}

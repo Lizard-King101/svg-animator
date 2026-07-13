@@ -1,0 +1,191 @@
+@use "../../editor/editor-tokens" as *;
+
+.header {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+
+  .function-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    height: $header-h;
+    border-bottom: 1px solid var(--border);
+
+    .function-bar-sep {
+      width: 1px;
+      height: 16px;
+      background: var(--border-bright);
+      margin: 0 2px;
+    }
+
+    .function-bar-spacer { flex: 1; }
+
+    .mode-toggle {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+
+      button {
+        height: 22px;
+        padding: 0 9px;
+        background: transparent;
+        border: none;
+        border-radius: 3px;
+        color: var(--text-secondary);
+        font-size: 11px;
+        cursor: pointer;
+
+        &.active {
+          background: var(--accent-dim);
+          color: var(--accent);
+        }
+      }
+    }
+
+    .btn-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+
+      &:hover:not(:disabled) {
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+        border-color: var(--border-bright);
+      }
+
+      &:disabled {
+        opacity: 0.3;
+        cursor: default;
+      }
+    }
+
+    .btn-new,
+    .btn-export {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-bright);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+
+      fa-icon { font-size: 10px; color: var(--accent); }
+
+      &:hover:not(:disabled) {
+        background: var(--border-bright);
+        border-color: var(--accent);
+      }
+
+      &:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+    }
+  }
+
+  .tabs {
+    display: flex;
+    align-items: flex-end;
+    height: $tabs-h;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 4px;
+    gap: 2px;
+
+    .svg-tab {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      padding: 0 10px 0 12px;
+      border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+      background: transparent;
+      border: 1px solid transparent;
+      border-bottom: none;
+      cursor: pointer;
+      transition: background 0.12s;
+
+      .tab-name {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        user-select: none;
+        transition: color 0.12s;
+      }
+
+      .tab-close {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        background: transparent;
+        border: none;
+        border-radius: 3px;
+        color: var(--text-muted);
+        font-size: 9px;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.12s, background 0.12s, color 0.12s;
+      }
+
+      &:hover {
+        background: var(--bg-elevated);
+        .tab-name { color: var(--text-primary); }
+        .tab-close { opacity: 1; }
+      }
+
+      &.selected {
+        background: var(--bg-elevated);
+        border-color: var(--border);
+        border-bottom-color: transparent;
+        position: relative;
+
+        &::after {
+          content: '';
+          position: absolute;
+          bottom: -1px;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: var(--bg-elevated);
+        }
+
+        .tab-name { color: var(--text-primary); }
+        .tab-close { opacity: 1; color: var(--text-secondary); }
+      }
+
+      .tab-close:hover {
+        background: rgba(244, 92, 122, 0.15);
+        color: var(--danger);
+        opacity: 1;
+      }
+    }
+  }
+}

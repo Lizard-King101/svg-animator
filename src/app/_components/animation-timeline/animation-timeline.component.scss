@@ -1,4 +1,13 @@
-:host {
+$timeline-z-graph: 2;
+$timeline-z-keys: 3;
+$timeline-z-rows: 5;
+$timeline-z-ruler: 6;
+$timeline-z-corner: 7;
+$timeline-z-marquee: 25;
+$timeline-z-resize: 30;
+$timeline-z-popover: 1000;
+
+animation-timeline {
   display: block;
   flex: 0 0 310px;
   min-height: 190px;
@@ -30,6 +39,7 @@
 
 .timeline-root {
   position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -41,7 +51,7 @@
   left: 0;
   right: 0;
   top: -5px;
-  z-index: 30;
+  z-index: $timeline-z-resize;
   height: 10px;
   display: flex;
   align-items: center;
@@ -59,7 +69,7 @@
   }
 
   &:hover span,
-  :host.resizing & span {
+  animation-timeline.resizing & span {
     opacity: 1;
     background: var(--accent);
   }
@@ -278,7 +288,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 2;
+  z-index: $timeline-z-graph;
   overflow: hidden;
   background:
     linear-gradient(to right, transparent calc(100% - 1px), color-mix(in srgb, var(--border) 50%, transparent) 0) 28px 0 / var(--timeline-grid-step, 120px) 100%,
@@ -332,6 +342,7 @@
 
 .graph-legend {
   position: absolute;
+  z-index: $timeline-z-keys;
   top: 7px;
   right: 10px;
   display: flex;
@@ -363,6 +374,7 @@
 
 .speed-axis-label {
   position: absolute;
+  z-index: $timeline-z-keys;
   left: 5px;
   padding: 1px 3px;
   border-radius: 2px;
@@ -378,6 +390,7 @@
 
 .graph-empty {
   position: absolute;
+  z-index: $timeline-z-keys;
   inset: 0;
   display: grid;
   place-items: center;
@@ -390,7 +403,7 @@
   position: sticky;
   top: 0;
   left: 0;
-  z-index: 7;
+  z-index: $timeline-z-corner;
   display: flex;
   align-items: center;
   padding: 0 10px;
@@ -409,7 +422,7 @@
 .timeline-ruler-cell {
   position: sticky;
   top: 0;
-  z-index: 6;
+  z-index: $timeline-z-ruler;
   overflow: visible;
 }
 
@@ -437,7 +450,7 @@
 .timeline-left-cell {
   position: sticky;
   left: 0;
-  z-index: 5;
+  z-index: $timeline-z-rows;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -575,7 +588,7 @@
 
 .color-popover {
   position: fixed;
-  z-index: 1000;
+  z-index: $timeline-z-popover;
   width: 244px;
   max-height: calc(100vh - 16px);
   overflow-y: auto;
@@ -612,7 +625,7 @@
 
 .gradient-stops-popover {
   position: fixed;
-  z-index: 1000;
+  z-index: $timeline-z-popover;
   width: 270px;
   max-height: min(420px, calc(100vh - 16px));
   overflow-y: auto;
@@ -666,11 +679,12 @@
   width: 1px;
   background: var(--accent);
   pointer-events: none;
-  z-index: 2;
+  z-index: $timeline-z-graph;
 }
 
 .key-diamond {
   position: absolute;
+  z-index: $timeline-z-keys;
   top: 50%;
   width: 15px;
   height: 15px;
@@ -708,6 +722,7 @@
 
 .key-summary-diamond {
   position: absolute;
+  z-index: $timeline-z-keys;
   top: 50%;
   display: inline-flex;
   align-items: center;
@@ -733,7 +748,7 @@
 
 .marquee-selection {
   position: absolute;
-  z-index: 25;
+  z-index: $timeline-z-marquee;
   border: 1px solid var(--accent);
   background: rgba(45, 212, 191, 0.12);
   pointer-events: none;

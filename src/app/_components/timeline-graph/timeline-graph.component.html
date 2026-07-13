@@ -1,0 +1,49 @@
+<div class="speed-graph-surface" *ngIf="visibleIndex == 0"
+     [style.width.px]="timeline.timelineContentWidth" [style.height.px]="timeline.graphHeight()"
+     (pointerdown)="timeline.beginScrub($event)">
+  <svg [attr.width]="timeline.timelineContentWidth" [attr.height]="timeline.graphHeight()" [attr.viewBox]="'0 0 ' + timeline.timelineContentWidth + ' ' + timeline.graphHeight()">
+    <line class="speed-zero-line" [attr.x1]="0" [attr.x2]="timeline.timelineContentWidth" [attr.y1]="timeline.graphZeroY()" [attr.y2]="timeline.graphZeroY()"></line>
+    <line class="graph-playhead animation-graph-playhead"
+          [attr.data-pixels-per-second]="timeline.pixelsPerSecond" [attr.data-time-padding]="timeline.timePadding"
+          [attr.x1]="timeline.graphPlayheadX()" [attr.x2]="timeline.graphPlayheadX()" y1="0" [attr.y2]="timeline.graphHeight()"></line>
+    <ng-container *ngFor="let graphTrack of timeline.graphRenderTracks()">
+      <path class="speed-curve" [attr.d]="timeline.speedCurvePath(graphTrack.track)" [attr.stroke]="graphTrack.color"></path>
+      <ng-container *ngFor="let handle of timeline.graphHandles(graphTrack.track)">
+        <circle *ngIf="graphTrack.axis != 'y'" class="speed-key" [class.selected]="timeline.graphKeyframeSelected(handle)" [attr.stroke]="graphTrack.color"
+                [attr.cx]="timeline.graphKeyX(handle)" [attr.cy]="timeline.graphHandleDisplayY(handle)" r="4.5"
+                (pointerdown)="timeline.beginGraphKeyframeDrag(handle, $event)">
+          <title>{{ graphTrack.label }} · drag horizontally to retime · {{ handle.keyframe.time.toFixed(2) }}s</title>
+        </circle>
+        <rect *ngIf="graphTrack.axis == 'y'" class="speed-key speed-key-y" [class.selected]="timeline.graphKeyframeSelected(handle)" [attr.stroke]="graphTrack.color"
+              [attr.x]="timeline.graphKeyX(handle) - 4.5" [attr.y]="timeline.graphHandleDisplayY(handle) - 4.5" width="9" height="9"
+              (pointerdown)="timeline.beginGraphKeyframeDrag(handle, $event)">
+          <title>{{ graphTrack.label }} · drag horizontally to retime · {{ handle.keyframe.time.toFixed(2) }}s</title>
+        </rect>
+        <line class="speed-handle-line"
+              [attr.stroke]="graphTrack.color"
+              [attr.x1]="timeline.graphKeyX(handle)" [attr.y1]="timeline.graphHandleDisplayY(handle)"
+              [attr.x2]="timeline.graphHandleX(handle)" [attr.y2]="timeline.graphHandleDisplayY(handle)"></line>
+        <circle *ngIf="graphTrack.axis != 'y'" class="speed-handle" [class.selected]="timeline.graphHandleSelected(handle)"
+                [attr.stroke]="graphTrack.color" [attr.cx]="timeline.graphHandleX(handle)" [attr.cy]="timeline.graphHandleDisplayY(handle)" r="5"
+                (pointerdown)="timeline.beginGraphHandleDrag(handle, $event)">
+          <title>{{ graphTrack.label }} · {{ handle.side }} · {{ handle.speed.toFixed(2) }} units/s</title>
+        </circle>
+        <rect *ngIf="graphTrack.axis == 'y'" class="speed-handle speed-handle-y" [class.selected]="timeline.graphHandleSelected(handle)"
+              [attr.stroke]="graphTrack.color" [attr.x]="timeline.graphHandleX(handle) - 5" [attr.y]="timeline.graphHandleDisplayY(handle) - 5" width="10" height="10"
+              (pointerdown)="timeline.beginGraphHandleDrag(handle, $event)">
+          <title>{{ graphTrack.label }} · {{ handle.side }} · {{ handle.speed.toFixed(2) }} units/s</title>
+        </rect>
+      </ng-container>
+    </ng-container>
+  </svg>
+  <div class="graph-legend" *ngIf="timeline.graphTracks().length" (pointerdown)="$event.stopPropagation()">
+    <button *ngFor="let graphTrack of timeline.graphTracks()" [class.active]="graphTrack.selected"
+            (click)="timeline.selectGraphProperty(graphTrack.track.property)">
+      <span [style.background]="graphTrack.color" [class.square]="graphTrack.axis == 'y'"></span>{{ graphTrack.label }}
+    </button>
+  </div>
+  <div class="speed-axis-label max">{{ timeline.graphSpeedMax.toFixed(2) }}</div>
+  <div class="speed-axis-label zero">0 units/s</div>
+  <div class="speed-axis-label min">{{ timeline.graphSpeedMin.toFixed(2) }}</div>
+  <div class="graph-empty" *ngIf="timeline.graphTracks().length == 0">Select a numeric property with timeline.keyframes to edit its speed.</div>
+</div>

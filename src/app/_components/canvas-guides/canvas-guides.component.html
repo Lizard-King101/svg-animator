@@ -1,0 +1,37 @@
+<button class="ruler-corner" type="button" [ngClass]="{'locked': editor.selectedSVG?.guidesLocked}"
+        (mousedown)="$event.stopPropagation()" (click)="toggleLock($event)"
+        [title]="editor.selectedSVG?.guidesLocked ? 'Unlock guides' : 'Lock guides'">
+  <fa-icon [icon]="editor.selectedSVG?.guidesLocked ? 'lock' : 'lock-open'"></fa-icon>
+</button>
+<div class="canvas-ruler x-ruler" [ngClass]="{'guides-locked': editor.selectedSVG?.guidesLocked}"
+     (mousedown)="$event.stopPropagation()" (mousemove)="$event.stopPropagation()" (mouseup)="$event.stopPropagation()" (click)="$event.stopPropagation()"
+     (pointerdown)="beginRulerDrag('y', $event)" (pointermove)="updateDrag($event)" (pointerup)="endDrag($event)" (pointercancel)="endDrag($event)"
+     (dblclick)="openRulerInput('y', $event)">
+  <span class="ruler-mark" *ngFor="let mark of rulerMarks('x')" [style.left.px]="mark.position">{{ mark.label }}</span>
+</div>
+<div class="canvas-ruler y-ruler" [ngClass]="{'guides-locked': editor.selectedSVG?.guidesLocked}"
+     (mousedown)="$event.stopPropagation()" (mousemove)="$event.stopPropagation()" (mouseup)="$event.stopPropagation()" (click)="$event.stopPropagation()"
+     (pointerdown)="beginRulerDrag('x', $event)" (pointermove)="updateDrag($event)" (pointerup)="endDrag($event)" (pointercancel)="endDrag($event)"
+     (dblclick)="openRulerInput('x', $event)">
+  <span class="ruler-mark" *ngFor="let mark of rulerMarks('y')" [style.top.px]="mark.position">{{ mark.label }}</span>
+</div>
+<div class="guide-layer">
+  <ng-container *ngFor="let guide of editor.selectedSVG?.guides">
+    <div class="canvas-guide" [ngClass]="guide.axis" [class.can-drag]="canDrag()"
+         [style.left.px]="guide.axis == 'x' ? screenPosition(guide) : null" [style.top.px]="guide.axis == 'y' ? screenPosition(guide) : null"
+         (mousedown)="$event.stopPropagation()" (mousemove)="$event.stopPropagation()" (mouseup)="$event.stopPropagation()" (click)="$event.stopPropagation()"
+         (pointerdown)="beginExistingDrag(guide, $event)" (pointermove)="updateDrag($event)" (pointerup)="endDrag($event)" (pointercancel)="endDrag($event)"
+         (contextmenu)="openContextMenu(guide, $event)"></div>
+  </ng-container>
+  <div class="canvas-guide active" *ngIf="drag" [ngClass]="drag.axis"
+       [style.left.px]="drag.axis == 'x' ? activeScreenPosition() : null" [style.top.px]="drag.axis == 'y' ? activeScreenPosition() : null"></div>
+  <div class="guide-badge" *ngIf="drag" [ngStyle]="activeBadgeStyle()">{{ activeLabel() }}</div>
+</div>
+<div class="guide-input-popover" *ngIf="input" [style.left.px]="input.x" [style.top.px]="input.y"
+     (mousedown)="$event.stopPropagation()" (click)="$event.stopPropagation()">
+  <label>{{ input.axis == 'x' ? 'X' : 'Y' }}</label>
+  <input type="text" [(ngModel)]="input.value" (keydown.enter)="applyInput()" (keydown.escape)="cancelInput()" autofocus />
+  <button (click)="applyInput()" title="Apply"><fa-icon icon="check"></fa-icon></button>
+  <button (click)="cancelInput()" title="Cancel"><fa-icon icon="times"></fa-icon></button>
+  <div class="guide-input-error" *ngIf="input.error">{{ input.error }}</div>
+</div>
