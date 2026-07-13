@@ -169,6 +169,31 @@ export function parsePathPointProperty(property: string): { pointId: string; axi
     };
 }
 
+/** Resolve the equivalent animatable property on another layer, including generated point/stop IDs. */
+export function matchingAnimationProperty(source: AnyElement, destination: AnyElement, property: string): string | undefined {
+    const pathPoint = parsePathPointProperty(property);
+    if(pathPoint) {
+        if(!(source instanceof Path) || !(destination instanceof Path)) return undefined;
+        const sourceIndex = source.pathPoints().findIndex((point) => point.id === pathPoint.pointId);
+        const destinationPoint = sourceIndex >= 0 ? destination.pathPoints()[sourceIndex] : undefined;
+        return destinationPoint ? pathPointAnimationProperty(destinationPoint.id, pathPoint.axis) : undefined;
+    }
+
+    const gradient = parseGradientProperty(property);
+    if(gradient?.stopId && gradient.stopField) {
+        const sourcePaint = (source.settings as Record<string, unknown>)[gradient.paintKey];
+        const destinationPaint = (destination.settings as Record<string, unknown>)[gradient.paintKey];
+        if(!isGradientPaint(sourcePaint) || !isGradientPaint(destinationPaint)) return undefined;
+        const sourceIndex = sourcePaint.stops.findIndex((stop) => stop.id === gradient.stopId);
+        const destinationStop = sourceIndex >= 0 ? destinationPaint.stops[sourceIndex] : undefined;
+        return destinationStop
+            ? `settings.${gradient.paintKey}.gradient.stops.${destinationStop.id}.${gradient.stopField}`
+            : undefined;
+    }
+
+    return readAnimationProperty(destination, property) !== undefined ? property : undefined;
+}
+
 function writeNumber(value: unknown, write: (value: number) => void): boolean {
     const numeric = typeof value === "number" ? value : Number(value);
     if(!Number.isFinite(numeric)) {

@@ -60,16 +60,27 @@ export class TimelineEditingService {
         return true;
     }
 
-    paste(animation: AnimationDocument, currentTime: number): boolean {
+    paste(
+        animation: AnimationDocument,
+        currentTime: number,
+        destination?: AnyElement,
+        mapProperty: (element: AnyElement, property: string, sourceTargetId: string) => string | undefined = (_element, property) => property,
+    ): boolean {
         if(this.clipboard.length === 0) return false;
+        const entries = this.clipboard.flatMap((copied) => {
+            const property = destination ? mapProperty(destination, copied.property, copied.targetId) : copied.property;
+            return property ? [{ copied, property }] : [];
+        });
+        if(entries.length === 0) return false;
         this.selectedKeyframeIds.clear();
-        this.clipboard.forEach((copied) => {
-            let track = animation.tracks.find((candidate) => candidate.targetId === copied.targetId && candidate.property === copied.property);
+        entries.forEach(({ copied, property }) => {
+            const targetId = destination?.id ?? copied.targetId;
+            let track = animation.tracks.find((candidate) => candidate.targetId === targetId && candidate.property === property);
             if(!track) {
                 track = {
                     id: makeAnimationId("track"),
-                    targetId: copied.targetId,
-                    property: copied.property,
+                    targetId,
+                    property,
                     valueType: copied.valueType,
                     keyframes: [],
                     enabled: true,

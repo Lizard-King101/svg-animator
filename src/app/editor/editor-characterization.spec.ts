@@ -6,6 +6,7 @@ import { HistoryService } from "../_services/history.service";
 import { LayerOperationsService } from "../_services/layer-operations.service";
 import { ProjectService } from "../_services/project.service";
 import { createDefaultAnimation, evaluateTrack } from "./objects/animation.object";
+import { matchingAnimationProperty, pathPointAnimationProperty } from "./objects/animation-targets";
 import { Color } from "./objects/color.object";
 import { Group } from "./objects/elements/group.object";
 import { Path } from "./objects/elements/path.object";
@@ -17,7 +18,7 @@ import { SVG } from "./objects/svg.object";
 import { buildSVGMarkup } from "./svg-markup";
 import { deletePathAnchor, insertPathPoint, togglePathLineType } from "../_services/tools/path-edit.helpers";
 import { snapTimelineTime, TimelineEditingService, timelineTimeToX, timelineXToTime } from "../_services/timeline-editing.service";
-import { paintSVGValue } from "./objects/paint.object";
+import { createDefaultGradient, paintSVGValue } from "./objects/paint.object";
 
 function editorDouble(): EditorService {
     let id = 0;
@@ -244,6 +245,62 @@ describe("editor topology boundaries", () => {
         expect(duplicate.motion.pathId).toBe(motionPath.id);
     });
 
+    it("duplicates group and child tracks with remapped path-point and gradient-stop IDs", () => {
+        const { editor, svg, path } = documentWithPath();
+        (editor as any).selectedSVG = svg;
+        const group = new Group(editor);
+        group.elements = [path];
+        svg.elements = [group];
+        const point = path.pathPoints()[0];
+        const gradient = createDefaultGradient(editor.ID);
+        path.settings.fill = gradient;
+        svg.animation.tracks = [
+            {
+                id: "group-track",
+                targetId: group.id,
+                property: "opacity",
+                valueType: "number",
+                keyframes: [{ id: "group-key", time: 0, value: 0.8 }],
+            },
+            {
+                id: "opacity-track",
+                targetId: path.id,
+                property: "opacity",
+                valueType: "number",
+                keyframes: [{ id: "opacity-key", time: 0.5, value: 0.4, easing: { type: "ease-in" } }],
+            },
+            {
+                id: "point-track",
+                targetId: path.id,
+                property: pathPointAnimationProperty(point.id, "x"),
+                valueType: "number",
+                keyframes: [{ id: "point-key", time: 1, value: 12 }],
+            },
+            {
+                id: "stop-track",
+                targetId: path.id,
+                property: `settings.fill.gradient.stops.${gradient.stops[0].id}.offset`,
+                valueType: "number",
+                keyframes: [{ id: "stop-key", time: 1.5, value: 0.2 }],
+            },
+        ];
+
+        const duplicateGroup = new LayerOperationsService(editor, new ElementFactory(editor)).duplicate(group) as Group;
+        const duplicate = duplicateGroup.elements[0] as Path;
+        const duplicateTracks = svg.animation.tracks.filter((track) => track.targetId === duplicate.id);
+        const duplicateGradient = duplicate.settings.fill as typeof gradient;
+
+        expect(duplicateTracks.length).toBe(3);
+        expect(svg.animation.tracks.some((track) => track.targetId === duplicateGroup.id && track.property === "opacity")).toBeTrue();
+        expect(duplicateTracks.map((track) => track.id)).not.toContain("opacity-track");
+        expect(duplicateTracks.flatMap((track) => track.keyframes.map((keyframe) => keyframe.id)))
+            .not.toContain("opacity-key");
+        expect(duplicateTracks.some((track) => track.property === "opacity")).toBeTrue();
+        expect(duplicateTracks.some((track) => track.property === pathPointAnimationProperty(duplicate.pathPoints()[0].id, "x"))).toBeTrue();
+        expect(duplicateTracks.some((track) => track.property === `settings.fill.gradient.stops.${duplicateGradient.stops[0].id}.offset`)).toBeTrue();
+        expect(duplicateTracks.find((track) => track.property === "opacity")!.keyframes[0].easing).toEqual({ type: "ease-in" });
+    });
+
     it("creates one history snapshot and autosave for a change and neither for a no-op", () => {
         const { editor, svg, path } = documentWithPath();
         (editor as any).selectedSVG = svg;
@@ -310,5 +367,62 @@ describe("editor topology boundaries", () => {
         expect(timelineTimeToX(1, 20, 100)).toBe(120);
         expect(timelineXToTime(120, 20, 100)).toBe(1);
         expect(snapTimelineTime(3, 2)).toBe(2);
+    });
+
+    it("pastes copied keyframes onto matching properties of a newly selected layer", () => {
+        const editing = new TimelineEditingService();
+        const editor = editorDouble();
+        const source = new Path(editor);
+        const destination = new Shape(editor, { type: "rectangle", position: new Point(0, 0) });
+        const animation = createDefaultAnimation();
+        animation.tracks = [
+            {
+                id: "opacity-track",
+                targetId: source.id,
+                property: "opacity",
+                valueType: "number",
+                keyframes: [{ id: "opacity-key", time: 0.25, value: 0.5 }],
+            },
+            {
+                id: "path-track",
+                targetId: source.id,
+                property: "path.drawProgress",
+                valueType: "number",
+                keyframes: [{ id: "path-key", time: 0.5, value: 0.75 }],
+            },
+        ];
+        editing.selectedKeyframeIds = new Set(["opacity-key", "path-key"]);
+
+        expect(editing.copy(animation.tracks)).toBeTrue();
+        expect(editing.paste(
+            animation,
+            1,
+            destination,
+            (element, property) => matchingAnimationProperty(source, element, property),
+        )).toBeTrue();
+
+        const destinationTracks = animation.tracks.filter((track) => track.targetId === destination.id);
+        expect(destinationTracks.length).toBe(1);
+        expect(destinationTracks[0].property).toBe("opacity");
+        expect(destinationTracks[0].keyframes.map((keyframe) => keyframe.time)).toEqual([1]);
+        expect(animation.tracks.find((track) => track.id === "path-track")!.keyframes.length).toBe(1);
+    });
+
+    it("matches generated path-point and gradient-stop properties by structural position", () => {
+        const { editor, path: source } = documentWithPath();
+        const gradient = createDefaultGradient(editor.ID);
+        source.settings.fill = gradient;
+        const destination = new ElementFactory(editor).clone(source) as Path;
+
+        expect(matchingAnimationProperty(
+            source,
+            destination,
+            pathPointAnimationProperty(source.pathPoints()[1].id, "y"),
+        )).toBe(pathPointAnimationProperty(destination.pathPoints()[1].id, "y"));
+        expect(matchingAnimationProperty(
+            source,
+            destination,
+            `settings.fill.gradient.stops.${gradient.stops[1].id}.color`,
+        )).toBe(`settings.fill.gradient.stops.${(destination.settings.fill as typeof gradient).stops[1].id}.color`);
     });
 });

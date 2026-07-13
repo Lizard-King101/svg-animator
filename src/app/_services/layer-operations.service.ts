@@ -7,6 +7,8 @@ import { Point } from "../editor/objects/point.object";
 import { convertStrokeToPath, StrokeToPathProfile } from "../editor/objects/stroke-outline.object";
 import { AnyElement } from "../editor/objects/svg.object";
 import { applyMatrix, invertMatrix, multiplyMatrix } from "../editor/objects/transform.object";
+import { makeAnimationId } from "../editor/objects/animation.object";
+import { matchingAnimationProperty } from "../editor/objects/animation-targets";
 import { EditorService } from "./editor.service";
 import { ElementFactory } from "./element-factory.service";
 
@@ -100,7 +102,52 @@ export class LayerOperationsService {
         if(!context) return undefined;
         const duplicate = this.elements.clone(element);
         context.elements.splice(context.index + 1, 0, duplicate);
+        this.duplicateAnimation(element, duplicate);
         return duplicate;
+    }
+
+    private duplicateAnimation(original: AnyElement, duplicate: AnyElement): void {
+        const animation = this.editor.selectedSVG?.animation;
+        if(!animation) return;
+
+        const elements = new Map<string, { original: AnyElement; duplicate: AnyElement }>();
+        this.mapDuplicateElements(original, duplicate, elements);
+        const tracks = animation.tracks
+            .filter((track) => elements.has(track.targetId))
+            .flatMap((track) => {
+                const pair = elements.get(track.targetId)!;
+                const property = matchingAnimationProperty(pair.original, pair.duplicate, track.property);
+                if(!property) return [];
+                return [{
+                    id: makeAnimationId("track"),
+                    targetId: pair.duplicate.id,
+                    property,
+                    valueType: track.valueType,
+                    enabled: track.enabled,
+                    keyframes: track.keyframes.map((keyframe) => ({
+                        id: makeAnimationId("key"),
+                        time: keyframe.time,
+                        value: cloneValue(keyframe.value),
+                        easing: cloneValue(keyframe.easing),
+                    })),
+                }];
+            });
+        animation.tracks.push(...tracks);
+    }
+
+    private mapDuplicateElements(
+        original: AnyElement,
+        duplicate: AnyElement,
+        elements: Map<string, { original: AnyElement; duplicate: AnyElement }>,
+    ): void {
+        elements.set(original.id, { original, duplicate });
+
+        if(original instanceof Group && duplicate instanceof Group) {
+            original.elements.forEach((child, index) => {
+                const cloned = duplicate.elements[index];
+                if(cloned) this.mapDuplicateElements(child, cloned, elements);
+            });
+        }
     }
 
     convertStroke(path: Path, profile: StrokeToPathProfile): Path | undefined {
@@ -233,4 +280,8 @@ export class LayerOperationsService {
             })), contour.closed));
         });
     }
+}
+
+function cloneValue<T>(value: T): T {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
 }

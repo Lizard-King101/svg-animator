@@ -7,7 +7,7 @@ import { EditorService } from "src/app/_services/editor.service";
 import { EditorPreferencesService } from "src/app/_services/editor-preferences.service";
 import { ColorAttribute } from "../attributes/color/color.component";
 import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, AnimationTrack, EasingType, Keyframe, makeAnimationId } from "src/app/editor/objects/animation.object";
-import { parsePathPointProperty, pathPointAnimationProperty, readAnimationProperty } from "src/app/editor/objects/animation-targets";
+import { findAnimationTarget, matchingAnimationProperty, parsePathPointProperty, pathPointAnimationProperty, readAnimationProperty } from "src/app/editor/objects/animation-targets";
 import { Color } from "src/app/editor/objects/color.object";
 import { Group } from "src/app/editor/objects/elements/group.object";
 import { Path } from "src/app/editor/objects/elements/path.object";
@@ -415,7 +415,15 @@ export class AnimationTimelineComponent {
 
     pasteKeyframes(): boolean {
         const svg = this.editor.selectedSVG;
-        if(!svg || !this.editing.paste(svg.animation, this.animation.currentTime)) {
+        if(!svg || !this.editing.paste(
+            svg.animation,
+            this.animation.currentTime,
+            this.editor.selectedElement,
+            (element, property, sourceTargetId) => {
+                const source = findAnimationTarget(svg.elements, sourceTargetId);
+                return source ? matchingAnimationProperty(source, element, property) : undefined;
+            },
+        )) {
             return false;
         }
         this.animation.previewAt(this.animation.currentTime);
