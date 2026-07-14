@@ -1,5 +1,11 @@
 # Editor Architecture
 
+## Working principle
+
+**Clean boundaries. One source of truth. Reusable behavior. Polished interactions.**
+
+Architecture is part of feature delivery. Pages and shells compose; components own cohesive views and local interactions; scoped services own shared state and commands; pure helpers own reusable calculations. Duplicate behavior should be consolidated at the second real consumer, while view-specific presentation remains local. Refactors must preserve layout topology, input behavior, mutation boundaries, and persisted compatibility.
+
 ## Ownership rules
 
 | Area | Owner | Responsibilities |

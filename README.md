@@ -2,6 +2,8 @@
 
 A browser-based motion SVG studio for drawing, editing, and keyframe animation.
 
+> **Working motto:** Clean boundaries. One source of truth. Reusable behavior. Polished interactions.
+
 
 **Live demo → [svg-animator.multihosts.net](https://svg-animator.multihosts.net)**
 
@@ -22,7 +24,7 @@ A browser-based motion SVG studio for drawing, editing, and keyframe animation.
 - Undo / redo — per-document, section-shared history (50 entries with a 64 MiB unique-section budget)
 - Hosted on Cloudflare Pages, routed with SPA fallback
 
-See [`FEATURES.md`](FEATURES.md) for shipped behavior, [`ANIMATION_GUIDE.md`](ANIMATION_GUIDE.md) for animation controls and a first-project walkthrough, [`ARCHITECTURE.md`](ARCHITECTURE.md) for ownership rules, and [`ROADMAP.md`](ROADMAP.md) for what comes next.
+See [`FEATURES.md`](FEATURES.md) for shipped behavior, [`ANIMATION_GUIDE.md`](ANIMATION_GUIDE.md) for animation controls and a first-project walkthrough, [`ARCHITECTURE.md`](ARCHITECTURE.md) for ownership rules, [`CONTRIBUTING.md`](CONTRIBUTING.md) for the working agreement, and [`ROADMAP.md`](ROADMAP.md) for what comes next.
 
 ---
 
