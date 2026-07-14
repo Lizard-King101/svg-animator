@@ -20,6 +20,7 @@ import { buildSVGMarkup } from "./svg-markup";
 import { deletePathAnchor, insertPathPoint, togglePathLineType } from "../_services/tools/path-edit.helpers";
 import { snapTimelineTime, TimelineEditingService, timelineTimeToX, timelineXToTime } from "../_services/timeline-editing.service";
 import { createDefaultGradient, isGradientPaint, paintSVGValue } from "./objects/paint.object";
+import { dashedPathContours } from "./objects/stroke-dash.object";
 
 function editorDouble(): EditorService {
     let id = 0;
@@ -222,6 +223,65 @@ describe("editor model characterization", () => {
         expect(outline!.settings.stroke).toBeNull();
         expect(outline!.settings.stroke_width).toBe(0);
         expect(outline!.contours.every((contour) => contour.closed)).toBeTrue();
+    });
+
+    it("exports authored dashes and portable inside alignment", () => {
+        const { svg, path } = documentWithPath();
+        path.closed = true;
+        path.settings.stroke_width = 6;
+        path.settings.stroke_alignment = "inside";
+        path.settings.stroke_dasharray = [8, 4, 2, 4];
+        path.settings.stroke_dashoffset = 3;
+        path.settings.stroke_miterlimit = 7;
+
+        const markup = buildSVGMarkup(svg);
+
+        expect(markup).toContain(`<clipPath id="stroke-inside-${path.id}">`);
+        expect(markup).toContain('stroke-width="12"');
+        expect(markup).toContain('stroke-dasharray="8 4 2 4"');
+        expect(markup).toContain('stroke-dashoffset="3"');
+        expect(markup).toContain('stroke-miterlimit="7"');
+        expect(new DOMParser().parseFromString(markup, "image/svg+xml").querySelector("parsererror")).toBeNull();
+    });
+
+    it("converts dashed and aligned strokes into fill-only geometry", () => {
+        const { editor, path } = documentWithPath();
+        path.closed = true;
+        path.settings.stroke = new Color("#2468ac");
+        path.settings.stroke_width = 4;
+        path.settings.stroke_alignment = "outside";
+        path.settings.stroke_dasharray = [5, 3];
+        path.settings.stroke_dashoffset = -2;
+        path.settings.line_cap = "round";
+
+        expect(dashedPathContours(path, editor).length).toBeGreaterThan(0);
+
+        path.settings.stroke_alignment = "center";
+        const dashedOutline = convertStrokeToPath(path, editor, "optimized");
+        expect(dashedOutline).not.toBeNull();
+
+        path.settings.stroke_alignment = "outside";
+        path.settings.stroke_dasharray = [];
+        const outline = convertStrokeToPath(path, editor, "optimized");
+
+        expect(outline).not.toBeNull();
+        expect(outline!.settings.fill_enabled).toBeTrue();
+        expect(outline!.settings.stroke).toBeNull();
+        expect(outline!.settings.stroke_dasharray).toEqual([]);
+        expect(outline!.settings.stroke_alignment).toBe("center");
+        expect(outline!.contours.every((contour) => contour.closed)).toBeTrue();
+
+        path.settings.stroke_dasharray = [5, 3];
+        path.settings.stroke_alignment = "inside";
+        path.settings.line_cap = "butt";
+        const dashedAligned = convertStrokeToPath(path, editor, "optimized");
+        expect(dashedAligned).not.toBeNull();
+        expect(dashedAligned!.settings.stroke_dasharray).toEqual([]);
+        const anchors = dashedAligned!.contours.flatMap((contour) => contour.lines.flatMap((line) => line.points));
+        expect(Math.min(...anchors.map((point) => point.x))).toBeGreaterThanOrEqual(-0.001);
+        expect(Math.max(...anchors.map((point) => point.x))).toBeLessThanOrEqual(10.001);
+        expect(Math.min(...anchors.map((point) => point.y))).toBeGreaterThanOrEqual(-0.001);
+        expect(Math.max(...anchors.map((point) => point.y))).toBeLessThanOrEqual(10.001);
     });
 });
 

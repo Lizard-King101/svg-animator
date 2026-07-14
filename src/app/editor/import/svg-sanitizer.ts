@@ -6,7 +6,7 @@ const FORBIDDEN_ELEMENTS = new Set([
 const SAFE_STYLE_PROPERTIES = new Set([
     "display", "visibility", "opacity", "fill", "fill-opacity", "fill-rule",
     "stroke", "stroke-opacity", "stroke-width", "stroke-linecap", "stroke-linejoin",
-    "stroke-miterlimit", "stroke-dasharray", "stroke-dashoffset", "paint-order",
+    "stroke-miterlimit", "stroke-dasharray", "stroke-dashoffset", "stroke-alignment", "paint-order",
     "vector-effect", "font-family", "font-size", "font-style", "font-weight",
     "letter-spacing", "word-spacing", "text-anchor", "dominant-baseline",
     "transform", "transform-origin", "clip-path", "mask", "filter", "mix-blend-mode",

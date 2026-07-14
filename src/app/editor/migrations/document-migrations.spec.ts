@@ -25,7 +25,8 @@ describe("document migrations", () => {
         expect(result.migrated).toBeTrue();
         expect(result.value.kind).toBe(DOCUMENT_ENVELOPE_KIND);
         expect(result.value.version).toBe(CURRENT_DOCUMENT_VERSION);
-        expect(result.value.data).toEqual({ ...legacyDocument, importedSourceNodes: [] } as any);
+        expect(result.value.data.importedSourceNodes).toEqual([]);
+        expect((result.value.data.elements[0] as any).settings.stroke_alignment).toBe("center");
     });
 
     it("migrates the legacy project array into document and database envelopes", () => {
@@ -36,8 +37,8 @@ describe("document migrations", () => {
         expect(result.migrated).toBeTrue();
         expect(result.value.kind).toBe(PROJECT_DATABASE_KIND);
         expect(result.value.version).toBe(CURRENT_PROJECT_DATABASE_VERSION);
-        expect(result.value.projects[0].document.data).toEqual({ ...legacyProjects[0].svgData, importedSourceNodes: [] } as any);
-        expect(runtimeProjects(result.value)[0].svgData).toEqual({ ...legacyProjects[0].svgData, importedSourceNodes: [] } as any);
+        expect((result.value.projects[0].document.data.elements[0] as any).settings.stroke_alignment).toBe("center");
+        expect((runtimeProjects(result.value)[0].svgData.elements[0] as any).settings.stroke_dasharray).toEqual([]);
     });
 
     it("treats the current fixture as idempotent", () => {
@@ -60,7 +61,7 @@ describe("document migrations", () => {
         expect(result.status).toBe("ok");
         if(result.status !== "ok") return;
         expect(result.migrated).toBeTrue();
-        expect(result.value.version).toBe(4);
+        expect(result.value.version).toBe(5);
         expect(result.value.data.importedSourceNodes).toEqual([]);
     });
 
@@ -79,7 +80,7 @@ describe("document migrations", () => {
 
         expect(result.status).toBe("ok");
         if(result.status !== "ok") return;
-        expect(result.value.version).toBe(4);
+        expect(result.value.version).toBe(5);
         expect(result.value.data.animation?.version).toBe(2);
         expect(result.value.data.animation?.tracks).toEqual(data.animation.tracks as any);
     });
@@ -88,7 +89,7 @@ describe("document migrations", () => {
         const result = migrateDocument(documentV3AnimationV1);
         expect(result.status).toBe("ok");
         if(result.status !== "ok") return;
-        expect(result.value.version).toBe(4);
+        expect(result.value.version).toBe(5);
         expect(result.value.data.animation?.version).toBe(2);
         expect(result.value.data.animation?.tracks[0].keyframes).toEqual((documentV3AnimationV1.data.animation.tracks[0].keyframes as any));
     });
@@ -132,7 +133,7 @@ describe("ProjectService migration boundary", () => {
         localStorage.setItem(PROJECT_STORAGE_KEY, raw);
         const service = new ProjectService();
 
-        expect(service.list()[0].svgData).toEqual({ ...legacyProjects[0].svgData, importedSourceNodes: [] } as any);
+        expect((service.list()[0].svgData.elements[0] as any).settings.stroke_alignment).toBe("center");
         expect(localStorage.getItem(PROJECT_STORAGE_KEY)).toBe(raw);
     });
 

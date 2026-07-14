@@ -20,7 +20,7 @@ References: [SVG paths](https://www.w3.org/TR/SVG/paths.html).
 1. Canvas marquee selection, multi-object transforms, align/distribute, clipboard, and reusable symbols.
 2. `line`, `polyline`, `polygon`, nested `svg`/`viewBox`, `defs`, `symbol`, and reusable `use` semantics. Local `use` references to editable geometry already normalize to independent editable groups.
 3. Full boolean operations and primitive/path conversion.
-4. ✅ Native alpha and fill/stroke opacity. Dashes, markers, vector effects, and paint order remain planned.
+4. ✅ Native alpha, fill/stroke opacity, stroke alignment, dashes, caps/joins, and miter limits. Markers, vector effects, and paint order remain planned.
 5. ✅ Editable linear/radial gradients, including timeline animation for geometry and stops. Reusable patterns remain planned.
 6. Images, embedded fonts, richer `tspan`, text-on-path, masks, filters, blend modes, metadata, and accessibility properties.
 7. Maintain native-edit, opaque-preservation, round-trip, and visual-rendering fixture corpora.

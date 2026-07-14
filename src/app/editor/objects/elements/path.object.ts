@@ -6,6 +6,7 @@ import { defaultMotion, MotionSave, MotionState, restoreMotion, serializeMotion 
 import { Point, PointSave } from "../point.object";
 import { defaultTransform, restoreTransform, serializeTransform, TransformSave, TransformState } from "../transform.object";
 import { PaintSave, restorePaint, serializePaint } from "../paint.object";
+import { DEFAULT_STROKE_STYLE, restoreStrokeStyle, StrokeAlignment } from "../stroke-style.object";
 
 export interface PathSave {
     type: 'path';
@@ -26,6 +27,10 @@ export interface PathSave {
         stroke: PaintSave;
         line_cap: string | null;
         line_join: string | null;
+        stroke_alignment: StrokeAlignment;
+        stroke_dasharray: number[];
+        stroke_dashoffset: number;
+        stroke_miterlimit: number;
     };
     lines?: LineSave[];
     contours?: PathContourSave[];
@@ -139,15 +144,20 @@ export class Path {
 
     set closed(closed: boolean) {
         this.primaryContour.closed = closed;
+        if(!closed) this.settings.stroke_alignment = "center";
     }
 
-    settings: SettingsFromAttributes<typeof PathAttributes> = {
+    settings: SettingsFromAttributes<typeof PathAttributes> & Pick<PathSave["settings"], "stroke_alignment" | "stroke_dasharray" | "stroke_dashoffset" | "stroke_miterlimit"> = {
         stroke_width: 2,
         fill_enabled: false,
         fill: null,
         stroke: new Color('#dddde8'),
         line_cap: null,
-        line_join: null
+        line_join: null,
+        stroke_alignment: DEFAULT_STROKE_STYLE.stroke_alignment,
+        stroke_dasharray: [],
+        stroke_dashoffset: DEFAULT_STROKE_STYLE.stroke_dashoffset,
+        stroke_miterlimit: DEFAULT_STROKE_STYLE.stroke_miterlimit,
     };
 
     attributes: readonly ElementAttribute[] = PathAttributes;
@@ -261,6 +271,10 @@ export class Path {
                 stroke: serializePaint(this.settings.stroke),
                 line_cap: this.settings.line_cap ?? null,
                 line_join: this.settings.line_join ?? null,
+                stroke_alignment: this.settings.stroke_alignment,
+                stroke_dasharray: [...this.settings.stroke_dasharray],
+                stroke_dashoffset: this.settings.stroke_dashoffset,
+                stroke_miterlimit: this.settings.stroke_miterlimit,
             },
             lines: this.lines.map((l) => l.toSave()),
             contours: this.contours.map((contour) => ({
@@ -282,14 +296,19 @@ export class Path {
         p.transform = restoreTransform(s.transform);
         p.motion = restoreMotion(s.motion);
         p.fillRule = s.fillRule ?? 'evenodd';
+        const strokeStyle = restoreStrokeStyle(s.settings);
         p.settings = {
             stroke_width: s.settings.stroke_width,
             // backward compat: old saves without fill_enabled default to false
             fill_enabled: s.settings.fill_enabled ?? false,
             fill: restorePaint(s.settings.fill),
             stroke: restorePaint(s.settings.stroke),
-            line_cap: s.settings.line_cap as any,
-            line_join: s.settings.line_join as any,
+            line_cap: strokeStyle.line_cap as any,
+            line_join: strokeStyle.line_join as any,
+            stroke_alignment: strokeStyle.stroke_alignment,
+            stroke_dasharray: strokeStyle.stroke_dasharray,
+            stroke_dashoffset: strokeStyle.stroke_dashoffset,
+            stroke_miterlimit: strokeStyle.stroke_miterlimit,
         };
 
         // Rebuild shared-point references. Adjacent segments share endpoint Point
@@ -317,6 +336,9 @@ export class Path {
                 closed: s.closed ?? false,
                 lines: (s.lines ?? []).map((ls) => Line.fromSave(ls, editor, resolve)),
             }];
+        }
+        if(p.contours.some((contour) => contour.lines.length > 0 && !contour.closed)) {
+            p.settings.stroke_alignment = "center";
         }
         return p;
     }

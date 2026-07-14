@@ -19,20 +19,22 @@
     </ng-container>
 </svg:defs>
 
-<ng-template #renderElements let-elements let-parentId="parentId" let-includeSource="includeSource">
+<ng-template #renderElements let-elements let-parentId="parentId" let-includeSource="includeSource" let-clipGeometry="clipGeometry">
 <ng-container *ngFor="let element of elements">
     <ng-container *ngIf="asGroup(element) as group">
         <svg:defs *ngIf="group.clipElement">
             <svg:clipPath [id]="group.clipPathId">
-                <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: clipElementList(group), includeSource: false }"></ng-container>
+                <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: clipElementList(group), includeSource: false, clipGeometry: true }"></ng-container>
             </svg:clipPath>
         </svg:defs>
         <svg:g [id]="group.id" [style.display]="group.visible ? null : 'none'" [attr.clip-path]="clipUrl(group)" [attr.transform]="transformAttr(group)" [attr.opacity]="opacityAttr(group)">
-            <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: group.renderedElements, parentId: group.id, includeSource: true }"></ng-container>
+            <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: group.renderedElements, parentId: group.id, includeSource: true, clipGeometry: clipGeometry }"></ng-container>
         </svg:g>
     </ng-container>
     <ng-container *ngIf="asPath(element) as path">
+        <svg:path *ngIf="clipGeometry" [attr.d]="path.raw" [attr.transform]="transformAttr(path)" [attr.fill-rule]="path.fillRule" />
         <svg:path
+        *ngIf="!clipGeometry && strokeAlignment(path) === 'center' && path.settings.stroke_dasharray.length === 0"
         [id]="path.id"
         [style.display]="path.visible ? null : 'none'"
         [attr.d]="path.raw"
@@ -46,14 +48,55 @@
         [attr.stroke-width]="path.settings.stroke_width"
         [attr.stroke-linecap]="path.settings.line_cap"
         [attr.stroke-linejoin]="path.settings.line_join"
-        [attr.pathLength]="drawPathLengthAttr(path)"
-        [attr.stroke-dasharray]="drawDasharrayAttr(path)"
-        [attr.stroke-dashoffset]="drawDashoffsetAttr(path)"
+        [attr.stroke-miterlimit]="path.settings.stroke_miterlimit"
+        [attr.pathLength]="strokePathLength(path)"
+        [attr.stroke-dasharray]="strokeDasharray(path)"
+        [attr.stroke-dashoffset]="strokeDashoffset(path)"
         />
+        <svg:g *ngIf="!clipGeometry && (strokeAlignment(path) !== 'center' || path.settings.stroke_dasharray.length > 0)"
+               [id]="path.id" [style.display]="path.visible ? null : 'none'"
+               [attr.transform]="transformAttr(path)" [attr.opacity]="opacityAttr(path)">
+            <svg:defs>
+                <svg:clipPath *ngIf="strokeAlignment(path) === 'inside'" [id]="strokeEffectId(path)">
+                    <svg:path data-render-role="geometry" [attr.d]="path.raw" [attr.fill-rule]="path.fillRule" />
+                </svg:clipPath>
+                <svg:mask *ngIf="strokeAlignment(path) === 'outside'" [id]="strokeEffectId(path)"
+                          x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox">
+                    <svg:rect x="-100%" y="-100%" width="300%" height="300%" fill="white" />
+                    <svg:path data-render-role="geometry" [attr.d]="path.raw" [attr.fill-rule]="path.fillRule" fill="black" />
+                </svg:mask>
+                <svg:mask *ngIf="path.settings.stroke_dasharray.length" [id]="drawMaskId(path)"
+                          x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox">
+                    <svg:path data-render-role="reveal geometry" [attr.d]="path.raw" fill="none" stroke="white"
+                              [attr.stroke-width]="path.settings.stroke_width * 4"
+                              [attr.stroke-linecap]="path.settings.line_cap"
+                              pathLength="1" stroke-dasharray="1" [attr.stroke-dashoffset]="drawOffsetAttr(path)" />
+                </svg:mask>
+            </svg:defs>
+            <svg:path data-render-role="fill geometry" [attr.d]="path.raw"
+                      [attr.fill]="path.settings.fill_enabled ? (paintValue(path.settings.fill) ?? 'none') : 'none'"
+                      [attr.fill-opacity]="path.settings.fill_enabled ? paintOpacity(path.settings.fill) : null"
+                      [attr.fill-rule]="path.fillRule" />
+            <svg:g [attr.mask]="strokeAlignment(path) === 'outside' ? strokeEffectUrl(path) : null">
+            <svg:path data-render-role="stroke geometry" [attr.d]="path.raw" fill="none"
+                      [attr.stroke]="paintValue(path.settings.stroke)"
+                      [attr.stroke-opacity]="paintOpacity(path.settings.stroke)"
+                      [attr.stroke-width]="path.settings.stroke_width * (strokeAlignment(path) === 'center' ? 1 : 2)"
+                      [attr.stroke-linecap]="path.settings.line_cap"
+                      [attr.stroke-linejoin]="path.settings.line_join"
+                      [attr.stroke-miterlimit]="path.settings.stroke_miterlimit"
+                      [attr.stroke-dasharray]="strokeDasharray(path)"
+                      [attr.stroke-dashoffset]="strokeDashoffset(path)"
+                      [attr.clip-path]="strokeAlignment(path) === 'inside' ? strokeEffectUrl(path) : null"
+                      [attr.mask]="path.settings.stroke_dasharray.length ? drawMaskUrl(path) : null" />
+            </svg:g>
+        </svg:g>
     </ng-container>
     <ng-container *ngIf="asShape(element) as shape">
+        <svg:rect *ngIf="clipGeometry && editor.shapeIsRectangle(shape)" [attr.transform]="transformAttr(shape)" [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.width" [attr.height]="shape.height" [attr.rx]="shape.settings.corner_radius || null" [attr.ry]="shape.settings.corner_radius || null" />
+        <svg:ellipse *ngIf="clipGeometry && editor.shapeIsEllipse(shape)" [attr.transform]="transformAttr(shape)" [attr.cx]="shape.centerX" [attr.cy]="shape.centerY" [attr.rx]="shape.radiusX" [attr.ry]="shape.radiusY" />
         <svg:rect
-        *ngIf="editor.shapeIsRectangle(shape)"
+        *ngIf="!clipGeometry && editor.shapeIsRectangle(shape) && strokeAlignment(shape) === 'center'"
         [id]="shape.id"
         [style.display]="shape.visible ? null : 'none'"
         [attr.transform]="transformAttr(shape)"
@@ -69,9 +112,14 @@
         [attr.stroke]="paintValue(shape.settings.stroke)"
         [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)"
         [attr.stroke-width]="shape.settings.stroke_width"
+        [attr.stroke-linecap]="shape.settings.line_cap"
+        [attr.stroke-linejoin]="shape.settings.line_join"
+        [attr.stroke-miterlimit]="shape.settings.stroke_miterlimit"
+        [attr.stroke-dasharray]="strokeDasharray(shape)"
+        [attr.stroke-dashoffset]="strokeDashoffset(shape)"
         />
         <svg:ellipse
-        *ngIf="editor.shapeIsEllipse(shape)"
+        *ngIf="!clipGeometry && editor.shapeIsEllipse(shape) && strokeAlignment(shape) === 'center'"
         [id]="shape.id"
         [style.display]="shape.visible ? null : 'none'"
         [attr.transform]="transformAttr(shape)"
@@ -85,7 +133,31 @@
         [attr.stroke]="paintValue(shape.settings.stroke)"
         [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)"
         [attr.stroke-width]="shape.settings.stroke_width"
+        [attr.stroke-linecap]="shape.settings.line_cap"
+        [attr.stroke-linejoin]="shape.settings.line_join"
+        [attr.stroke-miterlimit]="shape.settings.stroke_miterlimit"
+        [attr.stroke-dasharray]="strokeDasharray(shape)"
+        [attr.stroke-dashoffset]="strokeDashoffset(shape)"
         />
+        <svg:g *ngIf="!clipGeometry && strokeAlignment(shape) !== 'center'"
+               [id]="shape.id" [style.display]="shape.visible ? null : 'none'"
+               [attr.transform]="transformAttr(shape)" [attr.opacity]="opacityAttr(shape)">
+            <svg:defs>
+                <svg:clipPath *ngIf="strokeAlignment(shape) === 'inside'" [id]="strokeEffectId(shape)">
+                    <svg:rect *ngIf="editor.shapeIsRectangle(shape)" [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.width" [attr.height]="shape.height" [attr.rx]="shape.settings.corner_radius || null" [attr.ry]="shape.settings.corner_radius || null" />
+                    <svg:ellipse *ngIf="editor.shapeIsEllipse(shape)" [attr.cx]="shape.centerX" [attr.cy]="shape.centerY" [attr.rx]="shape.radiusX" [attr.ry]="shape.radiusY" />
+                </svg:clipPath>
+                <svg:mask *ngIf="strokeAlignment(shape) === 'outside'" [id]="strokeEffectId(shape)" x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox">
+                    <svg:rect x="-100%" y="-100%" width="300%" height="300%" fill="white" />
+                    <svg:rect *ngIf="editor.shapeIsRectangle(shape)" [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.width" [attr.height]="shape.height" [attr.rx]="shape.settings.corner_radius || null" [attr.ry]="shape.settings.corner_radius || null" fill="black" />
+                    <svg:ellipse *ngIf="editor.shapeIsEllipse(shape)" [attr.cx]="shape.centerX" [attr.cy]="shape.centerY" [attr.rx]="shape.radiusX" [attr.ry]="shape.radiusY" fill="black" />
+                </svg:mask>
+            </svg:defs>
+            <svg:rect data-render-role="fill" *ngIf="editor.shapeIsRectangle(shape)" [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.width" [attr.height]="shape.height" [attr.rx]="shape.settings.corner_radius || null" [attr.ry]="shape.settings.corner_radius || null" [attr.fill]="paintValue(shape.settings.fill) ?? 'none'" [attr.fill-opacity]="paintOpacity(shape.settings.fill)" />
+            <svg:ellipse data-render-role="fill" *ngIf="editor.shapeIsEllipse(shape)" [attr.cx]="shape.centerX" [attr.cy]="shape.centerY" [attr.rx]="shape.radiusX" [attr.ry]="shape.radiusY" [attr.fill]="paintValue(shape.settings.fill) ?? 'none'" [attr.fill-opacity]="paintOpacity(shape.settings.fill)" />
+            <svg:rect data-render-role="stroke" *ngIf="editor.shapeIsRectangle(shape)" [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.width" [attr.height]="shape.height" [attr.rx]="shape.settings.corner_radius || null" [attr.ry]="shape.settings.corner_radius || null" fill="none" [attr.stroke]="paintValue(shape.settings.stroke)" [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)" [attr.stroke-width]="shape.settings.stroke_width * 2" [attr.stroke-linecap]="shape.settings.line_cap" [attr.stroke-linejoin]="shape.settings.line_join" [attr.stroke-miterlimit]="shape.settings.stroke_miterlimit" [attr.stroke-dasharray]="strokeDasharray(shape)" [attr.stroke-dashoffset]="strokeDashoffset(shape)" [attr.clip-path]="strokeAlignment(shape) === 'inside' ? strokeEffectUrl(shape) : null" [attr.mask]="strokeAlignment(shape) === 'outside' ? strokeEffectUrl(shape) : null" />
+            <svg:ellipse data-render-role="stroke" *ngIf="editor.shapeIsEllipse(shape)" [attr.cx]="shape.centerX" [attr.cy]="shape.centerY" [attr.rx]="shape.radiusX" [attr.ry]="shape.radiusY" fill="none" [attr.stroke]="paintValue(shape.settings.stroke)" [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)" [attr.stroke-width]="shape.settings.stroke_width * 2" [attr.stroke-linecap]="shape.settings.line_cap" [attr.stroke-linejoin]="shape.settings.line_join" [attr.stroke-miterlimit]="shape.settings.stroke_miterlimit" [attr.stroke-dasharray]="strokeDasharray(shape)" [attr.stroke-dashoffset]="strokeDashoffset(shape)" [attr.clip-path]="strokeAlignment(shape) === 'inside' ? strokeEffectUrl(shape) : null" [attr.mask]="strokeAlignment(shape) === 'outside' ? strokeEffectUrl(shape) : null" />
+        </svg:g>
     </ng-container>
     <ng-container *ngIf="asText(element) as text">
         <svg:text
@@ -117,7 +189,7 @@
 </ng-container>
 </ng-template>
 
-<ng-container *ngTemplateOutlet="renderElements; context: { $implicit: editor.selectedSVG?.elements, parentId: null, includeSource: true }"></ng-container>
+<ng-container *ngTemplateOutlet="renderElements; context: { $implicit: editor.selectedSVG?.elements, parentId: null, includeSource: true, clipGeometry: false }"></ng-container>
 
 <ng-container *ngFor="let element of editor.selectedSVG?.tempElements">
     <ng-container *ngIf="editor.elementIsPath(element)">

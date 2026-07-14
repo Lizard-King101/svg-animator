@@ -123,7 +123,7 @@
                 (pointerdown)="timeline.beginKeyframeDrag(keyframe, $event)"
                 (click)="$event.stopPropagation()"
                 [title]="keyframe.time.toFixed(2) + 's'">
-          <fa-icon [icon]="timeline.keyframeEasingIcon(keyframe)" [ngClass]="timeline.keyframeEasingClass(keyframe)"></fa-icon>
+          <fa-icon [icon]="timeline.keyframeEasingIcon(keyframe)"></fa-icon>
         </button>
         <span class="key-summary-diamond"
               *ngFor="let keyframe of row.type == 'layer' ? timeline.visibleKeyframes(row) : []"

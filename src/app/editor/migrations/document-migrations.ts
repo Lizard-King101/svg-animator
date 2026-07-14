@@ -2,7 +2,7 @@ import { SVGSave } from "../objects/svg.object";
 
 export const DOCUMENT_ENVELOPE_KIND = "svg-animator/document" as const;
 export const PROJECT_DATABASE_KIND = "svg-animator/project-database" as const;
-export const CURRENT_DOCUMENT_VERSION = 4 as const;
+export const CURRENT_DOCUMENT_VERSION = 5 as const;
 export const CURRENT_PROJECT_DATABASE_VERSION = 1 as const;
 
 export interface DocumentEnvelopeV1 {
@@ -25,6 +25,12 @@ export interface DocumentEnvelopeV3 {
 
 export interface DocumentEnvelopeV4 {
     kind: typeof DOCUMENT_ENVELOPE_KIND;
+    version: 4;
+    data: SVGSave;
+}
+
+export interface DocumentEnvelopeV5 {
+    kind: typeof DOCUMENT_ENVELOPE_KIND;
     version: typeof CURRENT_DOCUMENT_VERSION;
     data: SVGSave;
 }
@@ -35,7 +41,7 @@ export interface StoredProjectV1 {
     thumbnail: string;
     createdAt: number;
     updatedAt: number;
-    document: DocumentEnvelopeV4;
+    document: DocumentEnvelopeV5;
 }
 
 export interface ProjectDatabaseV1 {
@@ -68,7 +74,7 @@ export interface MigrationFailure {
     version?: number;
 }
 
-export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV4 {
+export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV5 {
     return {
         kind: DOCUMENT_ENVELOPE_KIND,
         version: CURRENT_DOCUMENT_VERSION,
@@ -77,36 +83,77 @@ export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV4 {
 }
 
 /** Migrates one persisted document without constructing editor model objects. */
-export function migrateDocument(input: unknown): MigrationResult<DocumentEnvelopeV4> {
+export function migrateDocument(input: unknown): MigrationResult<DocumentEnvelopeV5> {
     if(isRecord(input) && input["kind"] === DOCUMENT_ENVELOPE_KIND) {
         const version = numericVersion(input["version"]);
         if(version === 1) {
             if(!isSVGSave(input["data"])) return invalid("Document v1 contains an invalid SVG payload.");
-            return success(createDocumentEnvelope(withAnimationV2(withImportedSourceNodes(input["data"]))), true, ["Migrated document version 1 to version 2.", "Migrated document version 2 to version 3.", "Migrated document version 3 to version 4 with animation schema v2."]);
+            return success(createDocumentEnvelope(withStrokeStyleV5(withAnimationV2(withImportedSourceNodes(input["data"])))), true, ["Migrated document version 1 to version 2.", "Migrated document version 2 to version 3.", "Migrated document version 3 to version 4 with animation schema v2.", "Migrated document version 4 to version 5 with expanded stroke styles."]);
         }
         if(version === 2) {
             if(!isSVGSave(input["data"])) return invalid("Document v2 contains an invalid SVG payload.");
-            return success(createDocumentEnvelope(withAnimationV2(input["data"])), true, ["Migrated document version 2 to version 3 for native paint values.", "Migrated document version 3 to version 4 with animation schema v2."]);
+            return success(createDocumentEnvelope(withStrokeStyleV5(withAnimationV2(input["data"]))), true, ["Migrated document version 2 to version 3 for native paint values.", "Migrated document version 3 to version 4 with animation schema v2.", "Migrated document version 4 to version 5 with expanded stroke styles."]);
         }
         if(version === 3) {
             if(!isSVGSave(input["data"])) return invalid("Document v3 contains an invalid SVG payload.");
-            return success(createDocumentEnvelope(withAnimationV2(input["data"])), true, ["Migrated document version 3 to version 4 with animation schema v2."]);
+            return success(createDocumentEnvelope(withStrokeStyleV5(withAnimationV2(input["data"]))), true, ["Migrated document version 3 to version 4 with animation schema v2.", "Migrated document version 4 to version 5 with expanded stroke styles."]);
+        }
+        if(version === 4) {
+            if(!isSVGSave(input["data"])) return invalid("Document v4 contains an invalid SVG payload.");
+            return success(createDocumentEnvelope(withStrokeStyleV5(withAnimationV2(input["data"]))), true, ["Migrated document version 4 to version 5 with expanded stroke styles."]);
         }
         if(version !== CURRENT_DOCUMENT_VERSION) return unsupported("document", version);
         if(!isSVGSave(input["data"])) {
-            return invalid("Document v4 contains an invalid SVG payload.");
+            return invalid("Document v5 contains an invalid SVG payload.");
         }
-        const upgraded = withAnimationV2(input["data"]);
+        const upgraded = withStrokeStyleV5(withAnimationV2(input["data"]));
         const migrated = upgraded !== input["data"];
-        return success(migrated ? createDocumentEnvelope(upgraded) : input as unknown as DocumentEnvelopeV4, migrated,
-            migrated ? ["Normalized animation schema to version 2."] : []);
+        return success(migrated ? createDocumentEnvelope(upgraded) : input as unknown as DocumentEnvelopeV5, migrated,
+            migrated ? ["Normalized document defaults."] : []);
     }
 
     if(isSVGSave(input)) {
-        return success(createDocumentEnvelope(withAnimationV2(withImportedSourceNodes(input))), true, ["Migrated an unversioned document to version 4."]);
+        return success(createDocumentEnvelope(withStrokeStyleV5(withAnimationV2(withImportedSourceNodes(input)))), true, ["Migrated an unversioned document to version 5."]);
     }
 
     return invalid("Value is neither a legacy SVG document nor a supported document envelope.");
+}
+
+function withStrokeStyleV5(document: SVGSave): SVGSave {
+    let changed = false;
+    const visit = (element: any): any => {
+        if(element?.type === "group") {
+            const elements = Array.isArray(element.elements) ? element.elements.map(visit) : [];
+            if(elements.some((child: unknown, index: number) => child !== element.elements[index])) {
+                changed = true;
+                return { ...element, elements };
+            }
+            return element;
+        }
+        if(element?.type !== "path" && element?.type !== "shape") return element;
+        const settings = element.settings ?? {};
+        const hasDefaults = settings.stroke_alignment != null
+            && Array.isArray(settings.stroke_dasharray)
+            && settings.stroke_dashoffset != null
+            && settings.stroke_miterlimit != null
+            && (element.type !== "shape" || ("line_cap" in settings && "line_join" in settings));
+        if(hasDefaults) return element;
+        changed = true;
+        return {
+            ...element,
+            settings: {
+                ...settings,
+                line_cap: settings.line_cap ?? null,
+                line_join: settings.line_join ?? null,
+                stroke_alignment: settings.stroke_alignment ?? "center",
+                stroke_dasharray: Array.isArray(settings.stroke_dasharray) ? settings.stroke_dasharray : [],
+                stroke_dashoffset: settings.stroke_dashoffset ?? 0,
+                stroke_miterlimit: settings.stroke_miterlimit ?? 4,
+            },
+        };
+    };
+    const elements = document.elements.map(visit);
+    return changed ? { ...document, elements } : document;
 }
 
 function withAnimationV2(document: SVGSave): SVGSave {

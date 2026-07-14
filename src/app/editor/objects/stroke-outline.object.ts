@@ -2,9 +2,11 @@ import { EditorService } from "src/app/_services/editor.service";
 import { Color } from "./color.object";
 import { Path, PathContour, RoundedCorner } from "./elements/path.object";
 import { Line } from "./line.object";
-import { unionFilledPathContours } from "./path-boolean.object";
+import { intersectFilledPathContours, subtractFilledPathContours, unionFilledPathContours } from "./path-boolean.object";
 import { Point } from "./point.object";
 import { clonePaint } from "./paint.object";
+import { dashedPathContourGroups, dashedPathContours } from "./stroke-dash.object";
+import { effectiveStrokeAlignment } from "./stroke-style.object";
 
 interface Vec {
     x: number;
@@ -46,7 +48,6 @@ export type StrokeToPathProfile = 'precise' | 'optimized';
 const EPSILON = 0.0001;
 const OFFSET_TOLERANCE = 0.08;
 const MAX_OFFSET_DEPTH = 7;
-const MITER_LIMIT = 4;
 
 export function canConvertStrokeToPath(path: Path): boolean {
     return path.settings.stroke_width > 0
@@ -60,7 +61,17 @@ export function convertStrokeToPath(path: Path, editor: EditorService, profile: 
         return null;
     }
 
-    const halfWidth = strokeWidth / 2;
+    const alignment = effectiveStrokeAlignment(path);
+    const working = new Path(editor);
+    working.settings = {
+        ...path.settings,
+        stroke_width: alignment === 'center' ? strokeWidth : strokeWidth * 2,
+        stroke_alignment: 'center',
+        stroke_dasharray: [],
+        stroke_dashoffset: 0,
+    };
+    working.contours = path.settings.stroke_dasharray.length ? dashedPathContours(path, editor) : path.contours;
+    const halfWidth = working.settings.stroke_width / 2;
     const converted = new Path(editor);
     converted.name = `${path.name} Outline (${profile === 'optimized' ? 'Optimized' : 'Precise'})`;
     converted.visible = path.visible;
@@ -77,18 +88,22 @@ export function convertStrokeToPath(path: Path, editor: EditorService, profile: 
         stroke_width: 0,
         line_cap: null,
         line_join: null,
+        stroke_alignment: 'center',
+        stroke_dasharray: [],
+        stroke_dashoffset: 0,
+        stroke_miterlimit: 4,
     };
     converted.contours = [];
 
-    path.contours.forEach((contour) => {
-        const source = strokeSourceSegments(path, contour, editor);
+    working.contours.forEach((contour) => {
+        const source = strokeSourceSegments(working, contour, editor);
         if(source.length === 0) {
             return;
         }
 
         if(contourIsClosed(contour)) {
-            const left = sideSegments(source, halfWidth, 1, true, path.settings.line_join);
-            const right = sideSegments(source, halfWidth, -1, true, path.settings.line_join);
+            const left = sideSegments(source, halfWidth, 1, true, working.settings.line_join, working.settings.stroke_miterlimit);
+            const right = sideSegments(source, halfWidth, -1, true, working.settings.line_join, working.settings.stroke_miterlimit);
             if(left.length >= 2) {
                 converted.contours.push(converted.createContour(linesFromSegments(prepareOutputSegments(left, profile, halfWidth, true), editor, true), true));
             }
@@ -98,8 +113,8 @@ export function convertStrokeToPath(path: Path, editor: EditorService, profile: 
             return;
         }
 
-        const left = sideSegments(source, halfWidth, 1, false, path.settings.line_join);
-        const right = sideSegments(source, halfWidth, -1, false, path.settings.line_join);
+        const left = sideSegments(source, halfWidth, 1, false, working.settings.line_join, working.settings.stroke_miterlimit);
+        const right = sideSegments(source, halfWidth, -1, false, working.settings.line_join, working.settings.stroke_miterlimit);
         if(left.length === 0 || right.length === 0) {
             return;
         }
@@ -110,15 +125,15 @@ export function convertStrokeToPath(path: Path, editor: EditorService, profile: 
         const endDirection = lineEndDirection(lastLine);
         const outline = [
             ...left,
-            ...capSegments(lastLine.points[1], left[left.length - 1].end, right[right.length - 1].end, path.settings.line_cap, endDirection, halfWidth),
+            ...capSegments(lastLine.points[1], left[left.length - 1].end, right[right.length - 1].end, working.settings.line_cap, endDirection, halfWidth),
             ...reverseSegments(right),
-            ...capSegments(firstLine.points[0], right[0].start, left[0].start, path.settings.line_cap, negate(startDirection), halfWidth),
+            ...capSegments(firstLine.points[0], right[0].start, left[0].start, working.settings.line_cap, negate(startDirection), halfWidth),
         ];
         converted.contours.push(converted.createContour(linesFromSegments(prepareOutputSegments(outline, profile, halfWidth, true), editor, true), true));
     });
 
     if(profile === 'optimized') {
-        const pieces = strokePieceContours(path, editor, halfWidth, profile);
+        const pieces = strokePieceContours(working, editor, halfWidth, profile);
         const resolved = unionFilledPathContours(pieces, editor);
         if(resolved?.length) {
             converted.contours = resolved;
@@ -126,7 +141,103 @@ export function convertStrokeToPath(path: Path, editor: EditorService, profile: 
         }
     }
 
+    if(alignment !== 'center' && converted.contours.length) {
+        if(path.settings.stroke_dasharray.length) {
+            const oneSided = alignedDashedStrokeContours(path, editor, profile, alignment);
+            if(oneSided.length === 0) return null;
+            converted.contours = profile === 'optimized' ? (unionFilledPathContours(oneSided, editor) ?? oneSided) : oneSided;
+            converted.fillRule = 'nonzero';
+            return converted;
+        }
+        const closedSource = path.contours.filter((contour) => contour.closed);
+        const alignContours = (subject: PathContour[], subjectFillRule: 'evenodd' | 'nonzero') => alignment === 'inside'
+            ? intersectFilledPathContours(subject, closedSource, editor, path.fillRule, subjectFillRule)
+            : subtractFilledPathContours(subject, closedSource, editor, path.fillRule, subjectFillRule);
+        let aligned: PathContour[] | null;
+        aligned = alignContours(converted.contours, converted.fillRule);
+        if(aligned?.length) {
+            converted.contours = aligned;
+            converted.fillRule = 'nonzero';
+        } else if(path.settings.stroke_dasharray.length === 0) {
+            const fallback = fallbackAlignedContours(path, converted.contours, alignment);
+            if(fallback.length === 0) return null;
+            converted.contours = fallback;
+            converted.fillRule = 'evenodd';
+        }
+    }
+
     return converted.contours.length ? converted : null;
+}
+
+function alignedDashedStrokeContours(path: Path, editor: EditorService, profile: StrokeToPathProfile, alignment: 'inside' | 'outside'): PathContour[] {
+    const contours: PathContour[] = [];
+    dashedPathContourGroups(path, editor).forEach(({ source: sourceContour, pieces }) => {
+        const innerSide: Side = signedContourArea(sourceContour) >= 0 ? 1 : -1;
+        const side: Side = alignment === 'inside' ? innerSide : (innerSide === 1 ? -1 : 1);
+        pieces.forEach((piece) => {
+            const piecePath = new Path(editor);
+            piecePath.settings = { ...path.settings, stroke_dasharray: [], stroke_alignment: 'center' };
+            piecePath.contours = [piece];
+            const source = strokeSourceSegments(piecePath, piece, editor);
+            if(source.length === 0) return;
+            const offset = sideSegments(source, path.settings.stroke_width, side, false, path.settings.line_join, path.settings.stroke_miterlimit);
+            if(offset.length === 0) return;
+            const center = source.map(({ line }) => sourceOutlineSegment(line));
+            const start = source[0].line.points[0];
+            const end = source[source.length - 1].line.points[1];
+            const outline = [
+                ...center,
+                ...halfCapSegments(end, center[center.length - 1].end, offset[offset.length - 1].end, path.settings.line_cap, lineEndDirection(source[source.length - 1].line), path.settings.stroke_width),
+                ...reverseSegments(offset),
+                ...halfCapSegments(start, offset[0].start, center[0].start, path.settings.line_cap, negate(lineStartDirection(source[0].line)), path.settings.stroke_width),
+            ];
+            const prepared = prepareOutputSegments(outline, profile, path.settings.stroke_width, true);
+            if(prepared.length >= 2) contours.push({ id: editor.ID, closed: true, lines: linesFromSegments(prepared, editor, true) });
+        });
+    });
+    return contours;
+}
+
+function sourceOutlineSegment(line: Line): OutlineSegment {
+    return line.type === 'bezier' && line.controlStart && line.controlEnd
+        ? { type: 'bezier', start: line.points[0], end: line.points[1], controlStart: line.controlStart, controlEnd: line.controlEnd }
+        : { type: 'line', start: line.points[0], end: line.points[1] };
+}
+
+function halfCapSegments(center: Point, from: Point, to: Point, cap: string | null, direction: Vec, width: number): OutlineSegment[] {
+    if(cap !== 'round' && cap !== 'square') return [lineSegment(from, to)];
+    const extreme = new Point(center.x + (direction.x * width), center.y + (direction.y * width));
+    if(cap === 'square') return [lineSegment(from, extreme), lineSegment(extreme, to)];
+    if(distance(from, center) <= EPSILON) {
+        const sweep: Side = cross({ x: extreme.x - center.x, y: extreme.y - center.y }, { x: to.x - center.x, y: to.y - center.y }) >= 0 ? 1 : -1;
+        return [lineSegment(from, extreme), ...arcSegments(center, extreme, to, sweep)];
+    }
+    const sweep: Side = cross({ x: from.x - center.x, y: from.y - center.y }, { x: extreme.x - center.x, y: extreme.y - center.y }) >= 0 ? 1 : -1;
+    return [...arcSegments(center, from, extreme, sweep), lineSegment(extreme, to)];
+}
+
+function fallbackAlignedContours(path: Path, outlined: PathContour[], alignment: 'inside' | 'outside'): PathContour[] {
+    const result: PathContour[] = [];
+    let pairIndex = 0;
+    path.contours.forEach((contour) => {
+        if(!contourIsClosed(contour)) return;
+        const left = outlined[pairIndex++];
+        const right = outlined[pairIndex++];
+        if(!left || !right) return;
+        const area = signedContourArea(contour);
+        const inner = area >= 0 ? left : right;
+        const outer = area >= 0 ? right : left;
+        result.push({ id: contour.id, closed: true, lines: contour.lines }, alignment === 'inside' ? inner : outer);
+    });
+    return result;
+}
+
+function signedContourArea(contour: PathContour): number {
+    const points = completeLines(contour).map((line) => line.points[0]);
+    return points.reduce((area, point, index) => {
+        const next = points[(index + 1) % points.length];
+        return area + (point.x * next.y) - (next.x * point.y);
+    }, 0) / 2;
 }
 
 function strokePieceContours(path: Path, editor: EditorService, halfWidth: number, profile: StrokeToPathProfile): PathContour[] {
@@ -177,6 +288,7 @@ function strokePieceContours(path: Path, editor: EditorService, halfWidth: numbe
                 current.joinAnchor,
                 halfWidth,
                 path.settings.line_join,
+                path.settings.stroke_miterlimit,
             );
             if(patch.length) {
                 addPiece(patch);
@@ -224,6 +336,7 @@ function joinPatchSegments(
     anchor: Point,
     halfWidth: number,
     join: string | null,
+    miterLimit: number,
 ): OutlineSegment[] {
     const turn = cross(lineEndDirection(previousLine), lineStartDirection(nextLine));
     if(Math.abs(turn) <= EPSILON) {
@@ -252,7 +365,7 @@ function joinPatchSegments(
             to,
             segmentStartDirection(nextSegment),
         );
-        boundary = intersection && distance(anchor, intersection) <= halfWidth * MITER_LIMIT
+        boundary = intersection && distance(anchor, intersection) <= halfWidth * miterLimit
             ? [lineSegment(from, intersection), lineSegment(intersection, to)]
             : [lineSegment(from, to)];
     } else {
@@ -432,7 +545,7 @@ function pointsFitChord(points: Point[], start: Point, end: Point, tolerance: nu
     });
 }
 
-function sideSegments(source: StrokeSourceSegment[], halfWidth: number, side: Side, closed: boolean, join: string | null): OutlineSegment[] {
+function sideSegments(source: StrokeSourceSegment[], halfWidth: number, side: Side, closed: boolean, join: string | null, miterLimit: number): OutlineSegment[] {
     const pieces = source.flatMap(({ line }, sourceIndex) => {
         return offsetLine(line, halfWidth, side).map((segment) => ({ segment, sourceIndex }));
     });
@@ -446,13 +559,13 @@ function sideSegments(source: StrokeSourceSegment[], halfWidth: number, side: Si
         if(index > 0) {
             const previous = pieces[index - 1];
             const anchor = previous.sourceIndex === piece.sourceIndex ? undefined : source[piece.sourceIndex].joinAnchor;
-            result.push(...joinSegments(previous.segment, segment, anchor, halfWidth, side, join));
+            result.push(...joinSegments(previous.segment, segment, anchor, halfWidth, side, join, miterLimit));
         }
         result.push(segment);
     });
 
     if(closed && pieces.length > 1) {
-        result.push(...joinSegments(pieces[pieces.length - 1].segment, pieces[0].segment, source[0].joinAnchor, halfWidth, side, join));
+        result.push(...joinSegments(pieces[pieces.length - 1].segment, pieces[0].segment, source[0].joinAnchor, halfWidth, side, join, miterLimit));
     }
 
     return result;
@@ -531,7 +644,7 @@ function offsetError(
     }, 0);
 }
 
-function joinSegments(previous: OutlineSegment, next: OutlineSegment, anchor: Point | undefined, halfWidth: number, side: Side, join: string | null): OutlineSegment[] {
+function joinSegments(previous: OutlineSegment, next: OutlineSegment, anchor: Point | undefined, halfWidth: number, side: Side, join: string | null, miterLimit: number): OutlineSegment[] {
     if(distance(previous.end, next.start) <= EPSILON) {
         return [];
     }
@@ -559,7 +672,7 @@ function joinSegments(previous: OutlineSegment, next: OutlineSegment, anchor: Po
         }
 
         if((join == null || join === 'miter') && intersection
-            && distance(anchor, intersection) <= halfWidth * MITER_LIMIT) {
+            && distance(anchor, intersection) <= halfWidth * miterLimit) {
             return connectAtIntersection(previous, next, intersection);
         }
     }

@@ -23,6 +23,7 @@ import { readAnimationProperty } from "../../editor/objects/animation-targets";
 import { PaintEditorComponent } from "../paint-editor/paint-editor.component";
 import { PaintEditorChange } from "../paint-editor/paint-editor.types";
 import { PaintEditingService } from "../../_services/paint-editing.service";
+import { formatDashArray, parseDashArray, StrokeAlignment } from "../../editor/objects/stroke-style.object";
 
 @Component({
     selector: "app-properties-panel",
@@ -49,6 +50,37 @@ export class PropertiesPanelComponent {
 
     asPath(element: AnyElement | undefined): Path | null {
         return element instanceof Path ? element : null;
+    }
+
+    asStrokeElement(element: AnyElement | undefined): Path | Shape | null {
+        return element instanceof Path || element instanceof Shape ? element : null;
+    }
+
+    strokeAlignmentDisabled(element: Path | Shape): boolean {
+        return element instanceof Path && element.contours.some((contour) => contour.lines.length > 0 && !contour.closed);
+    }
+
+    dashPattern(element: Path | Shape): string {
+        return formatDashArray(element.settings.stroke_dasharray);
+    }
+
+    setStrokeAlignment(element: Path | Shape, value: StrokeAlignment): void {
+        element.settings.stroke_alignment = this.strokeAlignmentDisabled(element) ? "center" : value;
+        this.scheduleAttributeSnapshot();
+    }
+
+    setDashPattern(element: Path | Shape, value: string): void {
+        const parsed = parseDashArray(value);
+        if(parsed == null) return;
+        element.settings.stroke_dasharray = parsed;
+        this.scheduleAttributeSnapshot();
+    }
+
+    setStrokeNumber(element: Path | Shape, key: "stroke_dashoffset" | "stroke_miterlimit", value: number | string | null): void {
+        const numeric = typeof value === "number" ? value : Number(value);
+        if(!Number.isFinite(numeric)) return;
+        const normalized = key === "stroke_miterlimit" ? Math.max(1, numeric) : numeric;
+        this.handleAttributeChange(element, { label: key, name: key, input: "number", output: key }, normalized);
     }
 
     /** Bridge for template dynamic-key access on the now-typed settings object. */

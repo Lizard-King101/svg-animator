@@ -91,6 +91,7 @@ export const ANIMATABLE_PROPERTIES: readonly AnimatablePropertyDefinition[] = [
     { property: "settings.stroke", label: "Stroke", valueType: "color", group: "style", mvp: true },
     { property: "settings.color", label: "Text Color", valueType: "color", group: "style", mvp: true },
     { property: "settings.stroke_width", label: "Stroke Width", valueType: "number", group: "style", mvp: true },
+    { property: "settings.stroke_dashoffset", label: "Dash Offset", valueType: "number", group: "style", mvp: true },
     { property: "path.drawProgress", label: "Draw Progress", valueType: "number", group: "path", mvp: true },
     { property: "motion.progress", label: "Motion Progress", valueType: "number", group: "path", mvp: true },
     { property: "motion.rotateToPath", label: "Rotate To Path", valueType: "boolean", group: "path", mvp: true },

@@ -14,6 +14,8 @@ import { GradientPaint, gradientAnimationProperties, isGradientPaint } from "src
 import { FloatingPopoverPosition, floatingPopoverStyle, positionFloatingPopover } from "src/app/_components/floating-popover";
 import { PaintEditorChange } from "src/app/_components/paint-editor/paint-editor.types";
 import { PaintEditingService } from "src/app/_services/paint-editing.service";
+import { IconProp } from "@fortawesome/fontawesome-svg-core";
+import { keyframeEasingIcon } from "src/app/_components/animation-timeline/keyframe-easing-icons";
 import {
     clampKeyframeTimeDelta,
     clampTimelineScale,
@@ -49,10 +51,10 @@ export class TimelineEditorService implements OnDestroy {
 
     readonly properties = ANIMATABLE_PROPERTIES;
     readonly easingOptions: readonly EasingToolbarOption[] = [
-        { type: "linear", label: "Linear", icon: "diamond" },
-        { type: "ease-in", label: "Ease In", icon: "caret-left" },
-        { type: "ease-out", label: "Ease Out", icon: "caret-right" },
-        { type: "ease-in-out", label: "Ease In Out", icon: "hourglass-half", className: "hourglass-sideways" },
+        { type: "linear", label: "Linear", icon: keyframeEasingIcon("linear") },
+        { type: "ease-in", label: "Ease In", icon: keyframeEasingIcon("ease-in") },
+        { type: "ease-out", label: "Ease Out", icon: keyframeEasingIcon("ease-out") },
+        { type: "ease-in-out", label: "Ease In Out", icon: keyframeEasingIcon("ease-in-out") },
     ];
     readonly timePadding = 28;
     expandedLayerIds = new Set<string>();
@@ -801,29 +803,9 @@ export class TimelineEditorService implements OnDestroy {
         this.animationChange.emit();
     }
 
-    keyframeEasingIcon(keyframe: TimelineKeyframe): string {
+    keyframeEasingIcon(keyframe: TimelineKeyframe): IconProp {
         const type = this.timelineKeyframeEasingType(keyframe);
-        switch(type) {
-            case "ease-in":
-                return "caret-left";
-            case "ease-out":
-                return "caret-right";
-            case "ease-in-out":
-                return "hourglass-half";
-            case "hold":
-                return "pause";
-            case "linear":
-            default:
-                return "diamond";
-        }
-    }
-
-    keyframeEasingClass(keyframe: TimelineKeyframe): string {
-        const type = this.timelineKeyframeEasingType(keyframe);
-        if(type === "ease-in-out") {
-            return "hourglass-sideways";
-        }
-        return "";
+        return keyframeEasingIcon(type, this.isKeyframeSelected(keyframe));
     }
 
     beginKeyframeDrag(keyframe: TimelineKeyframe, event: PointerEvent) {
@@ -1683,6 +1665,8 @@ export class TimelineEditorService implements OnDestroy {
                 return 1;
             case "settings.stroke_width":
                 return 0.25;
+            case "settings.stroke_dashoffset":
+                return 1;
             default:
                 return 1;
         }
@@ -2146,8 +2130,7 @@ interface KeyframeMarquee {
 interface EasingToolbarOption {
     type: EasingType;
     label: string;
-    icon: string;
-    className?: string;
+    icon: IconProp;
 }
 
 type GraphAxis = "x" | "y" | "scalar";

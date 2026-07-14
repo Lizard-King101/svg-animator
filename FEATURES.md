@@ -20,12 +20,12 @@ SVG Animator is a motion SVG studio: a browser-based drawing, editing, and keyfr
 
 - Pen-authored open and closed paths with straight and cubic segments.
 - Rectangle, ellipse, and multiline text elements.
-- Alpha-aware fill/stroke color picking, caps, joins, rectangle corner radius, element opacity, visibility, and locking.
+- Alpha-aware fill/stroke color picking, center/inside/outside alignment, authored dashes and offset, caps, joins, miter limits, rectangle corner radius, element opacity, visibility, and locking.
 - Direct linear/radial gradient handles plus compact stop popovers in Properties and Animate modes.
 - Element translate, scale, rotation, and editable transform origin.
 - Direct path editing: anchors, mirrored/broken bezier handles, segment selection, point insertion/deletion, straight/curve conversion, and rounded anchors.
 - Compound paths with multiple contours and even-odd/nonzero fill rules.
-- Precise and optimized stroke-to-path conversion, including caps, joins, closed strokes, and curve-native boolean cleanup.
+- Precise and optimized stroke-to-path conversion, including alignment, authored dash pieces, caps, joins, miter limits, closed strokes, and curve-native boolean cleanup.
 
 ## Layers and composition
 

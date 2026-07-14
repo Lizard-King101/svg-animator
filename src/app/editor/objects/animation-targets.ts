@@ -71,6 +71,8 @@ export function readAnimationProperty(element: AnyElement, property: string): un
             return solidColorHex((element.settings as Record<string, unknown>)["color"]);
         case "settings.stroke_width":
             return (element.settings as Record<string, unknown>)["stroke_width"];
+        case "settings.stroke_dashoffset":
+            return (element.settings as Record<string, unknown>)["stroke_dashoffset"];
         case "visible":
             return element.visible;
         case "path.drawProgress":
@@ -130,6 +132,8 @@ export function writeAnimationProperty(element: AnyElement, property: string, va
             return writeColor(element, "color", value);
         case "settings.stroke_width":
             return writeNumber(value, (numeric) => (element.settings as Record<string, unknown>)["stroke_width"] = numeric);
+        case "settings.stroke_dashoffset":
+            return writeNumber(value, (numeric) => (element.settings as Record<string, unknown>)["stroke_dashoffset"] = numeric);
         case "visible":
             element.visible = Boolean(value);
             return true;

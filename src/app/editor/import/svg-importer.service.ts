@@ -12,7 +12,7 @@ import { Color } from "../objects/color.object";
 
 const UNSUPPORTED_NATIVE_ATTRIBUTES = [
     "clip-path", "mask", "filter", "marker", "marker-start", "marker-mid", "marker-end",
-    "stroke-dasharray", "stroke-dashoffset", "vector-effect", "paint-order",
+    "vector-effect", "paint-order",
 ];
 
 const EDITABLE_DEFINITION_TAGS = new Set([
@@ -299,6 +299,7 @@ class ImportContext {
         if(contours.length === 0) throw new SVGImportError("Path has no drawable segments.");
         const id = this.id(element.getAttribute("id"), "path");
         const paint = pathPaint(element, false, (value) => this.paint(value));
+        if(contours.some((contour) => !contour.closed)) paint.settings.stroke_alignment = "center";
         return {
             type: "path",
             ...commonState(element, id, "Path", this.transform(element)),
@@ -595,11 +596,12 @@ function pathPaint(element: Element, openByDefault = false, resolvePaint: (value
             stroke,
             line_cap: nullableStyle(element, "stroke-linecap"),
             line_join: nullableStyle(element, "stroke-linejoin"),
+            ...strokeStyle(element),
         },
     };
 }
 
-function shapePaint(element: Element, resolvePaint: (value: string) => PaintSave | undefined = colorValue): Pick<ShapeSave["settings"], "stroke_width" | "stroke" | "fill"> {
+function shapePaint(element: Element, resolvePaint: (value: string) => PaintSave | undefined = colorValue): Omit<ShapeSave["settings"], "width" | "height" | "corner_radius"> {
     const fill = resolvePaint(styleValue(element, "fill") ?? "#000000");
     const stroke = resolvePaint(styleValue(element, "stroke") ?? "none");
     if(fill === undefined || stroke === undefined) throw new SVGImportError("Paint value cannot be represented natively.");
@@ -607,7 +609,58 @@ function shapePaint(element: Element, resolvePaint: (value: string) => PaintSave
         stroke_width: Math.max(0, firstNumber(styleValue(element, "stroke-width"), 1)),
         stroke,
         fill,
+        line_cap: nullableStyle(element, "stroke-linecap"),
+        line_join: nullableStyle(element, "stroke-linejoin"),
+        ...strokeStyle(element),
     };
+}
+
+function strokeStyle(element: Element): Pick<PathSave["settings"], "stroke_alignment" | "stroke_dasharray" | "stroke_dashoffset" | "stroke_miterlimit"> {
+    const alignment = styleValue(element, "stroke-alignment")?.toLowerCase();
+    if(alignment && !["center", "inner", "inside", "outer", "outside"].includes(alignment)) {
+        throw new SVGImportError("Stroke alignment cannot be represented natively.");
+    }
+    const dashSource = styleValue(element, "stroke-dasharray");
+    const dasharray = dashSource == null || dashSource.toLowerCase() === "none"
+        ? []
+        : parseSVGNumberList(dashSource);
+    if(dasharray == null || dasharray.some((value) => value < 0)) {
+        throw new SVGImportError("Stroke dash array cannot be represented natively.");
+    }
+    const dashoffset = svgLength(styleValue(element, "stroke-dashoffset"), 0);
+    const miterlimit = svgLength(styleValue(element, "stroke-miterlimit"), 4);
+    if(dashoffset == null || miterlimit == null || miterlimit < 1) {
+        throw new SVGImportError("Stroke offset or miter limit cannot be represented natively.");
+    }
+    return {
+        stroke_alignment: alignment === "inner" || alignment === "inside"
+            ? "inside"
+            : alignment === "outer" || alignment === "outside" ? "outside" : "center",
+        stroke_dasharray: dasharray.some((value) => value > 0) ? dasharray : [],
+        stroke_dashoffset: dashoffset,
+        stroke_miterlimit: miterlimit,
+    };
+}
+
+function parseSVGNumberList(value: string): number[] | null {
+    const parts = value.trim().split(/[\s,]+/).filter(Boolean);
+    const numbers: number[] = [];
+    for(const part of parts) {
+        const parsed = svgLength(part, null);
+        if(parsed == null) return null;
+        numbers.push(parsed);
+    }
+    return numbers;
+}
+
+function svgLength(value: string | undefined, fallback: number): number;
+function svgLength(value: string | undefined, fallback: null): number | null;
+function svgLength(value: string | undefined, fallback: number | null): number | null {
+    if(value == null || value.trim() === "") return fallback;
+    const match = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(?:px)?$/i.exec(value.trim());
+    if(!match) return null;
+    const parsed = Number(match[1]);
+    return Number.isFinite(parsed) ? parsed : null;
 }
 
 function styleValue(element: Element, property: string): string | undefined {

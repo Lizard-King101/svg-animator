@@ -5,6 +5,7 @@ import { motionAdjustedMatrix } from "../objects/motion-path.object";
 import { gradientPaints, gradientStopOpacity, paintOpacity, paintSVGValue } from "../objects/paint.object";
 import { AnyElement, SVG } from "../objects/svg.object";
 import { matrixToSvg } from "../objects/transform.object";
+import { effectiveStrokeAlignment } from "../objects/stroke-style.object";
 import { CompiledAnimationTrack } from "./animation-evaluation-plan";
 
 type RenderDomain = "transform" | "geometry" | "appearance" | "visibility" | "gradient";
@@ -35,11 +36,24 @@ export class ImperativeSvgRenderer {
             if(domains.has("visibility")) node.style.display = target.visible ? "" : "none";
             if(domains.has("transform")) setAttribute(node, "transform", matrixToSvg(motionAdjustedMatrix(this.svg, target)));
             if(domains.has("geometry") && target instanceof Path) {
-                setAttribute(node, "d", target.raw);
+                if(node.tagName.toLowerCase() === "g") {
+                    node.querySelectorAll<SVGElement>('[data-render-role~="geometry"]').forEach((geometry) => setAttribute(geometry, "d", target.raw));
+                } else {
+                    setAttribute(node, "d", target.raw);
+                }
                 const progress = Math.max(0, Math.min(1, target.drawProgress));
-                setAttribute(node, "pathLength", progress < 1 ? 1 : null);
-                setAttribute(node, "stroke-dasharray", progress < 1 ? 1 : null);
-                setAttribute(node, "stroke-dashoffset", progress < 1 ? 1 - progress : null);
+                if(target.settings.stroke_dasharray.length > 0) {
+                    node.querySelectorAll<SVGElement>('[data-render-role~="reveal"]').forEach((reveal) => setAttribute(reveal, "stroke-dashoffset", 1 - progress));
+                } else {
+                    const strokeNodes = node.tagName.toLowerCase() === "g"
+                        ? [...node.querySelectorAll<SVGElement>('[data-render-role~="stroke"]')]
+                        : [node];
+                    strokeNodes.forEach((stroke) => {
+                        setAttribute(stroke, "pathLength", progress < 1 ? 1 : null);
+                        setAttribute(stroke, "stroke-dasharray", progress < 1 ? 1 : null);
+                        setAttribute(stroke, "stroke-dashoffset", progress < 1 ? 1 - progress : null);
+                    });
+                }
             }
             if(domains.has("appearance")) this.writeAppearance(node, target);
             if(domains.has("gradient")) this.writeGradients(target);
@@ -55,19 +69,34 @@ export class ImperativeSvgRenderer {
     private writeAppearance(node: SVGElement, target: AnyElement): void {
         setAttribute(node, "opacity", target.opacity === 1 ? null : target.opacity);
         const settings = target.settings as Record<string, unknown>;
+        const fillNodes = node.tagName.toLowerCase() === "g"
+            ? [...node.querySelectorAll<SVGElement>('[data-render-role~="fill"]')]
+            : [node];
+        const strokeNodes = node.tagName.toLowerCase() === "g"
+            ? [...node.querySelectorAll<SVGElement>('[data-render-role~="stroke"]')]
+            : [node];
         if("fill" in settings) {
-            setAttribute(node, "fill", paintSVGValue(settings["fill"] as never) ?? "none");
-            setAttribute(node, "fill-opacity", paintOpacity(settings["fill"] as never));
+            fillNodes.forEach((item) => {
+                setAttribute(item, "fill", paintSVGValue(settings["fill"] as never) ?? "none");
+                setAttribute(item, "fill-opacity", paintOpacity(settings["fill"] as never));
+            });
         }
         if("stroke" in settings) {
-            setAttribute(node, "stroke", paintSVGValue(settings["stroke"] as never));
-            setAttribute(node, "stroke-opacity", paintOpacity(settings["stroke"] as never));
+            strokeNodes.forEach((item) => {
+                setAttribute(item, "stroke", paintSVGValue(settings["stroke"] as never));
+                setAttribute(item, "stroke-opacity", paintOpacity(settings["stroke"] as never));
+            });
         }
         if("color" in settings) {
             setAttribute(node, "fill", paintSVGValue(settings["color"] as never) ?? "#000000");
             setAttribute(node, "fill-opacity", paintOpacity(settings["color"] as never));
         }
-        if("stroke_width" in settings) setAttribute(node, "stroke-width", settings["stroke_width"] as string | number);
+        if("stroke_width" in settings) strokeNodes.forEach((item) => setAttribute(item, "stroke-width",
+            Number(settings["stroke_width"]) * ((target instanceof Path && effectiveStrokeAlignment(target) === "center") ? 1 : node.tagName.toLowerCase() === "g" ? 2 : 1)));
+        if("stroke_width" in settings && target instanceof Path) {
+            node.querySelectorAll<SVGElement>('[data-render-role~="reveal"]').forEach((item) => setAttribute(item, "stroke-width", Number(settings["stroke_width"]) * 4));
+        }
+        if("stroke_dashoffset" in settings) strokeNodes.forEach((item) => setAttribute(item, "stroke-dashoffset", settings["stroke_dashoffset"] as number));
     }
 
     private writeGradients(target: AnyElement): void {

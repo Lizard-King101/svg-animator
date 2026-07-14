@@ -225,7 +225,7 @@ function collectElementIds(elements: unknown[]): Set<string> {
 }
 
 function supportedProperty(property: string): boolean {
-    return /^(transform\.(translateX|translateY|scaleX|scaleY|rotation|originX|originY)|opacity|visible|settings\.(fill|stroke|color|stroke_width)|path\.drawProgress|motion\.(progress|rotateToPath|offsetAngle|offsetX|offsetY)|path\.points\.[^.]+\.(x|y)|settings\.(fill|stroke|color)\.gradient\.(x1|y1|x2|y2|cx|cy|r|fx|fy|stops\..+\.(offset|color|opacity)))$/.test(property);
+    return /^(transform\.(translateX|translateY|scaleX|scaleY|rotation|originX|originY)|opacity|visible|settings\.(fill|stroke|color|stroke_width|stroke_dashoffset)|path\.drawProgress|motion\.(progress|rotateToPath|offsetAngle|offsetX|offsetY)|path\.points\.[^.]+\.(x|y)|settings\.(fill|stroke|color)\.gradient\.(x1|y1|x2|y2|cx|cy|r|fx|fy|stops\..+\.(offset|color|opacity)))$/.test(property);
 }
 
 function parseColor(value: unknown): { packed: number; space: "rgb" | "hsl" } | undefined {

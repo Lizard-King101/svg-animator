@@ -11,6 +11,7 @@ import { matrixToSvg } from "src/app/editor/objects/transform.object";
 import { SVGEditorOverlayComponent } from "../svg-editor-overlay/svg-editor-overlay.component";
 import { ImportedSVGSourceDirective } from "./imported-svg-source.directive";
 import { GradientPaint, gradientPaints, gradientTransformValue, Paint, paintOpacity, paintSVGValue } from "src/app/editor/objects/paint.object";
+import { effectiveStrokeAlignment, StrokeAlignment, strokeDasharrayAttr } from "src/app/editor/objects/stroke-style.object";
 
 @Component({
     standalone: true,
@@ -86,6 +87,24 @@ export class SVGDisplay implements AfterViewInit {
     drawDashoffsetAttr(path: Path): number | null {
         const offset = this.drawOffsetAttr(path);
         return offset > 0 ? offset : null;
+    }
+
+    strokeAlignment(element: Path | Shape): StrokeAlignment { return effectiveStrokeAlignment(element); }
+    strokeEffectId(element: Path | Shape): string { return `stroke-${this.strokeAlignment(element)}-${element.id}`; }
+    strokeEffectUrl(element: Path | Shape): string { return `url(#${this.strokeEffectId(element)})`; }
+    drawMaskId(path: Path): string { return `stroke-draw-${path.id}`; }
+    drawMaskUrl(path: Path): string { return `url(#${this.drawMaskId(path)})`; }
+    strokeDasharray(element: Path | Shape): string | number | null {
+        return strokeDasharrayAttr(element.settings.stroke_dasharray)
+            ?? (element instanceof Path ? this.drawDasharrayAttr(element) : null);
+    }
+    strokeDashoffset(element: Path | Shape): number | null {
+        return element.settings.stroke_dasharray.length
+            ? element.settings.stroke_dashoffset
+            : (element instanceof Path ? this.drawDashoffsetAttr(element) : null);
+    }
+    strokePathLength(path: Path): number | null {
+        return path.settings.stroke_dasharray.length ? null : this.drawPathLengthAttr(path);
     }
 
     textTspans(text: TextElement): Array<{ text: string; dy: number }> {

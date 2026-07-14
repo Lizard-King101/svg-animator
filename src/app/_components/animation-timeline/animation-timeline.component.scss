@@ -254,13 +254,16 @@ animation-timeline {
 }
 
 .easing-button {
+  font-size: 14px;
+
   fa-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
     line-height: 1;
   }
-}
-
-.hourglass-sideways {
-  transform: rotate(90deg);
 }
 
 .timeline-table {
@@ -684,8 +687,8 @@ animation-timeline {
   position: absolute;
   z-index: $timeline-z-keys;
   top: 50%;
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -696,25 +699,25 @@ animation-timeline {
   transform: translate(-50%, -50%);
   cursor: pointer;
   outline: none;
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1;
 
   fa-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 12px;
-    height: 12px;
+    width: 15px;
+    height: 15px;
     color: currentColor;
     filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.45));
   }
 
-  &:hover,
+  &:hover {
+    color: var(--text-primary);
+  }
+
   &.selected {
     color: var(--text-primary);
-    box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.22);
-    background: var(--bg-surface);
-    border-radius: 50%;
   }
 }
 

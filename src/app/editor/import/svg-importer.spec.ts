@@ -227,6 +227,26 @@ describe("SVGImporterService", () => {
         expect(result.editability).toBe("native");
     });
 
+    it("imports editable dash, alignment, cap, join, and miter settings", () => {
+        const result = importer.import(`
+            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40">
+                <rect width="30" height="20" fill="none" stroke="#123456"
+                      stroke-width="4" stroke-alignment="inner"
+                      stroke-dasharray="8px, 4, 2, 4" stroke-dashoffset="-3px"
+                      stroke-linecap="round" stroke-linejoin="miter" stroke-miterlimit="9"/>
+            </svg>
+        `);
+        const shape = result.document.elements[0] as ShapeSave;
+
+        expect(result.editability).toBe("native");
+        expect(shape.settings.stroke_alignment).toBe("inside");
+        expect(shape.settings.stroke_dasharray).toEqual([8, 4, 2, 4]);
+        expect(shape.settings.stroke_dashoffset).toBe(-3);
+        expect(shape.settings.line_cap).toBe("round");
+        expect(shape.settings.line_join).toBe("miter");
+        expect(shape.settings.stroke_miterlimit).toBe(9);
+    });
+
     it("imports text gradient fills as editable text paint", () => {
         const result = importer.import(`
             <svg xmlns="http://www.w3.org/2000/svg" width="120" height="40">

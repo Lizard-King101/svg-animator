@@ -10,7 +10,7 @@
       "updatedAt": 400,
       "document": {
         "kind": "svg-animator/document",
-        "version": 4,
+        "version": 5,
         "data": {
           "id": "current-doc",
           "name": "Current document",

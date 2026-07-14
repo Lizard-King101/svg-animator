@@ -19,7 +19,8 @@ Legend: **Native** = editable model (including import normalization); **Render/e
 | Solid fill/stroke | Yes | Yes | Yes | Hex, RGB/RGBA, alpha-aware picking, and browser-recognized solid colors |
 | Linear/radial gradients | Yes | Yes | Yes | References normalize to editable per-element paints; direct canvas handles and stop popovers edit inheritance-normalized geometry and alpha-aware stops |
 | Patterns | No | Source | Yes | Reusable pattern editing remains planned |
-| Dashes/markers/vector effects | No | Source | Yes | Style-depth milestone |
+| Stroke alignment/dashes | Yes | Yes | Yes | Center/inside/outside alignment, numeric dash arrays/offsets, caps, joins, and miter limits; inside/outside export uses portable clipping/masking |
+| Markers/vector effects | No | Source | Yes | Style-depth milestone |
 | Images | No | Source | Yes | External references are stripped; safe embedded raster data is retained |
 | Filters/blend modes | No | Source | Yes | Sanitized before rendering |
 | Metadata/accessibility | Partial | Partial | Partial | Title can name a document; richer metadata remains planned |

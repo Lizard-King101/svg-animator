@@ -140,6 +140,40 @@
                      [label]="attr.label"></attr-select>
       </div>
     </ng-container>
+    <div class="transform-section" *ngIf="asStrokeElement(editor.inspectedElement) as strokeElement">
+      <div class="transform-title">Stroke Style</div>
+      <div class="transform-grid">
+        <label>
+          <span>Alignment</span>
+          <select [disabled]="strokeAlignmentDisabled(strokeElement)"
+                  [ngModel]="strokeElement.settings.stroke_alignment"
+                  (ngModelChange)="setStrokeAlignment(strokeElement, $event)">
+            <option value="center">Center</option>
+            <option value="inside">Inside</option>
+            <option value="outside">Outside</option>
+          </select>
+        </label>
+        <label>
+          <span>Dash Offset</span>
+          <input type="number" step="1"
+                 [ngModel]="strokeElement.settings.stroke_dashoffset"
+                 (ngModelChange)="setStrokeNumber(strokeElement, 'stroke_dashoffset', $event)" />
+        </label>
+        <label class="stroke-pattern-field">
+          <span>Dash Pattern</span>
+          <input type="text" placeholder="Solid"
+                 [value]="dashPattern(strokeElement)"
+                 (change)="setDashPattern(strokeElement, $any($event.target).value)" />
+        </label>
+        <label>
+          <span>Miter Limit</span>
+          <input type="number" min="1" step="1"
+                 [disabled]="strokeElement.settings.line_join != null && strokeElement.settings.line_join !== 'miter'"
+                 [ngModel]="strokeElement.settings.stroke_miterlimit"
+                 (ngModelChange)="setStrokeNumber(strokeElement, 'stroke_miterlimit', $event)" />
+        </label>
+      </div>
+    </div>
   </div>
 </ng-container>
 <div class="panel-empty" *ngIf="!editor.inspectedElement">
