@@ -16,6 +16,7 @@ import { PaintEditorChange } from "src/app/_components/paint-editor/paint-editor
 import { PaintEditingService } from "src/app/_services/paint-editing.service";
 import { IconProp } from "@fortawesome/fontawesome-svg-core";
 import { keyframeEasingIcon } from "src/app/_components/animation-timeline/keyframe-easing-icons";
+import { isEditableEventTarget } from "src/app/editor/editable-event-target";
 import {
     clampKeyframeTimeDelta,
     clampTimelineScale,
@@ -2037,12 +2038,7 @@ export class TimelineEditorService implements OnDestroy {
             return true;
         }
 
-        const target = event.target as HTMLElement | null;
-        if(!target) {
-            return false;
-        }
-
-        return !!target.closest("input, textarea, select, [contenteditable='true']");
+        return isEditableEventTarget(event.target);
     }
 
     private consumeShortcut(event: KeyboardEvent) {

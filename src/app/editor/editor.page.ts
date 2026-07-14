@@ -24,6 +24,7 @@ import { ExportDialogComponent } from "../_components/export-dialog/export-dialo
 import { CanvasGuidesComponent } from "../_components/canvas-guides/canvas-guides.component";
 import { EditorUiStateService } from "../_services/editor-ui-state.service";
 import { PaintEditingService } from "../_services/paint-editing.service";
+import { isEditableEventTarget } from "./editable-event-target";
 
 @Component({
     standalone: true,
@@ -74,6 +75,10 @@ export class EditorPage implements AfterViewInit {
 
         if(event.key == 'Escape' && this.layers.renamingLayer) {
             this.layers.renamingLayer = undefined;
+            return;
+        }
+
+        if(isEditableEventTarget(event.target)) {
             return;
         }
 
@@ -140,6 +145,7 @@ export class EditorPage implements AfterViewInit {
         this.snapshotAndSaveIfChanged(beforeState);
     }
     @HostListener('document:keyup', ['$event']) handleKeyUp(event: KeyboardEvent) {
+        if(isEditableEventTarget(event.target)) return;
         this.editor.keyReleased(event.key);
     }
 
