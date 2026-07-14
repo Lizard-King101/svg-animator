@@ -5,6 +5,7 @@ import { Point, PointSave } from '../point.object';
 import { ElementAttribute, SettingsFromAttributes } from './element';
 import { defaultMotion, MotionSave, MotionState, restoreMotion, serializeMotion } from '../motion.object';
 import { defaultTransform, restoreTransform, serializeTransform, TransformSave, TransformState } from '../transform.object';
+import { PaintSave, restorePaint, serializePaint } from '../paint.object';
 
 export interface TextSave {
     type: 'text';
@@ -22,7 +23,7 @@ export interface TextSave {
         font_family: string;
         font_size: number;
         font_weight: string;
-        color: string | null;
+        color: PaintSave;
     };
 }
 
@@ -84,7 +85,7 @@ const TextAttributes = [
     {
         label: 'Color',
         name: 'fill',
-        input: 'color',
+        input: 'paint',
         output: 'color',
     },
 ] as const satisfies readonly ElementAttribute[];
@@ -176,7 +177,7 @@ export class TextElement {
                 font_size: this.settings.font_size,
                 font_weight: this.settings.font_weight ?? '400',
                 text_align: this.textAnchor,
-                color: this.settings.color?.serialized ?? null,
+                color: serializePaint(this.settings.color),
             },
         };
     }
@@ -196,7 +197,7 @@ export class TextElement {
             font_size: s.settings.font_size,
             text_align: TextElement.normalizeTextAnchor(s.settings.text_align),
             font_weight: s.settings.font_weight as any,
-            color: s.settings.color ? new Color(s.settings.color) : null,
+            color: restorePaint(s.settings.color),
         };
         return t;
     }

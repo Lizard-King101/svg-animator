@@ -191,7 +191,7 @@ export function semanticPartnerProperty(property: string): string | undefined {
     if(fixed[property]) return fixed[property];
     const point = /^(path\.points\.[^.]+)\.(x|y)$/.exec(property);
     if(point) return `${point[1]}.${point[2] === "x" ? "y" : "x"}`;
-    const gradient = /^(settings\.(?:fill|stroke)\.gradient\.)(x1|y1|x2|y2|cx|cy|fx|fy)$/.exec(property);
+    const gradient = /^(settings\.(?:fill|stroke|color)\.gradient\.)(x1|y1|x2|y2|cx|cy|fx|fy)$/.exec(property);
     if(!gradient) return undefined;
     const pairs: Record<string, string> = { x1: "y1", y1: "x1", x2: "y2", y2: "x2", cx: "cy", cy: "cx", fx: "fy", fy: "fx" };
     return `${gradient[1]}${pairs[gradient[2]]}`;

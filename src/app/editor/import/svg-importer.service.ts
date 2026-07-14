@@ -395,7 +395,7 @@ class ImportContext {
         this.requireNativeFeatures(element);
         if(element.querySelector("textPath")) throw new SVGImportError("Text-on-path is not native yet.");
         const id = this.id(element.getAttribute("id"), "text");
-        const fill = colorValue(styleValue(element, "fill") ?? "#000000");
+        const fill = this.paint(styleValue(element, "fill") ?? "#000000");
         if(fill === undefined) throw new SVGImportError("Text uses an unsupported paint.");
         return {
             type: "text",

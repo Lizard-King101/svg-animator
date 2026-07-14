@@ -23,6 +23,7 @@ import { NewProjectDialogComponent } from "../_components/new-project-dialog/new
 import { ExportDialogComponent } from "../_components/export-dialog/export-dialog.component";
 import { CanvasGuidesComponent } from "../_components/canvas-guides/canvas-guides.component";
 import { EditorUiStateService } from "../_services/editor-ui-state.service";
+import { PaintEditingService } from "../_services/paint-editing.service";
 
 @Component({
     standalone: true,
@@ -51,6 +52,7 @@ import { EditorUiStateService } from "../_services/editor-ui-state.service";
         LayerOperationsService,
         LayerCommandService,
         EditorUiStateService,
+        PaintEditingService,
     ],
     templateUrl: 'editor.page.html',
     styleUrls: ['editor.page.scss'],

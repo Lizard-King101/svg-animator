@@ -10,7 +10,10 @@ import { Subscription } from "rxjs";
 import { Group } from "src/app/editor/objects/elements/group.object";
 import { Path } from "src/app/editor/objects/elements/path.object";
 import { AnyElement } from "src/app/editor/objects/svg.object";
-import { GradientPaint, GradientStop, gradientAnimationProperties, isGradientPaint } from "src/app/editor/objects/paint.object";
+import { GradientPaint, gradientAnimationProperties, isGradientPaint } from "src/app/editor/objects/paint.object";
+import { FloatingPopoverPosition, floatingPopoverStyle, positionFloatingPopover } from "src/app/_components/floating-popover";
+import { PaintEditorChange } from "src/app/_components/paint-editor/paint-editor.types";
+import { PaintEditingService } from "src/app/_services/paint-editing.service";
 import {
     clampKeyframeTimeDelta,
     clampTimelineScale,
@@ -59,7 +62,7 @@ export class TimelineEditorService implements OnDestroy {
     get selectedKeyframeIds(): Set<string> { return this.editing.selectedKeyframeIds; }
     set selectedKeyframeIds(value: Set<string>) { this.editing.selectedKeyframeIds = value; }
     openColorEditorKey?: string;
-    paintPopoverPosition?: { left: number; top: number };
+    paintPopoverPosition?: FloatingPopoverPosition;
     pixelsPerSecond = 120;
     surfaceMode: "timeline" | "graph" = "timeline";
     graphSpeedMin = -1;
@@ -104,6 +107,7 @@ export class TimelineEditorService implements OnDestroy {
         private zone: NgZone,
         private mutations: DocumentMutationService,
         private changeDetector: ChangeDetectorRef,
+        private paintEditing: PaintEditingService,
     ) {
         this.timelineHeight = this.clampTimelineHeight(this.preferences.timelineHeight);
         this.historyRestoreSubscription = this.mutations.historyRestored.subscribe(() => {
@@ -190,8 +194,8 @@ export class TimelineEditorService implements OnDestroy {
                     this.selectedGraphProperty = first.property;
                 }
             }
-            const match = /^settings\.(fill|stroke)\.gradient\./.exec(row.property.property);
-            if(match) this.editor.selectedGradientPaintKey = match[1] as "fill" | "stroke";
+            const match = /^settings\.(fill|stroke|color)\.gradient\./.exec(row.property.property);
+            if(match) this.editor.selectedGradientPaintKey = match[1] as "fill" | "stroke" | "color";
         }
         if(this.surfaceMode === "graph") this.fitSpeed();
     }
@@ -1085,7 +1089,10 @@ export class TimelineEditorService implements OnDestroy {
         }
         const gradient = this.isGradientStopsRow(row);
         const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-        this.paintPopoverPosition = this.popoverPosition(rect, gradient ? 270 : 244, gradient ? 420 : 360);
+        this.paintPopoverPosition = positionFloatingPopover(rect, {
+            width: gradient ? 270 : 244,
+            preferredHeight: gradient ? 420 : 360,
+        });
         this.openColorEditorKey = key;
     }
 
@@ -1103,7 +1110,7 @@ export class TimelineEditorService implements OnDestroy {
 
     gradientForRow(row: TimelineRow): GradientPaint | undefined {
         if(row.type !== "property") return undefined;
-        const match = /^settings\.(fill|stroke)\.gradient\./.exec(row.property.property);
+        const match = /^settings\.(fill|stroke|color)\.gradient\./.exec(row.property.property);
         const paint = match ? (row.element.settings as Record<string, unknown>)[match[1]] : undefined;
         return isGradientPaint(paint) ? paint : undefined;
     }
@@ -1119,17 +1126,18 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     paintPopoverStyle(): Record<string, string> {
-        const position = this.paintPopoverPosition;
-        return position ? { left: `${position.left}px`, top: `${position.top}px` } : {};
+        return floatingPopoverStyle(this.paintPopoverPosition);
     }
 
-    setTimelineGradientStop(row: TimelineRow, stop: GradientStop, field: "offset" | "color", value: unknown) {
+    setTimelinePaint(row: TimelineRow, change: PaintEditorChange): void {
         if(row.type !== "property") return;
-        const match = /^settings\.(fill|stroke)\.gradient\./.exec(row.property.property);
-        if(!match) return;
-        const property = `settings.${match[1]}.gradient.stops.${stop.id}.${field}`;
-        this.animation.setAnimatedPropertyValue(row.element, property, field === "color" ? "color" : "number", value);
-        this.animationChange.emit();
+        const solid = /^settings\.(fill|stroke|color)$/.exec(row.property.property);
+        const gradient = /^settings\.(fill|stroke|color)\.gradient\./.exec(row.property.property);
+        const key = (solid?.[1] ?? gradient?.[1]) as "fill" | "stroke" | "color" | undefined;
+        if(!key) return;
+        if(solid && change.type !== "solid-color") return;
+        if(gradient && change.type !== "stop") return;
+        if(this.paintEditing.apply(row.element, key, change)) this.animationChange.emit();
     }
 
     setPropertyValue(row: TimelineRow, value: unknown) {
@@ -1619,7 +1627,7 @@ export class TimelineEditorService implements OnDestroy {
         }
 
         if(property.property.startsWith("settings.")) {
-            if(property.property === "settings.fill" || property.property === "settings.stroke") {
+            if(property.property === "settings.fill" || property.property === "settings.stroke" || property.property === "settings.color") {
                 return readAnimationProperty(element, property.property) !== undefined;
             }
             if(property.property.includes(".gradient.")) {
@@ -1888,7 +1896,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private gradientPropertiesForRow(row: PropertyTimelineRow): AnimatablePropertyDefinition[] {
-        const match = /^settings\.(fill|stroke)\.gradient\.(geometry|stops)$/.exec(row.property.property);
+        const match = /^settings\.(fill|stroke|color)\.gradient\.(geometry|stops)$/.exec(row.property.property);
         if(!match) return [];
         const prefix = `settings.${match[1]}.gradient.`;
         return gradientAnimationProperties(row.element.settings as Record<string, unknown>).filter((property) => {
@@ -2034,17 +2042,6 @@ export class TimelineEditorService implements OnDestroy {
 
     private cloneValue<T>(value: T): T {
         return value == null ? value : JSON.parse(JSON.stringify(value));
-    }
-
-    private popoverPosition(rect: DOMRect, width: number, preferredHeight: number): { left: number; top: number } {
-        const margin = 8;
-        const height = Math.min(preferredHeight, window.innerHeight - margin * 2);
-        const left = Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin));
-        const below = rect.bottom + 4;
-        const top = below + height <= window.innerHeight - margin
-            ? below
-            : Math.max(margin, rect.top - height - 4);
-        return { left, top };
     }
 
     private timesMatch(a: number, b: number): boolean {

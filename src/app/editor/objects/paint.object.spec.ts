@@ -1,5 +1,5 @@
 import { readAnimationProperty, writeAnimationProperty } from "./animation-targets";
-import { createAnimationColorValue, evaluateTrack } from "./animation.object";
+import { ANIMATABLE_PROPERTIES, createAnimationColorValue, evaluateTrack } from "./animation.object";
 import { Color } from "./color.object";
 import { AnyElement } from "./svg.object";
 import { createDefaultGradient, gradientAnimationProperties, isGradientPaint, restorePaint, serializePaint } from "./paint.object";
@@ -75,12 +75,48 @@ describe("native gradient paint", () => {
         }, 0.5);
         expect(value).toBe("#80808080");
     });
+
+    it("projects text color paints into solid and gradient timeline rows", () => {
+        const solid = elementWithSettings({ color: new Color("#123456") });
+        const solidRows = new TimelineEditingService().projectRows(
+            [solid],
+            new Set([solid.id]),
+            ANIMATABLE_PROPERTIES,
+            (element, property) => property.property === "settings.color"
+                && readAnimationProperty(element, property.property) !== undefined,
+            { property: "path.shape", label: "Path Shape", valueType: "string", group: "path", mvp: true },
+        );
+
+        expect(solidRows.some((row) => row.type === "property" && row.property.property === "settings.color")).toBeTrue();
+        expect(writeAnimationProperty(solid, "settings.color", createAnimationColorValue("#abcdef"))).toBeTrue();
+        expect(readAnimationProperty(solid, "settings.color")).toBe("#abcdef");
+
+        const gradient = createDefaultGradient("text-gradient");
+        const gradientText = elementWithSettings({ color: gradient });
+        const properties = gradientAnimationProperties(gradientText.settings as Record<string, unknown>);
+        const gradientRows = new TimelineEditingService().projectRows(
+            [gradientText],
+            new Set([gradientText.id]),
+            ANIMATABLE_PROPERTIES,
+            (element, property) => property.property === "settings.color"
+                && readAnimationProperty(element, property.property) !== undefined,
+            { property: "path.shape", label: "Path Shape", valueType: "string", group: "path", mvp: true },
+        );
+
+        expect(properties.map((property) => property.property)).toContain("settings.color.gradient.x2");
+        expect(gradientRows.some((row) => row.type === "property" && row.property.property === "settings.color.gradient.geometry")).toBeTrue();
+        expect(gradientRows.some((row) => row.type === "property" && row.property.property === "settings.color.gradient.stops")).toBeTrue();
+    });
 });
 
 function elementDouble(fill: unknown): AnyElement {
+    return elementWithSettings({ fill, stroke: null, stroke_width: 1 });
+}
+
+function elementWithSettings(settings: Record<string, unknown>): AnyElement {
     return {
         id: "element",
-        settings: { fill, stroke: null, stroke_width: 1 },
+        settings,
         transform: {},
         motion: {},
         opacity: 1,

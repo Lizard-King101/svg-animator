@@ -123,78 +123,11 @@
                      [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
                      (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
                      [label]="attr.label"></color>
-        <color       *ngIf="attr.input == 'paint' && !asGradientPaint(settingsOf(editor.inspectedElement)[attr.output])"
-                     [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
-                     (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
-                     [label]="attr.label"></color>
-        <button class="paint-gradient-enable"
-                *ngIf="attr.input == 'paint' && !asGradientPaint(settingsOf(editor.inspectedElement)[attr.output])"
-                type="button"
-                (click)="enableGradientPaint(editor.inspectedElement, attr.output)">Use Gradient</button>
-        <div class="gradient-editor"
-             *ngIf="attr.input == 'paint' && asGradientPaint(settingsOf(editor.inspectedElement)[attr.output]) as gradient"
-             (click)="selectGradientPaint(attr.output)">
-          <div class="gradient-header">
-            <strong>{{ attr.label }}</strong>
-            <button type="button"
-                    (click)="useSolidPaint(editor.inspectedElement, attr.output, gradient)">Use Solid</button>
-          </div>
-          <div class="gradient-grid">
-            <label>
-              <span>Type</span>
-              <select [ngModel]="gradient.type"
-                      (ngModelChange)="setGradientKind(editor.inspectedElement, attr.output, gradient, $event)">
-                <option value="linear-gradient">Linear</option>
-                <option value="radial-gradient">Radial</option>
-              </select>
-            </label>
-            <label>
-              <span>Units</span>
-              <select [ngModel]="gradient.units"
-                      (ngModelChange)="setGradientUnits(editor.inspectedElement, gradient, $event)">
-                <option value="objectBoundingBox">Object box</option>
-                <option value="userSpaceOnUse">User space</option>
-              </select>
-            </label>
-            <label>
-              <span>Spread</span>
-              <select [ngModel]="gradient.spreadMethod"
-                      (ngModelChange)="setGradientMeta(gradient, 'spreadMethod', $event)">
-                <option value="pad">Pad</option>
-                <option value="reflect">Reflect</option>
-                <option value="repeat">Repeat</option>
-              </select>
-            </label>
-          </div>
-          <div class="gradient-handle-hint">Drag the amber handles on the canvas to edit geometry.</div>
-          <div class="gradient-stops-control">
-            <button class="gradient-stops-trigger" type="button"
-                    (click)="toggleGradientStopsPopover(editor.inspectedElement, attr.output, $event)">
-              Edit {{ gradient.stops.length }} Stops
-            </button>
-          <div class="gradient-stops gradient-stops-popover"
-               *ngIf="gradientStopsPopoverOpen(editor.inspectedElement, attr.output)"
-               [ngStyle]="gradientStopsPopoverStyle()"
-               (click)="$event.stopPropagation()" (pointerdown)="$event.stopPropagation()">
-            <div class="gradient-stop" *ngFor="let stop of gradient.stops; let stopIndex = index">
-              <div class="gradient-stop-title">
-                <span>Stop {{ stopIndex + 1 }}</span>
-                <button type="button" [disabled]="gradient.stops.length <= 2"
-                        (click)="removeGradientStop(editor.inspectedElement, attr.output, gradient, stop)">Remove</button>
-              </div>
-              <label>
-                <span>Offset</span>
-                <input type="number" min="0" max="1" step="0.01" [ngModel]="stop.offset"
-                       (ngModelChange)="setGradientStopValue(editor.inspectedElement, attr.output, stop, 'offset', $event)" />
-              </label>
-              <color [ngModel]="stop.color"
-                     (ngModelChange)="setGradientStopValue(editor.inspectedElement, attr.output, stop, 'color', $event)"></color>
-            </div>
-            <button class="gradient-add-stop" type="button"
-                    (click)="addGradientStop(gradient)">Add Stop</button>
-          </div>
-          </div>
-        </div>
+        <app-paint-editor *ngIf="attr.input == 'paint'"
+                          [label]="attr.label"
+                          [paint]="asPaint(settingsOf(editor.inspectedElement)[attr.output])"
+                          (click)="selectGradientPaint(attr.output)"
+                          (paintChange)="handlePaintChange(editor.inspectedElement, attr.output, $event)" />
         <range       *ngIf="attr.input == 'range'"
                      [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
                      (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"

@@ -11,6 +11,7 @@ describe("speed graph semantic pairing", () => {
         expect(semanticPartnerProperty("path.points.point-7.x")).toBe("path.points.point-7.y");
         expect(semanticPartnerProperty("settings.fill.gradient.x2")).toBe("settings.fill.gradient.y2");
         expect(semanticPartnerProperty("settings.stroke.gradient.fy")).toBe("settings.stroke.gradient.fx");
+        expect(semanticPartnerProperty("settings.color.gradient.x1")).toBe("settings.color.gradient.y1");
     });
 
     it("keeps scalar channels single", () => {

@@ -1,9 +1,9 @@
 import { localBounds } from "./element-bounds";
-import { GradientPaint, isGradientPaint } from "./paint.object";
+import { GradientPaint, isGradientPaint, PaintSettingKey, PAINT_SETTING_KEYS } from "./paint.object";
 import { AnyElement } from "./svg.object";
 import { applyMatrix, identityMatrix, invertMatrix, Matrix } from "./transform.object";
 
-export type GradientPaintKey = "fill" | "stroke";
+export type GradientPaintKey = PaintSettingKey;
 export type GradientHandle = "start" | "end" | "center" | "radius" | "focal";
 
 export interface ElementGradient {
@@ -25,8 +25,9 @@ export interface GradientGeometry {
 export function elementGradient(element: AnyElement, preferred?: GradientPaintKey): ElementGradient | undefined {
     const settings = element.settings as Record<string, unknown>;
     if(preferred && isGradientPaint(settings[preferred])) return { key: preferred, paint: settings[preferred] };
-    if(isGradientPaint(settings["fill"])) return { key: "fill", paint: settings["fill"] };
-    if(isGradientPaint(settings["stroke"])) return { key: "stroke", paint: settings["stroke"] };
+    for(const key of PAINT_SETTING_KEYS) {
+        if(isGradientPaint(settings[key])) return { key, paint: settings[key] };
+    }
     return undefined;
 }
 

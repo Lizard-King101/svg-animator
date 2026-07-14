@@ -10,6 +10,7 @@ import { Tool } from "./tools/tool";
 
 import { Tools } from "./tools/tools";
 import { EditorPreferencesService } from "./editor-preferences.service";
+import { PaintSettingKey } from "../editor/objects/paint.object";
 
 @Injectable()
 export class EditorService {
@@ -20,7 +21,7 @@ export class EditorService {
     selectedSVG?: SVG;
 
     selectedElement?: AnyElement;
-    selectedGradientPaintKey?: "fill" | "stroke";
+    selectedGradientPaintKey?: PaintSettingKey;
     activeElement?: AnyElement;
     selectedPathAnchor?: Point;
     selectedPathLine?: Line;

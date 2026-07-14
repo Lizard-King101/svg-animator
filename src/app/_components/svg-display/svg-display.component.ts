@@ -10,7 +10,7 @@ import { AnyElement, ImportedSourceNode } from "src/app/editor/objects/svg.objec
 import { matrixToSvg } from "src/app/editor/objects/transform.object";
 import { SVGEditorOverlayComponent } from "../svg-editor-overlay/svg-editor-overlay.component";
 import { ImportedSVGSourceDirective } from "./imported-svg-source.directive";
-import { GradientPaint, gradientTransformValue, isGradientPaint, Paint, paintOpacity, paintSVGValue } from "src/app/editor/objects/paint.object";
+import { GradientPaint, gradientPaints, gradientTransformValue, Paint, paintOpacity, paintSVGValue } from "src/app/editor/objects/paint.object";
 
 @Component({
     standalone: true,
@@ -96,9 +96,7 @@ export class SVGDisplay implements AfterViewInit {
         const gradients = new Map<string, GradientPaint>();
         const visit = (elements: AnyElement[]) => elements.forEach((element) => {
             const settings = element.settings as Record<string, unknown>;
-            [settings["fill"], settings["stroke"]].forEach((paint) => {
-                if(isGradientPaint(paint)) gradients.set(paint.id, paint);
-            });
+            gradientPaints(settings).forEach((paint) => gradients.set(paint.id, paint));
             if(element instanceof Group) visit(element.elements);
         });
         visit(this.editor.selectedSVG?.elements ?? []);

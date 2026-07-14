@@ -4,6 +4,7 @@ import malformedFixture from "./fixtures/malformed.json";
 import { GroupSave } from "../objects/elements/group.object";
 import { PathSave } from "../objects/elements/path.object";
 import { ShapeSave } from "../objects/elements/shape.object";
+import { TextSave } from "../objects/elements/text.object";
 import { ElementSave } from "../objects/svg.object";
 import { GradientPaintSave } from "../objects/paint.object";
 import { SVGImporterService, SVGImportError } from "./svg-importer.service";
@@ -224,6 +225,27 @@ describe("SVGImporterService", () => {
         expect(shape.settings.fill).toBe("#ff000080");
         expect(shape.settings.stroke).toBe("#0000ff40");
         expect(result.editability).toBe("native");
+    });
+
+    it("imports text gradient fills as editable text paint", () => {
+        const result = importer.import(`
+            <svg xmlns="http://www.w3.org/2000/svg" width="120" height="40">
+                <defs>
+                    <linearGradient id="text-gradient">
+                        <stop offset="0" stop-color="#ff0000"/>
+                        <stop offset="1" stop-color="#0000ff"/>
+                    </linearGradient>
+                </defs>
+                <text id="title" x="4" y="6" fill="url(#text-gradient)">Gradient</text>
+            </svg>
+        `);
+        const text = result.document.elements[0] as TextSave;
+        const paint = text.settings.color as GradientPaintSave;
+
+        expect(result.editability).toBe("native");
+        expect(text.type).toBe("text");
+        expect(paint.type).toBe("linear-gradient");
+        expect(paint.stops.map((stop) => stop.color)).toEqual(["#ff0000", "#0000ff"]);
     });
 
     it("throws a user-facing import error for invalid SVG XML", () => {

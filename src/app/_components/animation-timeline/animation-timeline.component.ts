@@ -22,6 +22,7 @@ export class AnimationTimelineComponent {
     @HostBinding("class.dragging-number") get draggingNumber(): boolean { return this.timeline.draggingNumber; }
     @HostBinding("class.selecting-keyframes") get selectingKeyframes(): boolean { return this.timeline.selectingKeyframes; }
     @HostBinding("class.panning-timeline") get panningTimeline(): boolean { return this.timeline.panningTimeline; }
+    @HostBinding("class.paint-popover-open") get paintPopoverOpen(): boolean { return !!this.timeline.openColorEditorKey; }
 
     constructor(public timeline: TimelineEditorService) {
         this.animationChange = timeline.animationChange;
@@ -29,6 +30,9 @@ export class AnimationTimelineComponent {
 
     @HostListener("document:click")
     closePopovers(): void { this.timeline.closeColorEditor(); }
+
+    @HostListener("window:resize")
+    closePopoversOnResize(): void { this.timeline.closeColorEditor(); }
 
     @HostListener("document:keydown", ["$event"])
     handleShortcut(event: KeyboardEvent): void { this.timeline.handleTimelineShortcut(event); }

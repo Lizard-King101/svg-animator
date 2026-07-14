@@ -50,6 +50,8 @@ export class CanvasGuidesComponent {
         return marks;
     }
 
+    trackRulerMark(_index: number, mark: RulerMark): string { return mark.label; }
+
     canDrag(): boolean { return !this.editor.selectedSVG?.guidesLocked && (this.editor.selectedTool?.interactsWithGuides ?? false); }
     toggleLock(event: MouseEvent): void {
         event.preventDefault(); event.stopPropagation();

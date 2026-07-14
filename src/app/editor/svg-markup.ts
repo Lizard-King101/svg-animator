@@ -5,7 +5,7 @@ import { TextElement } from "./objects/elements/text.object";
 import { motionAdjustedMatrix } from "./objects/motion-path.object";
 import { AnyElement, ImportedSourceNode, SVG } from "./objects/svg.object";
 import { matrixToSvg } from "./objects/transform.object";
-import { GradientPaint, gradientTransformValue, isGradientPaint, paintOpacity, paintSVGValue } from "./objects/paint.object";
+import { GradientPaint, gradientPaints, gradientTransformValue, paintOpacity, paintSVGValue } from "./objects/paint.object";
 
 export function escapeXmlText(value: unknown): string {
     return String(value)
@@ -112,8 +112,8 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                     attr('font-family', s.font_family) +
                     attr('font-weight', s.font_weight) +
                     attr('text-anchor', element.textAnchor) +
-                    attr('fill', s.color?.hex ?? '#000000') +
-                    attr('fill-opacity', s.color && s.color.alpha < 0.9999 ? s.color.alpha : null) +
+                    attr('fill', paintSVGValue(s.color) ?? '#000000') +
+                    attr('fill-opacity', paintOpacity(s.color)) +
                     ` dominant-baseline="hanging">` +
                     `\n${tspans}\n${indent}</text>`
                 );
@@ -174,9 +174,7 @@ function collectGradients(elements: AnyElement[]): GradientPaint[] {
     const gradients = new Map<string, GradientPaint>();
     const visit = (element: AnyElement) => {
         const settings = element.settings as Record<string, unknown>;
-        [settings["fill"], settings["stroke"]].forEach((paint) => {
-            if(isGradientPaint(paint)) gradients.set(paint.id, paint);
-        });
+        gradientPaints(settings).forEach((paint) => gradients.set(paint.id, paint));
         if(element instanceof Group) element.elements.forEach(visit);
     };
     elements.forEach(visit);

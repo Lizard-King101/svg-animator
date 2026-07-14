@@ -1,5 +1,5 @@
-import { NgFor, NgIf, NgStyle } from "@angular/common";
-import { Component, HostListener } from "@angular/core";
+import { NgFor, NgIf } from "@angular/common";
+import { Component } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { AnimationPlaybackService } from "../../_services/animation-playback.service";
@@ -16,31 +16,30 @@ import { pinTransformOrigin, resolvedOrigin } from "../../editor/objects/element
 import { ElementAttribute } from "../../editor/objects/elements/element";
 import { Path } from "../../editor/objects/elements/path.object";
 import { Shape } from "../../editor/objects/elements/shape.object";
-import { convertGradientUnits } from "../../editor/objects/gradient-geometry";
-import { createDefaultGradient, GradientKind, GradientPaint, GradientStop, isGradientPaint } from "../../editor/objects/paint.object";
+import { Paint, PaintSettingKey } from "../../editor/objects/paint.object";
 import { Point } from "../../editor/objects/point.object";
 import { AnyElement } from "../../editor/objects/svg.object";
 import { readAnimationProperty } from "../../editor/objects/animation-targets";
+import { PaintEditorComponent } from "../paint-editor/paint-editor.component";
+import { PaintEditorChange } from "../paint-editor/paint-editor.types";
+import { PaintEditingService } from "../../_services/paint-editing.service";
 
 @Component({
     selector: "app-properties-panel",
     standalone: true,
-    imports: [FormsModule, NgFor, NgIf, NgStyle, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute],
+    imports: [FormsModule, NgFor, NgIf, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute, PaintEditorComponent],
     templateUrl: "properties-panel.component.html",
     styles: [":host { display: contents; }"],
 })
 export class PropertiesPanelComponent {
     readonly ANIMATABLE_PROPERTIES = ANIMATABLE_PROPERTIES;
-    openGradientStopsKey?: string;
-    gradientStopsPopoverPosition?: { left: number; top: number };
 
-    constructor(public editor: EditorService, public animation: AnimationPlaybackService, private mutations: DocumentMutationService) {}
-
-    @HostListener("document:click")
-    closeGradientStopsPopover(): void {
-        this.openGradientStopsKey = undefined;
-        this.gradientStopsPopoverPosition = undefined;
-    }
+    constructor(
+        public editor: EditorService,
+        public animation: AnimationPlaybackService,
+        private mutations: DocumentMutationService,
+        private paintEditing: PaintEditingService,
+    ) {}
 
     private scheduleAttributeSnapshot(): void { this.mutations.schedule(); }
 
@@ -57,130 +56,20 @@ export class PropertiesPanelComponent {
         return (element?.settings ?? {}) as Record<string, any>;
     }
 
-    asGradientPaint(value: unknown): GradientPaint | null {
-        return isGradientPaint(value) ? value : null;
-    }
-
-    toggleGradientStopsPopover(element: AnyElement | undefined, key: string, event: MouseEvent) {
-        event.stopPropagation();
-        if(!element) return;
-        const rowKey = `${element.id}:${key}`;
-        if(this.openGradientStopsKey === rowKey) {
-            this.closeGradientStopsPopover();
-            return;
-        }
-        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-        this.gradientStopsPopoverPosition = this.popoverPosition(rect, 286, 440);
-        this.openGradientStopsKey = rowKey;
-    }
-
-    gradientStopsPopoverOpen(element: AnyElement | undefined, key: string): boolean {
-        return !!element && this.openGradientStopsKey === `${element.id}:${key}`;
-    }
-
-    gradientStopsPopoverStyle(): Record<string, string> {
-        const position = this.gradientStopsPopoverPosition;
-        return position ? { left: `${position.left}px`, top: `${position.top}px` } : {};
-    }
+    asPaint(value: unknown): Paint | null { return value as Paint | null; }
 
     selectGradientPaint(key: string) {
-        if(key === "fill" || key === "stroke") this.editor.selectedGradientPaintKey = key;
+        if(this.isPaintSettingKey(key)) this.editor.selectedGradientPaintKey = key;
     }
 
-    enableGradientPaint(element: AnyElement | undefined, key: string, kind: GradientKind = "linear-gradient") {
-        if(!element || (key !== "fill" && key !== "stroke") || this.animation.mode === "animate") return;
-        const gradient = createDefaultGradient(this.editor.ID, kind);
-        const current = this.settingsOf(element)[key];
-        if(current instanceof Color) {
-            gradient.stops[0].color = new Color(current.serialized);
-            gradient.stops[1].color = new Color(current.serialized);
-        }
-        this.settingsOf(element)[key] = gradient;
-        this.selectGradientPaint(key);
-        if(element instanceof Path && key === "fill") element.settings.fill_enabled = true;
-        this.scheduleAttributeSnapshot();
+    handlePaintChange(element: AnyElement | undefined, key: string, change: PaintEditorChange): void {
+        if(!element || !this.isPaintSettingKey(key)) return;
+        this.paintEditing.apply(element, key, change);
+        if(change.type !== "mode" || change.mode === "gradient") this.selectGradientPaint(key);
     }
 
-    useSolidPaint(element: AnyElement | undefined, key: string, gradient: GradientPaint) {
-        if(!element || (key !== "fill" && key !== "stroke") || this.animation.mode === "animate") return;
-        this.settingsOf(element)[key] = gradient.stops[0] ? new Color(gradient.stops[0].color.serialized) : null;
-        this.removeGradientTracks(element, `settings.${key}.gradient.`);
-        this.scheduleAttributeSnapshot();
-    }
-
-    setGradientKind(element: AnyElement | undefined, key: string, gradient: GradientPaint, kind: GradientKind) {
-        if(!element || this.animation.mode === "animate" || gradient.type === kind) return;
-        const replacement = createDefaultGradient(gradient.id, kind);
-        replacement.stops = gradient.stops;
-        replacement.units = gradient.units;
-        replacement.spreadMethod = gradient.spreadMethod;
-        replacement.transform = gradient.transform;
-        this.settingsOf(element)[key] = replacement;
-        this.removeGradientTracks(element, `settings.${key}.gradient.`);
-        this.scheduleAttributeSnapshot();
-    }
-
-    setGradientUnits(element: AnyElement | undefined, gradient: GradientPaint, units: GradientPaint["units"]) {
-        if(!element || this.animation.mode === "animate") return;
-        if(convertGradientUnits(element, gradient, units)) this.scheduleAttributeSnapshot();
-    }
-
-    setGradientMeta(gradient: GradientPaint, field: "spreadMethod", value: GradientPaint["spreadMethod"]) {
-        if(this.animation.mode === "animate") return;
-        if(field === "spreadMethod" && (value === "pad" || value === "reflect" || value === "repeat")) gradient.spreadMethod = value;
-        this.scheduleAttributeSnapshot();
-    }
-
-    private popoverPosition(rect: DOMRect, width: number, preferredHeight: number): { left: number; top: number } {
-        const margin = 8;
-        const height = Math.min(preferredHeight, window.innerHeight - margin * 2);
-        const left = Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin));
-        const below = rect.bottom + 4;
-        const top = below + height <= window.innerHeight - margin
-            ? below
-            : Math.max(margin, rect.top - height - 4);
-        return { left, top };
-    }
-
-    setGradientStopValue(element: AnyElement | undefined, key: string, stop: GradientStop, field: "offset" | "opacity" | "color", value: unknown) {
-        if(!element) return;
-        const property = `settings.${key}.gradient.stops.${stop.id}.${field}`;
-        if(this.animation.mode === "animate") {
-            this.animation.setAnimatedPropertyValue(element, property, field === "color" ? "color" : "number", field === "color" ? this.normalizeAnimationValue(value, {
-                property, label: "Gradient Stop", valueType: "color", group: "style", mvp: true,
-            }) : value);
-            this.scheduleAttributeSnapshot();
-            return;
-        }
-        if(field === "color" && value instanceof Color) {
-            stop.color = value;
-            stop.opacity = value.alpha;
-        }
-        if(field !== "color") {
-            const numeric = typeof value === "number" ? value : Number(value);
-            if(Number.isFinite(numeric)) stop[field] = Math.max(0, Math.min(1, numeric));
-        }
-        this.scheduleAttributeSnapshot();
-    }
-
-    addGradientStop(gradient: GradientPaint) {
-        if(this.animation.mode === "animate") return;
-        const last = gradient.stops[gradient.stops.length - 1];
-        gradient.stops.push({ id: this.editor.ID, offset: 0.5, color: new Color(last?.color.serialized ?? "#ffffff"), opacity: last?.color.alpha ?? 1 });
-        gradient.stops.sort((a, b) => a.offset - b.offset);
-        this.scheduleAttributeSnapshot();
-    }
-
-    removeGradientStop(element: AnyElement | undefined, key: string, gradient: GradientPaint, stop: GradientStop) {
-        if(!element || this.animation.mode === "animate" || gradient.stops.length <= 2) return;
-        gradient.stops = gradient.stops.filter((candidate) => candidate !== stop);
-        this.removeGradientTracks(element, `settings.${key}.gradient.stops.${stop.id}.`);
-        this.scheduleAttributeSnapshot();
-    }
-
-    private removeGradientTracks(element: AnyElement, prefix: string) {
-        const animation = this.editor.selectedSVG?.animation;
-        if(animation) animation.tracks = animation.tracks.filter((track) => track.targetId !== element.id || !track.property.startsWith(prefix));
+    private isPaintSettingKey(key: string): key is PaintSettingKey {
+        return key === "fill" || key === "stroke" || key === "color";
     }
 
     handleAttributeChange(element: AnyElement | undefined, attr: ElementAttribute, value: unknown) {
@@ -362,7 +251,7 @@ export class PropertiesPanelComponent {
         }
 
         if(definition.property.startsWith('settings.')) {
-            if(definition.property === 'settings.fill' || definition.property === 'settings.stroke' || definition.property.includes('.gradient.')) {
+            if(definition.property === 'settings.fill' || definition.property === 'settings.stroke' || definition.property === 'settings.color' || definition.property.includes('.gradient.')) {
                 return readAnimationProperty(element, definition.property) !== undefined;
             }
             const key = definition.property.slice('settings.'.length);

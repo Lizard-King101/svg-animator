@@ -11,6 +11,7 @@ import { Color } from "./objects/color.object";
 import { Group } from "./objects/elements/group.object";
 import { Path } from "./objects/elements/path.object";
 import { Shape } from "./objects/elements/shape.object";
+import { TextElement } from "./objects/elements/text.object";
 import { Line } from "./objects/line.object";
 import { Point } from "./objects/point.object";
 import { canConvertStrokeToPath, convertStrokeToPath } from "./objects/stroke-outline.object";
@@ -18,7 +19,7 @@ import { SVG } from "./objects/svg.object";
 import { buildSVGMarkup } from "./svg-markup";
 import { deletePathAnchor, insertPathPoint, togglePathLineType } from "../_services/tools/path-edit.helpers";
 import { snapTimelineTime, TimelineEditingService, timelineTimeToX, timelineXToTime } from "../_services/timeline-editing.service";
-import { createDefaultGradient, paintSVGValue } from "./objects/paint.object";
+import { createDefaultGradient, isGradientPaint, paintSVGValue } from "./objects/paint.object";
 
 function editorDouble(): EditorService {
     let id = 0;
@@ -68,6 +69,31 @@ describe("editor model characterization", () => {
 
         expect(restored.save()).toEqual(save);
         expect(restored.id).toBe(svg.id);
+    });
+
+    it("round-trips, duplicates, and exports text gradient paint", () => {
+        const editor = editorDouble();
+        const svg = new SVG(editor, {
+            width: 160,
+            height: 60,
+            name: "Text gradient",
+            pos: new Point(0, 0),
+        });
+        const text = new TextElement(editor, new Point(8, 10));
+        text.settings.content = "Gradient";
+        text.settings.color = createDefaultGradient("text-gradient");
+        svg.elements = [text];
+
+        const restored = SVG.fromSave(svg.save(), editor);
+        const restoredText = restored.elements[0] as TextElement;
+        const duplicate = new ElementFactory(editor).clone(text) as TextElement;
+        const markup = buildSVGMarkup(restored);
+
+        expect(isGradientPaint(restoredText.settings.color)).toBeTrue();
+        expect(isGradientPaint(duplicate.settings.color)).toBeTrue();
+        expect((duplicate.settings.color as ReturnType<typeof createDefaultGradient>).id).not.toBe("text-gradient");
+        expect(markup).toContain('<linearGradient id="text-gradient"');
+        expect(markup).toContain('fill="url(#text-gradient)"');
     });
 
     it("restores shared path endpoints by object identity", () => {

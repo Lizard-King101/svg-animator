@@ -7,13 +7,13 @@
      (mousedown)="$event.stopPropagation()" (mousemove)="$event.stopPropagation()" (mouseup)="$event.stopPropagation()" (click)="$event.stopPropagation()"
      (pointerdown)="beginRulerDrag('y', $event)" (pointermove)="updateDrag($event)" (pointerup)="endDrag($event)" (pointercancel)="endDrag($event)"
      (dblclick)="openRulerInput('y', $event)">
-  <span class="ruler-mark" *ngFor="let mark of rulerMarks('x')" [style.left.px]="mark.position">{{ mark.label }}</span>
+  <span class="ruler-mark" *ngFor="let mark of rulerMarks('x'); trackBy: trackRulerMark" [style.left.px]="mark.position">{{ mark.label }}</span>
 </div>
 <div class="canvas-ruler y-ruler" [ngClass]="{'guides-locked': editor.selectedSVG?.guidesLocked}"
      (mousedown)="$event.stopPropagation()" (mousemove)="$event.stopPropagation()" (mouseup)="$event.stopPropagation()" (click)="$event.stopPropagation()"
      (pointerdown)="beginRulerDrag('x', $event)" (pointermove)="updateDrag($event)" (pointerup)="endDrag($event)" (pointercancel)="endDrag($event)"
      (dblclick)="openRulerInput('x', $event)">
-  <span class="ruler-mark" *ngFor="let mark of rulerMarks('y')" [style.top.px]="mark.position">{{ mark.label }}</span>
+  <span class="ruler-mark" *ngFor="let mark of rulerMarks('y'); trackBy: trackRulerMark" [style.top.px]="mark.position">{{ mark.label }}</span>
 </div>
 <div class="guide-layer">
   <ng-container *ngFor="let guide of editor.selectedSVG?.guides">

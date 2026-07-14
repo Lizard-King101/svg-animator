@@ -1,4 +1,4 @@
-<div class="timeline-table" (scroll)="timeline.updateTimelineViewport($event)" (wheel)="timeline.timelineWheel($event)"
+<div class="timeline-table" (scroll)="timeline.updateTimelineViewport($event); timeline.closeColorEditor()" (wheel)="timeline.timelineWheel($event)"
      (pointerdown)="timeline.beginViewportPan($event)">
   <div class="timeline-head-left">Layers</div>
   <div class="timeline-time-cell timeline-ruler-cell">
@@ -19,7 +19,7 @@
 
   <ng-container *ngFor="let row of timeline.visibleRows; trackBy: timeline.trackRow; let visibleIndex = index">
     <div class="timeline-left-cell"
-         [ngClass]="{'selected': timeline.editor.selectedElement == row.element, 'property': row.type == 'property'}"
+         [ngClass]="{'selected': timeline.editor.selectedElement == row.element, 'property': row.type == 'property', 'popover-open': timeline.colorEditorOpen(row)}"
          [style.padding-left.px]="10 + row.depth * 16"
          (click)="timeline.selectTimelineRow(row)"
          (contextmenu)="timeline.openRowContextMenu(row, $event)">
@@ -41,15 +41,9 @@
           </button>
           <div class="gradient-stops-popover" *ngIf="timeline.colorEditorOpen(row)" [ngStyle]="timeline.paintPopoverStyle()"
                (click)="$event.stopPropagation()" (pointerdown)="$event.stopPropagation()">
-            <div class="gradient-stop-popover-row" *ngFor="let stop of gradient.stops; let stopIndex = index">
-              <strong>Stop {{ stopIndex + 1 }}</strong>
-              <label>
-                <span>Position</span>
-                <input type="number" min="0" max="1" step="0.01" [ngModel]="stop.offset"
-                       (ngModelChange)="timeline.setTimelineGradientStop(row, stop, 'offset', $event)" />
-              </label>
-              <color [ngModel]="stop.color" (ngModelChange)="timeline.setTimelineGradientStop(row, stop, 'color', $event)"></color>
-            </div>
+            <app-paint-editor [paint]="gradient" [compact]="true"
+                              [capabilities]="gradientStopsCapabilities"
+                              (paintChange)="timeline.setTimelinePaint(row, $event)" />
           </div>
         </div>
         <input class="property-number"
@@ -81,8 +75,9 @@
                [ngStyle]="timeline.paintPopoverStyle()"
                (click)="$event.stopPropagation()"
                (pointerdown)="$event.stopPropagation()">
-            <color [ngModel]="timeline.colorValue(row)"
-                   (ngModelChange)="timeline.setPropertyValue(row, $event)"></color>
+            <app-paint-editor [paint]="timeline.colorValue(row)" [compact]="true"
+                              [capabilities]="solidPaintCapabilities"
+                              (paintChange)="timeline.setTimelinePaint(row, $event)" />
           </div>
         </div>
         <div class="key-controls">

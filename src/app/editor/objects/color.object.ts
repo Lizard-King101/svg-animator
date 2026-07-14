@@ -1,7 +1,7 @@
 export class Color {
     _hex: string = '#ff0000';
     _rgb: RGB = {r: 255, g: 0, b: 0};
-    _hsl: HSL = {h: 0, s: 1, l: .5};
+    _hsl: HSL = {h: 0, s: 100, l: 50};
     preferredSpace: ColorSpace = 'rgb';
     alpha: number = 1;
 
@@ -26,7 +26,7 @@ export class Color {
         return this._rgb;
     }
     set rgb(rgb: RGB) {
-        this._rgb = rgb;
+        this._rgb = normalizeRgb(rgb);
         this._hex = this.rgbToHex(this._rgb);
         this._hsl = this.rgbToHsl(this.rgb);
     }
@@ -36,7 +36,7 @@ export class Color {
         return this._hsl;
     }
     set hsl(hsl: HSL) {
-        this._hsl = hsl;
+        this._hsl = normalizeHsl(hsl);
         this._rgb = this.hslToRgb(this._hsl);
         this._hex = this.rgbToHex(this._rgb);
     }
@@ -60,12 +60,12 @@ export class Color {
     }
 
     hslToRgb(hsl: HSL): RGB {
-        let { h, s, l } = hsl;
+        let { h, s, l } = normalizeHsl(hsl);
         h /= 360; s /= 100; l /= 100;
         var r, g, b;
 
         if (s == 0) {
-            r = g = b = l; // achromatic
+            r = g = b = Math.round(l * 255); // achromatic
         } else {
             function hue2rgb(p: any, q: any, t: any) {
                 if (t < 0) t += 1;
@@ -140,7 +140,7 @@ export class Color {
     }
 
     rgbToHex(rgb: RGB): string {
-        let { r, g, b } = rgb;
+        let { r, g, b } = normalizeRgb(rgb);
         let componentToHex = (c: number) => {
             var hex = c.toString(16);
             return hex.length == 1 ? "0" + hex : hex;
@@ -161,6 +161,14 @@ export interface HSL {
     l: number;
 }
 
+/** Preserve the user's active color-space coordinates instead of round-tripping through quantized hex. */
+export function cloneColor(color: Color): Color {
+    const clone = new Color(color.serialized);
+    clone.preferredSpace = color.preferredSpace;
+    if(color.preferredSpace === "hsl") clone.hsl = { ...color.hsl };
+    return clone;
+}
+
 function expandHex(value: string): string {
     const source = value.replace(/^#/, '').toLowerCase();
     if(source.length === 3 || source.length === 4) return source.split('').map((part) => part + part).join('');
@@ -168,3 +176,23 @@ function expandHex(value: string): string {
 }
 
 export type ColorSpace = 'rgb' | 'hsl';
+
+function normalizeRgb(rgb: RGB): RGB {
+    return {
+        r: Math.round(clamp(Number(rgb.r), 0, 255)),
+        g: Math.round(clamp(Number(rgb.g), 0, 255)),
+        b: Math.round(clamp(Number(rgb.b), 0, 255)),
+    };
+}
+
+function normalizeHsl(hsl: HSL): HSL {
+    return {
+        h: clamp(Number(hsl.h), 0, 360),
+        s: clamp(Number(hsl.s), 0, 100),
+        l: clamp(Number(hsl.l), 0, 100),
+    };
+}
+
+function clamp(value: number, min: number, max: number): number {
+    return Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : min;
+}

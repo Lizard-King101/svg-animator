@@ -4,7 +4,7 @@ import { Group } from "./elements/group.object";
 import { Path } from "./elements/path.object";
 import { AnyElement } from "./svg.object";
 import { AnimationColorValue } from "./animation.object";
-import { GradientCoordinateKey, isGradientPaint } from "./paint.object";
+import { GradientCoordinateKey, isGradientPaint, PaintSettingKey } from "./paint.object";
 
 export interface AnimationPropertySnapshot {
     targetId: string;
@@ -67,6 +67,8 @@ export function readAnimationProperty(element: AnyElement, property: string): un
             return solidColorHex((element.settings as Record<string, unknown>)["fill"]);
         case "settings.stroke":
             return solidColorHex((element.settings as Record<string, unknown>)["stroke"]);
+        case "settings.color":
+            return solidColorHex((element.settings as Record<string, unknown>)["color"]);
         case "settings.stroke_width":
             return (element.settings as Record<string, unknown>)["stroke_width"];
         case "visible":
@@ -124,6 +126,8 @@ export function writeAnimationProperty(element: AnyElement, property: string, va
             return writeColor(element, "fill", value);
         case "settings.stroke":
             return writeColor(element, "stroke", value);
+        case "settings.color":
+            return writeColor(element, "color", value);
         case "settings.stroke_width":
             return writeNumber(value, (numeric) => (element.settings as Record<string, unknown>)["stroke_width"] = numeric);
         case "visible":
@@ -208,7 +212,7 @@ function clamp01(value: number): number {
     return Math.max(0, Math.min(1, value));
 }
 
-function writeColor(element: AnyElement, key: "fill" | "stroke", value: unknown): boolean {
+function writeColor(element: AnyElement, key: PaintSettingKey, value: unknown): boolean {
     if(value == null) {
         (element.settings as Record<string, unknown>)[key] = null;
         return true;
@@ -238,18 +242,18 @@ function solidColorHex(value: unknown): string | null | undefined {
 }
 
 interface ParsedGradientProperty {
-    paintKey: "fill" | "stroke";
+    paintKey: PaintSettingKey;
     coordinate?: GradientCoordinateKey;
     stopId?: string;
     stopField?: "offset" | "color" | "opacity";
 }
 
 function parseGradientProperty(property: string): ParsedGradientProperty | undefined {
-    const coordinate = /^settings\.(fill|stroke)\.gradient\.(x1|y1|x2|y2|cx|cy|r|fx|fy)$/.exec(property);
-    if(coordinate) return { paintKey: coordinate[1] as "fill" | "stroke", coordinate: coordinate[2] as GradientCoordinateKey };
-    const stop = /^settings\.(fill|stroke)\.gradient\.stops\.(.+)\.(offset|color|opacity)$/.exec(property);
+    const coordinate = /^settings\.(fill|stroke|color)\.gradient\.(x1|y1|x2|y2|cx|cy|r|fx|fy)$/.exec(property);
+    if(coordinate) return { paintKey: coordinate[1] as PaintSettingKey, coordinate: coordinate[2] as GradientCoordinateKey };
+    const stop = /^settings\.(fill|stroke|color)\.gradient\.stops\.(.+)\.(offset|color|opacity)$/.exec(property);
     if(stop) return {
-        paintKey: stop[1] as "fill" | "stroke",
+        paintKey: stop[1] as PaintSettingKey,
         stopId: stop[2],
         stopField: stop[3] as "offset" | "color" | "opacity",
     };

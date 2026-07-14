@@ -2,7 +2,7 @@ import { writeAnimationProperty } from "../objects/animation-targets";
 import { Group } from "../objects/elements/group.object";
 import { Path } from "../objects/elements/path.object";
 import { motionAdjustedMatrix } from "../objects/motion-path.object";
-import { isGradientPaint, paintOpacity, paintSVGValue } from "../objects/paint.object";
+import { gradientPaints, gradientStopOpacity, paintOpacity, paintSVGValue } from "../objects/paint.object";
 import { AnyElement, SVG } from "../objects/svg.object";
 import { matrixToSvg } from "../objects/transform.object";
 import { CompiledAnimationTrack } from "./animation-evaluation-plan";
@@ -63,13 +63,16 @@ export class ImperativeSvgRenderer {
             setAttribute(node, "stroke", paintSVGValue(settings["stroke"] as never));
             setAttribute(node, "stroke-opacity", paintOpacity(settings["stroke"] as never));
         }
+        if("color" in settings) {
+            setAttribute(node, "fill", paintSVGValue(settings["color"] as never) ?? "#000000");
+            setAttribute(node, "fill-opacity", paintOpacity(settings["color"] as never));
+        }
         if("stroke_width" in settings) setAttribute(node, "stroke-width", settings["stroke_width"] as string | number);
     }
 
     private writeGradients(target: AnyElement): void {
         const settings = target.settings as Record<string, unknown>;
-        [settings["fill"], settings["stroke"]].forEach((paint) => {
-            if(!isGradientPaint(paint)) return;
+        gradientPaints(settings).forEach((paint) => {
             const gradient = this.node(paint.id);
             if(!gradient) return;
             Object.entries(paint.coordinates).forEach(([key, value]) => setAttribute(gradient, key, value));
@@ -78,7 +81,7 @@ export class ImperativeSvgRenderer {
                 if(!node) return;
                 setAttribute(node, "offset", stop.offset);
                 setAttribute(node, "stop-color", stop.color.hex);
-                setAttribute(node, "stop-opacity", stop.opacity);
+                setAttribute(node, "stop-opacity", gradientStopOpacity(stop));
             });
         });
     }

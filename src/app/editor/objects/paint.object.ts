@@ -1,10 +1,13 @@
 import { AnimatablePropertyDefinition } from "./animation.object";
-import { Color } from "./color.object";
+import { cloneColor, Color } from "./color.object";
 
 export type GradientKind = "linear-gradient" | "radial-gradient";
 export type GradientUnits = "objectBoundingBox" | "userSpaceOnUse";
 export type GradientSpreadMethod = "pad" | "reflect" | "repeat";
 export type GradientCoordinateKey = "x1" | "y1" | "x2" | "y2" | "cx" | "cy" | "r" | "fx" | "fy";
+export type PaintSettingKey = "fill" | "stroke" | "color";
+
+export const PAINT_SETTING_KEYS: readonly PaintSettingKey[] = ["fill", "stroke", "color"];
 
 export interface GradientStopSave {
     id: string;
@@ -44,6 +47,12 @@ export function isGradientPaint(value: unknown): value is GradientPaint {
         && Array.isArray((value as Partial<GradientPaint>).stops);
 }
 
+export function gradientPaints(settings: Record<string, unknown>): GradientPaint[] {
+    return PAINT_SETTING_KEYS
+        .map((key) => settings[key])
+        .filter(isGradientPaint);
+}
+
 export function serializePaint(value: Paint | null | undefined): PaintSave {
     if(value == null) return null;
     if(value instanceof Color) return value.serialized;
@@ -58,9 +67,19 @@ export function serializePaint(value: Paint | null | undefined): PaintSave {
             id: stop.id,
             offset: clamp01(stop.offset),
             color: stop.color.hex,
-            opacity: clamp01(stop.color.alpha),
+            opacity: gradientStopOpacity(stop),
         })),
     };
+}
+
+/**
+ * Older in-memory gradients can outlive a hot reload without the optional
+ * persisted opacity field having gone through restorePaint(). Keep renderers
+ * and editors tolerant of that session-only shape.
+ */
+export function gradientStopOpacity(stop: Pick<GradientStop, "color"> & { opacity?: number }): number {
+    if(Number.isFinite(stop.opacity)) return clamp01(stop.opacity!);
+    return Number.isFinite(stop.color?.alpha) ? clamp01(stop.color.alpha) : 1;
 }
 
 export function restorePaint(value: PaintSave | undefined): Paint | null {
@@ -85,7 +104,7 @@ export function restorePaint(value: PaintSave | undefined): Paint | null {
 
 export function clonePaint(value: Paint | null | undefined, id?: string): Paint | null {
     if(value == null) return null;
-    if(value instanceof Color) return new Color(value.serialized);
+    if(value instanceof Color) return cloneColor(value);
     const restored = restorePaint(serializePaint(value));
     if(restored && isGradientPaint(restored) && id) {
         restored.id = id;
@@ -125,20 +144,21 @@ export function gradientTransformValue(value: GradientPaint): string | null {
 
 export function gradientAnimationProperties(settings: Record<string, unknown>): AnimatablePropertyDefinition[] {
     const properties: AnimatablePropertyDefinition[] = [];
-    (["fill", "stroke"] as const).forEach((paintKey) => {
+    PAINT_SETTING_KEYS.forEach((paintKey) => {
         const paint = settings[paintKey];
         if(!isGradientPaint(paint)) return;
+        const label = paintSettingLabel(paintKey);
         Object.keys(paint.coordinates).forEach((coordinate) => properties.push({
             property: `settings.${paintKey}.gradient.${coordinate}`,
-            label: `${paintKey === "fill" ? "Fill" : "Stroke"} ${coordinate.toUpperCase()}`,
+            label: `${label} ${coordinate.toUpperCase()}`,
             valueType: "number",
             group: "style",
             mvp: true,
         }));
         paint.stops.forEach((stop, index) => {
             const prefix = `settings.${paintKey}.gradient.stops.${stop.id}`;
-            properties.push({ property: `${prefix}.offset`, label: `${paintKey === "fill" ? "Fill" : "Stroke"} Stop ${index + 1} Offset`, valueType: "number", group: "style", mvp: true });
-            properties.push({ property: `${prefix}.color`, label: `${paintKey === "fill" ? "Fill" : "Stroke"} Stop ${index + 1} Color`, valueType: "color", group: "style", mvp: true });
+            properties.push({ property: `${prefix}.offset`, label: `${label} Stop ${index + 1} Offset`, valueType: "number", group: "style", mvp: true });
+            properties.push({ property: `${prefix}.color`, label: `${label} Stop ${index + 1} Color`, valueType: "color", group: "style", mvp: true });
         });
     });
     return properties;
@@ -146,13 +166,17 @@ export function gradientAnimationProperties(settings: Record<string, unknown>): 
 
 export function gradientTimelineProperties(settings: Record<string, unknown>): AnimatablePropertyDefinition[] {
     const properties: AnimatablePropertyDefinition[] = [];
-    (["fill", "stroke"] as const).forEach((paintKey) => {
+    PAINT_SETTING_KEYS.forEach((paintKey) => {
         if(!isGradientPaint(settings[paintKey])) return;
-        const label = paintKey === "fill" ? "Fill" : "Stroke";
+        const label = paintSettingLabel(paintKey);
         properties.push({ property: `settings.${paintKey}.gradient.geometry`, label: `${label} Gradient Geometry`, valueType: "string", group: "style", mvp: true });
         properties.push({ property: `settings.${paintKey}.gradient.stops`, label: `${label} Gradient Stops`, valueType: "string", group: "style", mvp: true });
     });
     return properties;
+}
+
+function paintSettingLabel(key: PaintSettingKey): string {
+    return key === "color" ? "Text Color" : key === "fill" ? "Fill" : "Stroke";
 }
 
 function isGradientPaintSave(value: unknown): value is GradientPaintSave {

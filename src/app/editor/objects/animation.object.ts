@@ -89,6 +89,7 @@ export const ANIMATABLE_PROPERTIES: readonly AnimatablePropertyDefinition[] = [
     { property: "opacity", label: "Opacity", valueType: "number", group: "style", mvp: true },
     { property: "settings.fill", label: "Fill", valueType: "color", group: "style", mvp: true },
     { property: "settings.stroke", label: "Stroke", valueType: "color", group: "style", mvp: true },
+    { property: "settings.color", label: "Text Color", valueType: "color", group: "style", mvp: true },
     { property: "settings.stroke_width", label: "Stroke Width", valueType: "number", group: "style", mvp: true },
     { property: "path.drawProgress", label: "Draw Progress", valueType: "number", group: "path", mvp: true },
     { property: "motion.progress", label: "Motion Progress", valueType: "number", group: "path", mvp: true },

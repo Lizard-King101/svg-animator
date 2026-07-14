@@ -1,0 +1,100 @@
+<section class="paint-editor" [class.compact]="compact">
+  <header class="paint-editor-header" *ngIf="label || capabilities.mode">
+    <strong *ngIf="label">{{ label }}</strong>
+    <div class="paint-mode-toggle" *ngIf="capabilities.mode" aria-label="Paint mode">
+      <button type="button" [class.active]="!gradient" (click)="selectMode('solid')">Solid</button>
+      <button type="button" [class.active]="!!gradient" (click)="selectMode('gradient')">Gradient</button>
+    </div>
+  </header>
+
+  <color *ngIf="!gradient" [ngModel]="solid" (ngModelChange)="setSolidColor($event)"></color>
+
+  <ng-container *ngIf="gradient as currentGradient">
+    <div class="paint-ramp-wrap">
+      <div class="paint-ramp" [style.--paint-gradient]="gradientPreview(currentGradient)">
+        <button class="paint-stop-marker"
+                *ngFor="let stop of currentGradient.stops; let index = index"
+                type="button"
+                [class.selected]="stop.id === selectedStopId"
+                [style.left.%]="stop.offset * 100"
+                [style.--stop-color]="stopColor(stop)"
+                [attr.aria-label]="stopLabel(stop, index)"
+                [attr.aria-valuenow]="stop.offset"
+                aria-valuemin="0" aria-valuemax="1" role="slider"
+                (click)="selectStop(stop)"
+                (pointerdown)="beginStopDrag(stop, $event)"
+                (pointermove)="updateStopDrag($event)"
+                (pointerup)="endStopDrag($event)"
+                (pointercancel)="cancelStopDrag($event)"
+                (keydown)="handleStopKey(stop, $event)"></button>
+      </div>
+    </div>
+
+    <div class="paint-kind-toggle" *ngIf="capabilities.metadata">
+      <button type="button" [class.active]="currentGradient.type === 'linear-gradient'"
+              (click)="paintChange.emit({type: 'kind', kind: 'linear-gradient'})">Linear</button>
+      <button type="button" [class.active]="currentGradient.type === 'radial-gradient'"
+              (click)="paintChange.emit({type: 'kind', kind: 'radial-gradient'})">Radial</button>
+    </div>
+
+    <div class="paint-selected-stop" *ngIf="selectedStop as stop">
+      <div class="paint-stop-heading">
+        <strong>Selected stop</strong>
+        <button class="paint-remove-stop" type="button"
+                *ngIf="capabilities.stopStructure"
+                [disabled]="currentGradient.stops.length <= 2"
+                (click)="removeSelectedStop()">Remove</button>
+      </div>
+      <label class="paint-number-field">
+        <span>Offset</span>
+        <input type="number" min="0" max="1" step="0.01" [ngModel]="stop.offset"
+               (ngModelChange)="setStopNumber('offset', $event)" />
+      </label>
+      <color [ngModel]="stop.color" (ngModelChange)="setStopColor($event)"></color>
+    </div>
+
+    <button class="paint-add-stop" type="button" *ngIf="capabilities.stopStructure" (click)="addStop()">Add Stop</button>
+
+    <div class="paint-presets" *ngIf="capabilities.presets">
+      <div class="paint-section-title">Presets</div>
+      <div class="paint-preset-grid">
+        <div class="paint-preset" *ngFor="let preset of presets.presets">
+          <button type="button" class="paint-preset-apply"
+                  (click)="paintChange.emit({type: 'apply-preset', preset: preset})">
+            <span [style.background]="presets.preview(preset)"></span>{{ preset.name }}
+          </button>
+          <button type="button" class="paint-preset-delete" *ngIf="preset.custom"
+                  [attr.aria-label]="'Delete ' + preset.name"
+                  (click)="paintChange.emit({type: 'delete-preset', presetId: preset.id})">×</button>
+        </div>
+      </div>
+      <button type="button" class="paint-save-preset"
+              (click)="paintChange.emit({type: 'save-preset', gradient: currentGradient})">Save current</button>
+    </div>
+
+    <div class="paint-advanced" *ngIf="capabilities.metadata">
+      <button type="button" class="paint-advanced-toggle" [attr.aria-expanded]="advancedOpen"
+              (click)="advancedOpen = !advancedOpen">Advanced <span>{{ advancedOpen ? '−' : '+' }}</span></button>
+      <div class="paint-advanced-body" *ngIf="advancedOpen">
+        <label>
+          <span>Units</span>
+          <select [ngModel]="currentGradient.units"
+                  (ngModelChange)="paintChange.emit({type: 'metadata', field: 'units', value: $event})">
+            <option value="objectBoundingBox">Object box</option>
+            <option value="userSpaceOnUse">User space</option>
+          </select>
+        </label>
+        <label>
+          <span>Spread</span>
+          <select [ngModel]="currentGradient.spreadMethod"
+                  (ngModelChange)="paintChange.emit({type: 'metadata', field: 'spreadMethod', value: $event})">
+            <option value="pad">Pad</option>
+            <option value="reflect">Reflect</option>
+            <option value="repeat">Repeat</option>
+          </select>
+        </label>
+        <p>Drag the amber handles on the canvas to edit geometry.</p>
+      </div>
+    </div>
+  </ng-container>
+</section>

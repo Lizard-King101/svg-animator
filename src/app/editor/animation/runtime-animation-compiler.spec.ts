@@ -56,4 +56,20 @@ describe("runtime animation compiler", () => {
             expect(Number(evaluateCompiledRuntimeTrack(runtime, time))).toBeCloseTo(Number(evaluateTrack(authoring, time)), 3);
         });
     });
+
+    it("compiles text color tracks for exported playback", () => {
+        const input = document();
+        input.animation!.tracks[0] = {
+            id: "text-color", targetId: "shape", property: "settings.color", valueType: "color",
+            keyframes: [
+                { id: "a", time: 0, value: "#ff0000" },
+                { id: "b", time: 1, value: "#0000ff" },
+            ],
+        };
+
+        const compiled = compileRuntimeAnimation(input);
+        expect(compiled.properties).toEqual(["settings.color"]);
+        expect(compiled.tracks[0].kind).toBe("color");
+        expect(compiled.diagnostics).toEqual([]);
+    });
 });

@@ -1,7 +1,7 @@
 import { AfterViewInit, Component, forwardRef, Input } from "@angular/core";
 import { NgIf, NgStyle } from "@angular/common";
 import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR } from "@angular/forms";
-import { Color, HSL, RGB } from "src/app/editor/objects/color.object";
+import { cloneColor, Color, HSL, RGB } from "src/app/editor/objects/color.object";
 
 @Component({
     standalone: true,
@@ -71,12 +71,15 @@ export class ColorAttribute implements AfterViewInit, ControlValueAccessor {
     writeValue(_value: Color | null) {
         if (_value) {
             const preferredSpace = _value.preferredSpace ?? 'rgb';
-            if(this.color.hex === _value.hex && Math.abs(this.color.alpha - _value.alpha) < 0.0001 && this.color.preferredSpace === preferredSpace) {
+            const sameCoordinates = preferredSpace === "hsl"
+                ? hslMatches(this.hsl, _value.hsl)
+                : rgbMatches(this.rgb, _value.rgb);
+            if(this.color.hex === _value.hex && Math.abs(this.color.alpha - _value.alpha) < 0.0001
+                && this.color.preferredSpace === preferredSpace && sameCoordinates) {
                 return;
             }
 
-            this.color = new Color(_value.serialized);
-            this.color.preferredSpace = preferredSpace;
+            this.color = cloneColor(_value);
             this.rgb = this.color.rgb;
             this.hsl = this.color.hsl;
         } else {
@@ -86,11 +89,19 @@ export class ColorAttribute implements AfterViewInit, ControlValueAccessor {
         }
     }
 
-    registerOnChange(fn: (_v: Color) => {}) {
+    registerOnChange(fn: (_v: Color) => void) {
         this.onChange = fn;
     }
 
     registerOnTouched(fn: () => {}) {
         this.onTouch = fn;
     }
+}
+
+function rgbMatches(a: RGB, b: RGB): boolean {
+    return a.r === b.r && a.g === b.g && a.b === b.b;
+}
+
+function hslMatches(a: HSL, b: HSL): boolean {
+    return a.h === b.h && a.s === b.s && a.l === b.l;
 }

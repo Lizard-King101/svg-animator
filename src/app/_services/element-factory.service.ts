@@ -3,7 +3,6 @@ import { Group } from "../editor/objects/elements/group.object";
 import { Path } from "../editor/objects/elements/path.object";
 import { Shape } from "../editor/objects/elements/shape.object";
 import { TextElement } from "../editor/objects/elements/text.object";
-import { Color } from "../editor/objects/color.object";
 import { Line } from "../editor/objects/line.object";
 import { Point } from "../editor/objects/point.object";
 import { AnyElement } from "../editor/objects/svg.object";
@@ -38,10 +37,6 @@ export class ElementFactory {
             pointMap.set(point.id, cloned);
         }
         return cloned;
-    }
-
-    private cloneColor(value: unknown): unknown {
-        return value instanceof Color ? new Color(value.serialized) : value;
     }
 
     private clonePath(path: Path): Path {
@@ -105,7 +100,7 @@ export class ElementFactory {
         clone.motion = { ...text.motion };
         clone.settings = {
             ...text.settings,
-            color: text.settings.color ? new Color(text.settings.color.serialized) : null,
+            color: clonePaint(text.settings.color, this.editor.ID),
         };
         return clone;
     }

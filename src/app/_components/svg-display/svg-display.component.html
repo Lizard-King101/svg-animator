@@ -99,8 +99,8 @@
         [attr.font-family]="text.settings.font_family"
         [attr.font-weight]="text.settings.font_weight"
         [attr.text-anchor]="text.textAnchor"
-        [attr.fill]="text.settings.color?.hex ?? '#000000'"
-        [attr.fill-opacity]="text.settings.color && text.settings.color.alpha < 0.9999 ? text.settings.color.alpha : null"
+        [attr.fill]="paintValue(text.settings.color) ?? '#000000'"
+        [attr.fill-opacity]="paintOpacity(text.settings.color)"
         dominant-baseline="hanging">
             <svg:tspan
             *ngFor="let span of textTspans(text)"
