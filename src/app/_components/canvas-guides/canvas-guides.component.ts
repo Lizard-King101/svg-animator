@@ -5,7 +5,9 @@ import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { DocumentMutationService } from "../../_services/document-mutation.service";
 import { EditorService } from "../../_services/editor.service";
 import { parseGuideExpression } from "../../editor/guide-expression";
+import { canvasToWorkspaceProjection, CanvasWorkspaceProjection } from "../../editor/canvas-workspace-projection";
 import { CanvasGuide } from "../../editor/objects/svg.object";
+import { applyMatrix } from "../../editor/objects/transform.object";
 import { CanvasWorkspaceComponent } from "../canvas-workspace/canvas-workspace.component";
 
 @Component({
@@ -153,20 +155,25 @@ export class CanvasGuidesComponent {
 
     private toViewportX(value: number): number {
         const svg = this.editor.selectedSVG;
-        const rect = this.canvasRect();
-        return rect && svg?.width ? rect.left + value * rect.width / svg.width : svg ? svg.pos.x + svg.width * (1 - svg.zoom) / 2 + value * svg.zoom : 0;
+        const projection = this.canvasProjection();
+        return projection ? applyMatrix(projection.canvasToWorkspace, value, 0).x
+            : svg ? svg.pos.x + svg.width * (1 - svg.zoom) / 2 + value * svg.zoom : 0;
     }
     private toViewportY(value: number): number {
         const svg = this.editor.selectedSVG;
-        const rect = this.canvasRect();
-        return rect && svg?.height ? rect.top + value * rect.height / svg.height : svg ? svg.pos.y + svg.height * (1 - svg.zoom) / 2 + value * svg.zoom : 0;
+        const projection = this.canvasProjection();
+        return projection ? applyMatrix(projection.canvasToWorkspace, 0, value).y
+            : svg ? svg.pos.y + svg.height * (1 - svg.zoom) / 2 + value * svg.zoom : 0;
     }
-    private canvasRect(): { left: number; top: number; width: number; height: number } | undefined {
+    private canvasProjection(): CanvasWorkspaceProjection | undefined {
+        const svg = this.editor.selectedSVG;
         const viewport = this.workspace?.element;
-        if(!this.canvas || !viewport) return undefined;
-        const canvas = this.canvas.getBoundingClientRect();
-        const view = viewport.getBoundingClientRect();
-        return { left: canvas.left - view.left, top: canvas.top - view.top, width: canvas.width, height: canvas.height };
+        if(!svg || !this.canvas || !viewport) return undefined;
+        return canvasToWorkspaceProjection(
+            this.canvas.getBoundingClientRect(),
+            viewport.getBoundingClientRect(),
+            { x: 0, y: 0, width: svg.width, height: svg.height },
+        );
     }
     private valueFromEvent(axis: "x" | "y", event: PointerEvent | MouseEvent, roundToTen: boolean): number {
         return this.valueFromClient(axis, event.clientX, event.clientY, roundToTen);

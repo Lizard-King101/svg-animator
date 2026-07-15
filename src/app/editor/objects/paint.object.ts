@@ -5,6 +5,7 @@ export type GradientKind = "linear-gradient" | "radial-gradient";
 export type GradientUnits = "objectBoundingBox" | "userSpaceOnUse";
 export type GradientSpreadMethod = "pad" | "reflect" | "repeat";
 export type GradientCoordinateKey = "x1" | "y1" | "x2" | "y2" | "cx" | "cy" | "r" | "fx" | "fy";
+export type GradientTransformKey = "a" | "b" | "c" | "d" | "e" | "f";
 export type PaintSettingKey = "fill" | "stroke" | "color";
 
 export const PAINT_SETTING_KEYS: readonly PaintSettingKey[] = ["fill", "stroke", "color"];
@@ -151,6 +152,13 @@ export function gradientAnimationProperties(settings: Record<string, unknown>): 
         Object.keys(paint.coordinates).forEach((coordinate) => properties.push({
             property: `settings.${paintKey}.gradient.${coordinate}`,
             label: `${label} ${coordinate.toUpperCase()}`,
+            valueType: "number",
+            group: "style",
+            mvp: true,
+        }));
+        (["a", "b", "c", "d", "e", "f"] as const).forEach((component) => properties.push({
+            property: `settings.${paintKey}.gradient.transform.${component}`,
+            label: `${label} Transform ${component.toUpperCase()}`,
             valueType: "number",
             group: "style",
             mvp: true,

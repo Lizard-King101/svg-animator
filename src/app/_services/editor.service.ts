@@ -11,6 +11,8 @@ import { Tool } from "./tools/tool";
 import { Tools } from "./tools/tools";
 import { EditorPreferencesService } from "./editor-preferences.service";
 import { PaintSettingKey } from "../editor/objects/paint.object";
+import { canvasToWorkspaceProjection } from "../editor/canvas-workspace-projection";
+import { applyMatrix } from "../editor/objects/transform.object";
 
 @Injectable()
 export class EditorService {
@@ -213,13 +215,21 @@ export class EditorService {
             }
         }
         if(this.viewPort && this.selectedSVG) {
-            let canvas: HTMLElement = <HTMLElement>this.viewPort.firstChild
-            let rect = canvas.getBoundingClientRect();
-            let p = new Point(
-                +((point.x - rect.left) / this.selectedSVG.zoom).toFixed(2),
-                +((point.y - rect.top)  / this.selectedSVG.zoom).toFixed(2)
-            );
-            return p;
+            const canvas = this.viewPort.querySelector<SVGElement>("svg[display]");
+            if(canvas) {
+                const viewportRect = this.viewPort.getBoundingClientRect();
+                const projection = canvasToWorkspaceProjection(
+                    canvas.getBoundingClientRect(),
+                    viewportRect,
+                    { x: 0, y: 0, width: this.selectedSVG.width, height: this.selectedSVG.height },
+                );
+                const local = applyMatrix(
+                    projection.workspaceToCanvas,
+                    point.x - viewportRect.left,
+                    point.y - viewportRect.top,
+                );
+                return new Point(+local.x.toFixed(2), +local.y.toFixed(2));
+            }
         }
         return point;
     }
@@ -243,7 +253,8 @@ export class EditorService {
             }
         }
         if(this.viewPort) {
-            return point.subtract(this.viewPort.offsetLeft, this.viewPort.offsetTop);
+            const rect = this.viewPort.getBoundingClientRect();
+            return point.subtract(rect.left, rect.top);
         } else return point;
     }
 

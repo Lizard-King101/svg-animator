@@ -2,9 +2,11 @@ import { Color } from "./color.object";
 import { resolvedOrigin } from "./element-bounds";
 import { Group } from "./elements/group.object";
 import { Path } from "./elements/path.object";
+import { Shape } from "./elements/shape.object";
+import { TextElement } from "./elements/text.object";
 import { AnyElement } from "./svg.object";
 import { AnimationColorValue } from "./animation.object";
-import { GradientCoordinateKey, isGradientPaint, PaintSettingKey } from "./paint.object";
+import { gradientAnimationProperties, GradientCoordinateKey, GradientTransformKey, isGradientPaint, PaintSettingKey } from "./paint.object";
 
 export interface AnimationPropertySnapshot {
     targetId: string;
@@ -47,6 +49,14 @@ export function readAnimationProperty(element: AnyElement, property: string): un
     if(gradient) return readGradientProperty(element, gradient);
 
     switch(property) {
+        case "geometry.x":
+            return element instanceof Shape || element instanceof TextElement ? element.position.x : undefined;
+        case "geometry.y":
+            return element instanceof Shape || element instanceof TextElement ? element.position.y : undefined;
+        case "geometry.width":
+            return element instanceof Shape ? element.settings.width : undefined;
+        case "geometry.height":
+            return element instanceof Shape ? element.settings.height : undefined;
         case "transform.translateX":
             return element.transform.translateX;
         case "transform.translateY":
@@ -108,6 +118,22 @@ export function writeAnimationProperty(element: AnyElement, property: string, va
     if(gradient) return writeGradientProperty(element, gradient, value);
 
     switch(property) {
+        case "geometry.x":
+            return element instanceof Shape || element instanceof TextElement
+                ? writeNumber(value, (numeric) => element.position.x = numeric)
+                : false;
+        case "geometry.y":
+            return element instanceof Shape || element instanceof TextElement
+                ? writeNumber(value, (numeric) => element.position.y = numeric)
+                : false;
+        case "geometry.width":
+            return element instanceof Shape
+                ? writeNumber(value, (numeric) => element.settings.width = Math.max(1, numeric))
+                : false;
+        case "geometry.height":
+            return element instanceof Shape
+                ? writeNumber(value, (numeric) => element.settings.height = Math.max(1, numeric))
+                : false;
         case "transform.translateX":
             return writeNumber(value, (numeric) => element.transform.translateX = numeric);
         case "transform.translateY":
@@ -163,6 +189,27 @@ export function writeAnimationProperty(element: AnyElement, property: string, va
 
 export function pathPointAnimationProperty(pointId: string, axis: "x" | "y"): string {
     return `path.points.${pointId}.${axis}`;
+}
+
+/** Numeric geometry channels affected by a whole-object native geometry edit. */
+export function geometryAnimationValues(element: AnyElement): Record<string, number> {
+    const properties = ["geometry.x", "geometry.y", "geometry.width", "geometry.height"];
+    const values: Record<string, number> = {};
+    properties.forEach((property) => {
+        const value = readAnimationProperty(element, property);
+        if(typeof value === "number") values[property] = value;
+    });
+    if(element instanceof Path) element.pathPoints().forEach((point) => {
+        values[pathPointAnimationProperty(point.id, "x")] = point.x;
+        values[pathPointAnimationProperty(point.id, "y")] = point.y;
+    });
+    gradientAnimationProperties(element.settings as Record<string, unknown>)
+        .filter((definition) => !definition.property.includes(".stops."))
+        .forEach((definition) => {
+            const value = readAnimationProperty(element, definition.property);
+            if(typeof value === "number") values[definition.property] = value;
+        });
+    return values;
 }
 
 export function parsePathPointProperty(property: string): { pointId: string; axis: "x" | "y" } | undefined {
@@ -250,11 +297,14 @@ interface ParsedGradientProperty {
     coordinate?: GradientCoordinateKey;
     stopId?: string;
     stopField?: "offset" | "color" | "opacity";
+    transformComponent?: GradientTransformKey;
 }
 
 function parseGradientProperty(property: string): ParsedGradientProperty | undefined {
     const coordinate = /^settings\.(fill|stroke|color)\.gradient\.(x1|y1|x2|y2|cx|cy|r|fx|fy)$/.exec(property);
     if(coordinate) return { paintKey: coordinate[1] as PaintSettingKey, coordinate: coordinate[2] as GradientCoordinateKey };
+    const transform = /^settings\.(fill|stroke|color)\.gradient\.transform\.(a|b|c|d|e|f)$/.exec(property);
+    if(transform) return { paintKey: transform[1] as PaintSettingKey, transformComponent: transform[2] as GradientTransformKey };
     const stop = /^settings\.(fill|stroke|color)\.gradient\.stops\.(.+)\.(offset|color|opacity)$/.exec(property);
     if(stop) return {
         paintKey: stop[1] as PaintSettingKey,
@@ -268,6 +318,7 @@ function readGradientProperty(element: AnyElement, property: ParsedGradientPrope
     const paint = (element.settings as Record<string, unknown>)[property.paintKey];
     if(!isGradientPaint(paint)) return undefined;
     if(property.coordinate) return paint.coordinates[property.coordinate];
+    if(property.transformComponent) return gradientTransformComponents(paint)[gradientTransformIndex(property.transformComponent)];
     const stop = paint.stops.find((candidate) => candidate.id === property.stopId);
     if(!stop || !property.stopField) return undefined;
     return property.stopField === "color" ? stop.color.serialized : stop[property.stopField];
@@ -278,6 +329,13 @@ function writeGradientProperty(element: AnyElement, property: ParsedGradientProp
     if(!isGradientPaint(paint)) return false;
     if(property.coordinate) {
         return writeNumber(value, (numeric) => paint.coordinates[property.coordinate!] = numeric);
+    }
+    if(property.transformComponent) {
+        return writeNumber(value, (numeric) => {
+            const transform = gradientTransformComponents(paint);
+            transform[gradientTransformIndex(property.transformComponent!)] = numeric;
+            paint.transform = transform;
+        });
     }
     const stop = paint.stops.find((candidate) => candidate.id === property.stopId);
     if(!stop || !property.stopField) return false;
@@ -292,6 +350,14 @@ function writeGradientProperty(element: AnyElement, property: ParsedGradientProp
         return true;
     }
     return writeNumber(value, (numeric) => stop[property.stopField as "offset" | "opacity"] = Math.max(0, Math.min(1, numeric)));
+}
+
+function gradientTransformComponents(paint: { transform?: [number, number, number, number, number, number] }): [number, number, number, number, number, number] {
+    return paint.transform ? [...paint.transform] : [1, 0, 0, 1, 0, 0];
+}
+
+function gradientTransformIndex(component: GradientTransformKey): number {
+    return ({ a: 0, b: 1, c: 2, d: 3, e: 4, f: 5 } as const)[component];
 }
 
 function isAnimationColorValue(value: unknown): value is AnimationColorValue {

@@ -1,8 +1,10 @@
 import { writeAnimationProperty } from "../objects/animation-targets";
 import { Group } from "../objects/elements/group.object";
 import { Path } from "../objects/elements/path.object";
+import { Shape } from "../objects/elements/shape.object";
+import { TextElement } from "../objects/elements/text.object";
 import { motionAdjustedMatrix } from "../objects/motion-path.object";
-import { gradientPaints, gradientStopOpacity, paintOpacity, paintSVGValue } from "../objects/paint.object";
+import { gradientPaints, gradientStopOpacity, gradientTransformValue, paintOpacity, paintSVGValue } from "../objects/paint.object";
 import { AnyElement, SVG } from "../objects/svg.object";
 import { matrixToSvg } from "../objects/transform.object";
 import { effectiveStrokeAlignment } from "../objects/stroke-style.object";
@@ -35,26 +37,7 @@ export class ImperativeSvgRenderer {
             if(!node) return;
             if(domains.has("visibility")) node.style.display = target.visible ? "" : "none";
             if(domains.has("transform")) setAttribute(node, "transform", matrixToSvg(motionAdjustedMatrix(this.svg, target)));
-            if(domains.has("geometry") && target instanceof Path) {
-                if(node.tagName.toLowerCase() === "g") {
-                    node.querySelectorAll<SVGElement>('[data-render-role~="geometry"]').forEach((geometry) => setAttribute(geometry, "d", target.raw));
-                } else {
-                    setAttribute(node, "d", target.raw);
-                }
-                const progress = Math.max(0, Math.min(1, target.drawProgress));
-                if(target.settings.stroke_dasharray.length > 0) {
-                    node.querySelectorAll<SVGElement>('[data-render-role~="reveal"]').forEach((reveal) => setAttribute(reveal, "stroke-dashoffset", 1 - progress));
-                } else {
-                    const strokeNodes = node.tagName.toLowerCase() === "g"
-                        ? [...node.querySelectorAll<SVGElement>('[data-render-role~="stroke"]')]
-                        : [node];
-                    strokeNodes.forEach((stroke) => {
-                        setAttribute(stroke, "pathLength", progress < 1 ? 1 : null);
-                        setAttribute(stroke, "stroke-dasharray", progress < 1 ? 1 : null);
-                        setAttribute(stroke, "stroke-dashoffset", progress < 1 ? 1 - progress : null);
-                    });
-                }
-            }
+            if(domains.has("geometry")) this.writeGeometry(node, target);
             if(domains.has("appearance")) this.writeAppearance(node, target);
             if(domains.has("gradient")) this.writeGradients(target);
         });
@@ -99,11 +82,52 @@ export class ImperativeSvgRenderer {
         if("stroke_dashoffset" in settings) strokeNodes.forEach((item) => setAttribute(item, "stroke-dashoffset", settings["stroke_dashoffset"] as number));
     }
 
+    private writeGeometry(node: SVGElement, target: AnyElement): void {
+        if(target instanceof Path) {
+            if(node.tagName.toLowerCase() === "g") node.querySelectorAll<SVGElement>('[data-render-role~="geometry"]').forEach((geometry) => setAttribute(geometry, "d", target.raw));
+            else setAttribute(node, "d", target.raw);
+            const progress = Math.max(0, Math.min(1, target.drawProgress));
+            if(target.settings.stroke_dasharray.length > 0) node.querySelectorAll<SVGElement>('[data-render-role~="reveal"]').forEach((reveal) => setAttribute(reveal, "stroke-dashoffset", 1 - progress));
+            else {
+                const strokeNodes = node.tagName.toLowerCase() === "g" ? [...node.querySelectorAll<SVGElement>('[data-render-role~="stroke"]')] : [node];
+                strokeNodes.forEach((stroke) => {
+                    setAttribute(stroke, "pathLength", progress < 1 ? 1 : null);
+                    setAttribute(stroke, "stroke-dasharray", progress < 1 ? 1 : null);
+                    setAttribute(stroke, "stroke-dashoffset", progress < 1 ? 1 - progress : null);
+                });
+            }
+            return;
+        }
+        if(target instanceof Shape) {
+            const geometry = node.tagName.toLowerCase() === "g" ? [...node.querySelectorAll<SVGElement>('[data-render-role~="fill"], [data-render-role~="stroke"], [data-render-role~="geometry-effect"]')] : [node];
+            geometry.forEach((item) => {
+                if(target.type === "rectangle") {
+                    setAttribute(item, "x", target.x);
+                    setAttribute(item, "y", target.y);
+                    setAttribute(item, "width", target.width);
+                    setAttribute(item, "height", target.height);
+                } else {
+                    setAttribute(item, "cx", target.centerX);
+                    setAttribute(item, "cy", target.centerY);
+                    setAttribute(item, "rx", target.radiusX);
+                    setAttribute(item, "ry", target.radiusY);
+                }
+            });
+            return;
+        }
+        if(target instanceof TextElement) {
+            setAttribute(node, "x", target.x);
+            setAttribute(node, "y", target.y);
+            node.querySelectorAll<SVGElement>("tspan").forEach((span) => setAttribute(span, "x", target.x));
+        }
+    }
+
     private writeGradients(target: AnyElement): void {
         const settings = target.settings as Record<string, unknown>;
         gradientPaints(settings).forEach((paint) => {
             const gradient = this.node(paint.id);
             if(!gradient) return;
+            setAttribute(gradient, "gradientTransform", gradientTransformValue(paint));
             Object.entries(paint.coordinates).forEach(([key, value]) => setAttribute(gradient, key, value));
             paint.stops.forEach((stop) => {
                 const node = this.node(stop.id);
@@ -126,7 +150,7 @@ export class ImperativeSvgRenderer {
 function renderDomain(property: string): RenderDomain {
     if(property === "visible") return "visibility";
     if(property.startsWith("transform.") || property.startsWith("motion.")) return "transform";
-    if(property.startsWith("path.points.") || property === "path.drawProgress") return "geometry";
+    if(property.startsWith("geometry.") || property.startsWith("path.points.") || property === "path.drawProgress") return "geometry";
     if(property.includes(".gradient.")) return "gradient";
     return "appearance";
 }

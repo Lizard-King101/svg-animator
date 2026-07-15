@@ -187,6 +187,10 @@ export function semanticPartnerProperty(property: string): string | undefined {
         "transform.originY": "transform.originX",
         "motion.offsetX": "motion.offsetY",
         "motion.offsetY": "motion.offsetX",
+        "geometry.x": "geometry.y",
+        "geometry.y": "geometry.x",
+        "geometry.width": "geometry.height",
+        "geometry.height": "geometry.width",
     };
     if(fixed[property]) return fixed[property];
     const point = /^(path\.points\.[^.]+)\.(x|y)$/.exec(property);

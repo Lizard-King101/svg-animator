@@ -2,30 +2,28 @@ import { Injectable } from "@angular/core";
 import { AnimationPlaybackService } from "./animation-playback.service";
 import { EditorService } from "./editor.service";
 import { ANIMATABLE_PROPERTIES } from "../editor/objects/animation.object";
-import { pathPointAnimationProperty, readAnimationProperty } from "../editor/objects/animation-targets";
-import { Path } from "../editor/objects/elements/path.object";
-import { gradientAnimationProperties } from "../editor/objects/paint.object";
+import { geometryAnimationValues, readAnimationProperty } from "../editor/objects/animation-targets";
 import { AnyElement } from "../editor/objects/svg.object";
 
 /** Converts direct canvas edits into animation keyframes at gesture boundaries. */
 @Injectable()
 export class AnimationGestureService {
     private transformStart?: AnimationTransformDragStart;
-    private pathPointStart?: AnimationPathPointDragStart;
-    private gradientStart?: AnimationGradientDragStart;
+    private geometryStart?: AnimationGeometryDragStart;
 
     constructor(private editor: EditorService, private animation: AnimationPlaybackService) {}
 
     begin(): void {
         this.captureAnimationTransformDragStart();
-        this.captureAnimationPathPointDragStart();
-        this.captureAnimationGradientDragStart();
+        this.captureAnimationGeometryDragStart();
     }
 
     end(): void {
-        this.commitAnimationTransformDrag();
-        this.commitAnimationPathPointDrag();
-        this.commitAnimationGradientDrag();
+        const element = this.editor.selectedElement;
+        const transformValues = element ? this.transformAnimationValues(element) : undefined;
+        const geometryValues = element ? geometryAnimationValues(element) : undefined;
+        this.commitAnimationTransformDrag(transformValues);
+        this.commitAnimationGeometryDrag(geometryValues);
     }
 
     private captureAnimationTransformDragStart() {
@@ -40,18 +38,14 @@ export class AnimationGestureService {
         };
     }
 
-    private commitAnimationTransformDrag() {
+    private commitAnimationTransformDrag(capturedValues?: Record<string, number>) {
         const start = this.transformStart;
         this.transformStart = undefined;
         if(this.animation.mode !== 'animate' || !start || this.editor.selectedElement !== start.element) {
             return;
         }
 
-        if(start.element instanceof Path && this.pathPointStart?.path === start.element && this.pathPointValuesChanged(this.pathPointStart)) {
-            return;
-        }
-
-        const currentValues = this.transformAnimationValues(start.element);
+        const currentValues = capturedValues ?? this.transformAnimationValues(start.element);
         ANIMATABLE_PROPERTIES
             .filter((definition) => definition.property.startsWith('transform.'))
             .forEach((definition) => {
@@ -65,54 +59,22 @@ export class AnimationGestureService {
             });
     }
 
-    private captureAnimationPathPointDragStart() {
-        if(this.animation.mode !== 'animate' || !(this.editor.selectedElement instanceof Path)) {
-            this.pathPointStart = undefined;
-            return;
-        }
-
-        this.pathPointStart = {
-            path: this.editor.selectedElement,
-            values: this.pathPointAnimationValues(this.editor.selectedElement),
-        };
+    private captureAnimationGeometryDragStart(): void {
+        const element = this.editor.selectedElement;
+        this.geometryStart = this.animation.mode === "animate" && element
+            ? { element, values: geometryAnimationValues(element) }
+            : undefined;
     }
 
-    private commitAnimationPathPointDrag() {
-        const start = this.pathPointStart;
-        this.pathPointStart = undefined;
-        if(this.animation.mode !== 'animate' || !start || this.editor.selectedElement !== start.path) {
-            return;
-        }
-
-        const currentValues = this.pathPointAnimationValues(start.path);
-        const changed: Array<{ id: string; axis: 'x' | 'y'; value: number; baseline: number }> = [];
-        Object.entries(currentValues).forEach(([id, current]) => {
-            const baseline = start.values[id];
-            if(!baseline) {
-                return;
-            }
-
-            if(Math.abs(current.x - baseline.x) >= 0.0005) {
-                changed.push({ id, axis: 'x', value: current.x, baseline: baseline.x });
-            }
-
-            if(Math.abs(current.y - baseline.y) >= 0.0005) {
-                changed.push({ id, axis: 'y', value: current.y, baseline: baseline.y });
-            }
-        });
-
-        if(changed.length === 0) {
-            return;
-        }
-
-        changed.forEach((change) => {
-            this.animation.upsertKeyframe(
-                start.path,
-                pathPointAnimationProperty(change.id, change.axis),
-                'number',
-                change.value,
-                change.baseline
-            );
+    private commitAnimationGeometryDrag(capturedValues?: Record<string, number>): void {
+        const start = this.geometryStart;
+        this.geometryStart = undefined;
+        if(this.animation.mode !== "animate" || !start || this.editor.selectedElement !== start.element) return;
+        const current = capturedValues ?? geometryAnimationValues(start.element);
+        Object.entries(current).forEach(([property, value]) => {
+            const baseline = start.values[property];
+            if(baseline == null || Math.abs(value - baseline) < 0.0005) return;
+            this.animation.upsertKeyframe(start.element, property, "number", value, baseline);
         });
     }
 
@@ -121,6 +83,8 @@ export class AnimationGestureService {
         ANIMATABLE_PROPERTIES
             .filter((definition) => definition.property.startsWith('transform.'))
             .forEach((definition) => {
+                if(definition.property === "transform.originX" && element.transform.originX == null) return;
+                if(definition.property === "transform.originY" && element.transform.originY == null) return;
                 const value = readAnimationProperty(element, definition.property);
                 if(typeof value === 'number' && Number.isFinite(value)) {
                     values[definition.property] = value;
@@ -129,56 +93,7 @@ export class AnimationGestureService {
         return values;
     }
 
-    private pathPointValuesChanged(start: AnimationPathPointDragStart): boolean {
-        const currentValues = this.pathPointAnimationValues(start.path);
-        return Object.entries(currentValues).some(([id, current]) => {
-            const baseline = start.values[id];
-            return !!baseline && (
-                Math.abs(current.x - baseline.x) >= 0.0005 ||
-                Math.abs(current.y - baseline.y) >= 0.0005
-            );
-        });
-    }
-
-    private pathPointAnimationValues(path: Path): Record<string, { x: number; y: number }> {
-        const values: Record<string, { x: number; y: number }> = {};
-        path.pathPoints().forEach((point) => {
-            values[point.id] = { x: point.x, y: point.y };
-        });
-        return values;
-    }
-
-    private captureAnimationGradientDragStart() {
-        const element = this.editor.selectedElement;
-        if(this.animation.mode !== 'animate' || !element) {
-            this.gradientStart = undefined;
-            return;
-        }
-        const values: Record<string, number> = {};
-        gradientAnimationProperties(element.settings as Record<string, unknown>)
-            .filter((definition) => !definition.property.includes('.stops.'))
-            .forEach((definition) => {
-                const value = readAnimationProperty(element, definition.property);
-                if(typeof value === 'number') values[definition.property] = value;
-            });
-        this.gradientStart = Object.keys(values).length ? { element, values } : undefined;
-    }
-
-    private commitAnimationGradientDrag() {
-        const start = this.gradientStart;
-        this.gradientStart = undefined;
-        if(this.animation.mode !== 'animate' || !start || this.editor.selectedElement !== start.element) return;
-        const changes = Object.entries(start.values).flatMap(([property, baseline]) => {
-            const value = readAnimationProperty(start.element, property);
-            if(typeof value === 'number' && Math.abs(value - baseline) >= 0.0005) {
-                return [{ property, baseline, value }];
-            }
-            return [];
-        });
-        changes.forEach(({ property, baseline, value }) => this.animation.upsertKeyframe(start.element, property, 'number', value, baseline));
-    }
 }
 
 interface AnimationTransformDragStart { element: AnyElement; values: Record<string, number> }
-interface AnimationPathPointDragStart { path: Path; values: Record<string, { x: number; y: number }> }
-interface AnimationGradientDragStart { element: AnyElement; values: Record<string, number> }
+interface AnimationGeometryDragStart { element: AnyElement; values: Record<string, number> }

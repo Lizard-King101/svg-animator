@@ -1,31 +1,31 @@
 <ng-container *ngIf="editor.inspectedElement">
   <div class="panel-header">Properties</div>
-  <div class="transform-section" *ngIf="asShape(editor.inspectedElement) as selectedShape">
+  <div class="transform-section" *ngIf="asFrameElement(editor.inspectedElement) as frameElement">
     <div class="transform-title">Frame</div>
     <div class="transform-grid">
       <label>
         <span>X</span>
         <input type="number"
-               [ngModel]="shapeFrameValue(selectedShape, 'x')"
-               (ngModelChange)="setShapeFrameValue(selectedShape, 'x', $event)" />
+               [ngModel]="frameValue(frameElement, 'x')"
+               (ngModelChange)="setFrameValue(frameElement, 'x', $event)" />
       </label>
       <label>
         <span>Y</span>
         <input type="number"
-               [ngModel]="shapeFrameValue(selectedShape, 'y')"
-               (ngModelChange)="setShapeFrameValue(selectedShape, 'y', $event)" />
+               [ngModel]="frameValue(frameElement, 'y')"
+               (ngModelChange)="setFrameValue(frameElement, 'y', $event)" />
       </label>
-      <label>
+      <label *ngIf="frameFieldSupported(frameElement, 'width')">
         <span>W</span>
         <input type="number" min="1"
-               [ngModel]="shapeFrameValue(selectedShape, 'width')"
-               (ngModelChange)="setShapeFrameValue(selectedShape, 'width', $event)" />
+               [ngModel]="frameValue(frameElement, 'width')"
+               (ngModelChange)="setFrameValue(frameElement, 'width', $event)" />
       </label>
-      <label>
+      <label *ngIf="frameFieldSupported(frameElement, 'height')">
         <span>H</span>
         <input type="number" min="1"
-               [ngModel]="shapeFrameValue(selectedShape, 'height')"
-               (ngModelChange)="setShapeFrameValue(selectedShape, 'height', $event)" />
+               [ngModel]="frameValue(frameElement, 'height')"
+               (ngModelChange)="setFrameValue(frameElement, 'height', $event)" />
       </label>
     </div>
   </div>
@@ -58,7 +58,7 @@
     </ng-container>
   </div>
   <div class="transform-section">
-    <div class="transform-title">Offset</div>
+    <div class="transform-title">Transform</div>
     <div class="transform-grid">
       <label>
         <span>Offset X</span>

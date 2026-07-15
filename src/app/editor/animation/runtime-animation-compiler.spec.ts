@@ -72,4 +72,13 @@ describe("runtime animation compiler", () => {
         expect(compiled.tracks[0].kind).toBe("color");
         expect(compiled.diagnostics).toEqual([]);
     });
+
+    it("accepts additive geometry frame channels without changing the runtime format", () => {
+        const input = document();
+        input.animation!.tracks[0].property = "geometry.width";
+        const compiled = compileRuntimeAnimation(input);
+        expect(compiled.properties).toEqual(["geometry.width"]);
+        expect(compiled.tracks[0].kind).toBe("number");
+        expect(compiled.diagnostics).toEqual([]);
+    });
 });

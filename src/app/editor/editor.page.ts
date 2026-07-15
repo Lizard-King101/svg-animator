@@ -22,6 +22,7 @@ import { EditorContextMenuComponent } from "../_components/editor-context-menu/e
 import { NewProjectDialogComponent } from "../_components/new-project-dialog/new-project-dialog.component";
 import { ExportDialogComponent } from "../_components/export-dialog/export-dialog.component";
 import { CanvasGuidesComponent } from "../_components/canvas-guides/canvas-guides.component";
+import { SVGEditorOverlayComponent } from "../_components/svg-editor-overlay/svg-editor-overlay.component";
 import { EditorUiStateService } from "../_services/editor-ui-state.service";
 import { PaintEditingService } from "../_services/paint-editing.service";
 import { isEditableEventTarget } from "./editable-event-target";
@@ -42,6 +43,7 @@ import { isEditableEventTarget } from "./editable-event-target";
         NewProjectDialogComponent,
         ExportDialogComponent,
         CanvasGuidesComponent,
+        SVGEditorOverlayComponent,
     ],
     providers: [
         EditorService,
@@ -60,7 +62,7 @@ import { isEditableEventTarget } from "./editable-event-target";
     encapsulation: ViewEncapsulation.None,
 })
 export class EditorPage implements AfterViewInit {
-    @ViewChild("canvas") canvas?: ElementRef<SVGElement>;
+    @ViewChild("canvas", { read: ElementRef }) canvas?: ElementRef<SVGElement>;
 
     @HostListener('document:keydown', ['$event']) handleKeyDown(event: KeyboardEvent) {
         if(this.ui.activeDialog) {

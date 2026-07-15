@@ -72,13 +72,17 @@ export interface AnimatablePropertyDefinition {
     property: string;
     label: string;
     valueType: AnimationValueType;
-    group: "transform" | "style" | "visibility" | "path";
+    group: "transform" | "geometry" | "style" | "visibility" | "path";
     mvp: boolean;
 }
 
 export type AnimationSave = AnimationDocument;
 
 export const ANIMATABLE_PROPERTIES: readonly AnimatablePropertyDefinition[] = [
+    { property: "geometry.x", label: "Frame X", valueType: "number", group: "geometry", mvp: true },
+    { property: "geometry.y", label: "Frame Y", valueType: "number", group: "geometry", mvp: true },
+    { property: "geometry.width", label: "Frame Width", valueType: "number", group: "geometry", mvp: true },
+    { property: "geometry.height", label: "Frame Height", valueType: "number", group: "geometry", mvp: true },
     { property: "transform.translateX", label: "Offset X", valueType: "number", group: "transform", mvp: true },
     { property: "transform.translateY", label: "Offset Y", valueType: "number", group: "transform", mvp: true },
     { property: "transform.scaleX", label: "Scale X", valueType: "number", group: "transform", mvp: true },

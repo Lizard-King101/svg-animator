@@ -16,10 +16,12 @@ import { pinTransformOrigin, resolvedOrigin } from "../../editor/objects/element
 import { ElementAttribute } from "../../editor/objects/elements/element";
 import { Path } from "../../editor/objects/elements/path.object";
 import { Shape } from "../../editor/objects/elements/shape.object";
+import { TextElement } from "../../editor/objects/elements/text.object";
+import { frameFieldSupported, frameFieldValue, GeometryFrameField, setGeometryFrameField } from "../../editor/objects/element-geometry";
 import { Paint, PaintSettingKey } from "../../editor/objects/paint.object";
 import { Point } from "../../editor/objects/point.object";
 import { AnyElement } from "../../editor/objects/svg.object";
-import { readAnimationProperty } from "../../editor/objects/animation-targets";
+import { geometryAnimationValues, readAnimationProperty } from "../../editor/objects/animation-targets";
 import { PaintEditorComponent } from "../paint-editor/paint-editor.component";
 import { PaintEditorChange } from "../paint-editor/paint-editor.types";
 import { PaintEditingService } from "../../_services/paint-editing.service";
@@ -50,6 +52,10 @@ export class PropertiesPanelComponent {
 
     asPath(element: AnyElement | undefined): Path | null {
         return element instanceof Path ? element : null;
+    }
+
+    asFrameElement(element: AnyElement | undefined): Path | Shape | TextElement | null {
+        return element instanceof Path || element instanceof Shape || element instanceof TextElement ? element : null;
     }
 
     asStrokeElement(element: AnyElement | undefined): Path | Shape | null {
@@ -189,27 +195,40 @@ export class PropertiesPanelComponent {
     }
 
     setShapeFrameValue(shape: Shape, field: ShapeFrameField, value: number | string | null) {
+        this.setFrameValue(shape, field, value);
+    }
+
+    frameValue(element: Path | Shape | TextElement, field: GeometryFrameField): number {
+        return frameFieldValue(element, field) ?? 0;
+    }
+
+    frameFieldSupported(element: Path | Shape | TextElement, field: GeometryFrameField): boolean {
+        return frameFieldSupported(element, field);
+    }
+
+    setFrameValue(element: Path | Shape | TextElement, field: GeometryFrameField, value: number | string | null) {
         const numeric = typeof value === 'number' ? value : Number(value);
-        if(!Number.isFinite(numeric)) {
-            return;
+        if(!Number.isFinite(numeric)) return;
+        const baseline = this.frameAnimationValues(element);
+        if(!setGeometryFrameField(element, field, numeric)) return;
+        if(this.animation.mode === "animate") {
+            const current = this.frameAnimationValues(element);
+            Object.entries(current).forEach(([property, next]) => {
+                const start = baseline[property];
+                if(start == null || Math.abs(next - start) < 0.0005) return;
+                this.animation.upsertKeyframe(element, property, "number", next, start);
+            });
         }
-
-        switch(field) {
-            case 'x':
-                shape.position.x = numeric;
-                break;
-            case 'y':
-                shape.position.y = numeric;
-                break;
-            case 'width':
-                shape.settings.width = Math.max(1, numeric);
-                break;
-            case 'height':
-                shape.settings.height = Math.max(1, numeric);
-                break;
-        }
-
         this.scheduleAttributeSnapshot();
+    }
+
+    private frameAnimationValues(element: AnyElement): Record<string, number> {
+        const values = geometryAnimationValues(element);
+        ["transform.translateX", "transform.translateY", "transform.originX", "transform.originY"].forEach((property) => {
+            const value = readAnimationProperty(element, property);
+            if(typeof value === "number") values[property] = value;
+        });
+        return values;
     }
 
     selectedCornerAnchor(path: Path): Point | null {

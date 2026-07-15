@@ -8,7 +8,6 @@ import { TextElement } from "src/app/editor/objects/elements/text.object";
 import { motionAdjustedMatrix } from "src/app/editor/objects/motion-path.object";
 import { AnyElement, ImportedSourceNode } from "src/app/editor/objects/svg.object";
 import { matrixToSvg } from "src/app/editor/objects/transform.object";
-import { SVGEditorOverlayComponent } from "../svg-editor-overlay/svg-editor-overlay.component";
 import { ImportedSVGSourceDirective } from "./imported-svg-source.directive";
 import { GradientPaint, gradientPaints, gradientTransformValue, Paint, paintOpacity, paintSVGValue } from "src/app/editor/objects/paint.object";
 import { effectiveStrokeAlignment, StrokeAlignment, strokeDasharrayAttr } from "src/app/editor/objects/stroke-style.object";
@@ -16,11 +15,14 @@ import { effectiveStrokeAlignment, StrokeAlignment, strokeDasharrayAttr } from "
 @Component({
     standalone: true,
     selector: '[display]',
-    imports: [NgFor, NgIf, NgTemplateOutlet, SVGEditorOverlayComponent, ImportedSVGSourceDirective],
+    exportAs: 'svgDisplay',
+    imports: [NgFor, NgIf, NgTemplateOutlet, ImportedSVGSourceDirective],
     templateUrl: 'svg-display.component.html',
     styles: ':host { user-select: none; }'
 })
 export class SVGDisplay implements AfterViewInit {
+    get nativeElement(): SVGElement { return this.host.nativeElement; }
+
     @HostBinding('attr.width') get width() { return this.editor.selectedSVG?.width }
     @HostBinding('attr.height') get height() { return this.editor.selectedSVG?.height }
     @HostBinding('attr.viewBox') get viewbox() { return '0 0 ' + this.editor.selectedSVG?.width + ' ' + this.editor.selectedSVG?.height }

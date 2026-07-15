@@ -3,7 +3,7 @@ import { Line } from "src/app/editor/objects/line.object";
 import { Path, PathContour } from "src/app/editor/objects/elements/path.object";
 import { Point } from "src/app/editor/objects/point.object";
 import { AnyElement } from "src/app/editor/objects/svg.object";
-import { combinedMatrixFor, parentMatrixFor, pinAncestorTransformOrigins, pinTransformOrigin } from "src/app/editor/objects/element-bounds";
+import { combinedMatrixFor, pinAncestorTransformOrigins, pinTransformOrigin } from "src/app/editor/objects/element-bounds";
 import { applyMatrix, invertMatrix } from "src/app/editor/objects/transform.object";
 import { EditorService } from "../editor.service";
 import { Tool } from "./tool";
@@ -20,7 +20,6 @@ export class SelectTool extends Tool {
     canDeselect: boolean = false;
     movedElement: boolean = false;
 
-    movingElement: boolean = false;
     moveStart?: Point;
     movingPoint?: Point;
     movingPointRole?: 'anchor' | 'control-start' | 'control-end' | 'anchor-convert';
@@ -71,12 +70,6 @@ export class SelectTool extends Tool {
         }
 
         const inverse = invertMatrix(combinedMatrixFor(this.rootElements(), this._editor.selectedElement));
-        const local = applyMatrix(inverse, point.x, point.y);
-        return new Point(local.x, local.y);
-    }
-
-    private canvasToParentLocal(element: AnyElement, point: Point): Point {
-        const inverse = invertMatrix(parentMatrixFor(this.rootElements(), element));
         const local = applyMatrix(inverse, point.x, point.y);
         return new Point(local.x, local.y);
     }
@@ -319,13 +312,11 @@ export class SelectTool extends Tool {
         if(idTarget?.id) {
             let foundElement = this._editor.findElement(idTarget.id);
             if(foundElement && !foundElement.locked && foundElement.visible) {
-                this.movingElement = true;
-                pinAncestorTransformOrigins(this.rootElements(), foundElement);
-                this.moveStart = this.canvasToParentLocal(foundElement, canvasPoint);
                 this._editor.selectedElement = foundElement;
                 this._editor.selectedPathAnchor = undefined;
                 this._editor.selectedPathLine = undefined;
                 this._editor.selectedPathLines = [];
+                this.transformInteraction.begin("move", event);
             }
         } else {
             this.canDeselect = true;
@@ -419,19 +410,9 @@ export class SelectTool extends Tool {
             return;
         }
 
-        if(this.moveStart && this.movingElement && this._editor.selectedElement && this._editor.selectedSVG) {
-            let pos = this.canvasToParentLocal(this._editor.selectedElement, this._editor.toCanvasPoint(event.clientX, event.clientY));
-            let delta = pos.subtract(this.moveStart);
-            this.moveStart = pos;
-            this._editor.selectedElement.transform.translateX += delta.x;
-            this._editor.selectedElement.transform.translateY += delta.y;
-            this.movedElement = true;
-            this.canDeselect = false;
-        }
     }
 
     override up(event: MouseEvent) {
-        this.movingElement = false;
         this.transformInteraction.end();
         this.gradientDrag = undefined;
         this.movingPoint = undefined;
@@ -448,6 +429,20 @@ export class SelectTool extends Tool {
             this.canDeselect = false;
         }
         this.movedElement = false;
+    }
+
+    override reset(): void {
+        this.transformInteraction.cancel();
+        this.gradientDrag = undefined;
+        this.movingPoint = undefined;
+        this.movingLines = undefined;
+        this.movedElement = false;
+        this.canDeselect = false;
+    }
+
+    override deselect(): void {
+        this.reset();
+        super.deselect();
     }
 
     override doubleClick(event: MouseEvent): void {
@@ -538,6 +533,11 @@ export class SelectTool extends Tool {
     }
 
     override keyPressed(key: string): void {
+        if(key === 'Escape' && this.transformInteraction.cancel()) {
+            this.movedElement = false;
+            this.canDeselect = false;
+            return;
+        }
         if(!(this._editor.selectedElement instanceof Path) || this._editor.selectedElement.locked || !this._editor.selectedElement.visible) {
             return;
         }
