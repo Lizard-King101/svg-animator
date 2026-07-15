@@ -79,8 +79,8 @@ export interface AnimatablePropertyDefinition {
 export type AnimationSave = AnimationDocument;
 
 export const ANIMATABLE_PROPERTIES: readonly AnimatablePropertyDefinition[] = [
-    { property: "geometry.x", label: "Frame X", valueType: "number", group: "geometry", mvp: true },
-    { property: "geometry.y", label: "Frame Y", valueType: "number", group: "geometry", mvp: true },
+    { property: "geometry.x", label: "Position X", valueType: "number", group: "geometry", mvp: true },
+    { property: "geometry.y", label: "Position Y", valueType: "number", group: "geometry", mvp: true },
     { property: "geometry.width", label: "Frame Width", valueType: "number", group: "geometry", mvp: true },
     { property: "geometry.height", label: "Frame Height", valueType: "number", group: "geometry", mvp: true },
     { property: "transform.translateX", label: "Offset X", valueType: "number", group: "transform", mvp: true },
@@ -287,6 +287,38 @@ export function temporalTangentsForPreset(
         case "hold": return { out: { speed: 0, influence: 0 }, in: { speed: 0, influence: 0 } };
         default: return { out: { speed: slope, influence: 1 / 3 }, in: { speed: slope, influence: 1 / 3 } };
     }
+}
+
+/** Materializes a preset into the same temporal representation edited by the speed graph. */
+export function applyEasingPresetToKeyframe(track: AnimationTrack, keyframe: Keyframe, type: EasingType): void {
+    keyframe.easing = { type };
+    const index = track.keyframes.indexOf(keyframe);
+    const next = index >= 0 ? track.keyframes[index + 1] : undefined;
+    if(!next) {
+        if(keyframe.temporal?.out) {
+            delete keyframe.temporal.out;
+            if(!keyframe.temporal.in) keyframe.temporal = undefined;
+        }
+        return;
+    }
+
+    const preset = temporalTangentsForPreset(keyframe.easing, Number(keyframe.value), Number(next.value), next.time - keyframe.time);
+    keyframe.temporal = withTemporalHandle(keyframe.temporal, "out", preset.out);
+    next.temporal = withTemporalHandle(next.temporal, "in", preset.in);
+}
+
+function withTemporalHandle(
+    temporal: TemporalTangents | undefined,
+    side: "in" | "out",
+    handle: TemporalHandle,
+): TemporalTangents {
+    const next: TemporalTangents = {
+        ...temporal,
+        [side]: { ...handle },
+        linked: temporal?.linked ?? true,
+    };
+    if(next.in && next.out && Math.abs(next.in.speed - next.out.speed) > 0.000001) next.linked = false;
+    return next;
 }
 
 /** Sorts once and deterministically keeps the last key at a timestamp. */

@@ -21,7 +21,7 @@ import { frameFieldSupported, frameFieldValue, GeometryFrameField, setGeometryFr
 import { Paint, PaintSettingKey } from "../../editor/objects/paint.object";
 import { Point } from "../../editor/objects/point.object";
 import { AnyElement } from "../../editor/objects/svg.object";
-import { geometryAnimationValues, readAnimationProperty } from "../../editor/objects/animation-targets";
+import { geometryAnimationChanges, geometryAnimationValues, readAnimationProperty } from "../../editor/objects/animation-targets";
 import { PaintEditorComponent } from "../paint-editor/paint-editor.component";
 import { PaintEditorChange } from "../paint-editor/paint-editor.types";
 import { PaintEditingService } from "../../_services/paint-editing.service";
@@ -213,9 +213,7 @@ export class PropertiesPanelComponent {
         if(!setGeometryFrameField(element, field, numeric)) return;
         if(this.animation.mode === "animate") {
             const current = this.frameAnimationValues(element);
-            Object.entries(current).forEach(([property, next]) => {
-                const start = baseline[property];
-                if(start == null || Math.abs(next - start) < 0.0005) return;
+            geometryAnimationChanges(element, baseline, current).forEach(({ property, value: next, baseline: start }) => {
                 this.animation.upsertKeyframe(element, property, "number", next, start);
             });
         }

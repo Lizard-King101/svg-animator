@@ -1,4 +1,4 @@
-<div class="editor-root" (click)="editor.closeContextMenu()">
+<div class="editor-root" suppressPointerMovesDuringPlayback (click)="editor.closeContextMenu()">
   <div class="storage-warning" *ngIf="projectService.savingWarning">{{ projectService.savingWarning }}</div>
 
   <app-editor-header />

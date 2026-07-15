@@ -81,6 +81,28 @@ describe("SVGImporterService", () => {
         expect(commandPath.contours?.[0].closed).toBeTrue();
     });
 
+    it("namespaces source, generated, paint, and preserved IDs for document merging", () => {
+        const result = importer.import(`
+            <svg id="icon" xmlns="http://www.w3.org/2000/svg" width="20" height="10">
+                <defs><linearGradient id="paint"><stop id="first-stop" offset="0" stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient></defs>
+                <rect id="shape" x="0" y="0" width="20" height="10" fill="url(#paint)"/>
+                <image id="preview" width="1" height="1" href="data:image/png;base64,AA=="/>
+            </svg>
+        `, { name: "Icon.svg", idNamespace: "asset-7" });
+        const shape = result.document.elements[0] as ShapeSave;
+        const paint = shape.settings.fill as GradientPaintSave;
+
+        expect(result.document.id).toBe("asset-7-icon");
+        expect(shape.id).toBe("asset-7-shape");
+        expect(shape.name).toBe("shape");
+        expect(shape.position.id).toMatch(/^asset-7-point-/);
+        expect(paint.id).toBe("asset-7-paint");
+        expect(paint.stops[0].id).toBe("asset-7-first-stop");
+        expect(result.document.importedSourceNodes?.[0].id).toMatch(/^asset-7-source-/);
+        expect(result.document.importedSourceNodes?.[0].markup).toContain('id="asset-7-preview"');
+        expect(result.sanitizedMarkup).toContain('fill="url(#asset-7-paint)"');
+    });
+
     it("preserves safe unsupported source while discarding unsafe behavior", () => {
         const result = importer.import(unsafeFixture.source, { name: unsafeFixture.name });
 

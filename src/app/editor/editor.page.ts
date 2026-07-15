@@ -25,7 +25,9 @@ import { CanvasGuidesComponent } from "../_components/canvas-guides/canvas-guide
 import { SVGEditorOverlayComponent } from "../_components/svg-editor-overlay/svg-editor-overlay.component";
 import { EditorUiStateService } from "../_services/editor-ui-state.service";
 import { PaintEditingService } from "../_services/paint-editing.service";
+import { CurrentDocumentSVGImportService } from "../_services/current-document-svg-import.service";
 import { isEditableEventTarget } from "./editable-event-target";
+import { PlaybackPointerGuardDirective } from "./playback-pointer-guard.directive";
 
 @Component({
     standalone: true,
@@ -44,6 +46,7 @@ import { isEditableEventTarget } from "./editable-event-target";
         ExportDialogComponent,
         CanvasGuidesComponent,
         SVGEditorOverlayComponent,
+        PlaybackPointerGuardDirective,
     ],
     providers: [
         EditorService,
@@ -56,6 +59,7 @@ import { isEditableEventTarget } from "./editable-event-target";
         LayerCommandService,
         EditorUiStateService,
         PaintEditingService,
+        CurrentDocumentSVGImportService,
     ],
     templateUrl: 'editor.page.html',
     styleUrls: ['editor.page.scss'],

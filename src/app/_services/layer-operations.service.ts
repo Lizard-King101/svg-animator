@@ -129,6 +129,7 @@ export class LayerOperationsService {
                         time: keyframe.time,
                         value: cloneValue(keyframe.value),
                         easing: cloneValue(keyframe.easing),
+                        temporal: cloneValue(keyframe.temporal),
                     })),
                 }];
             });

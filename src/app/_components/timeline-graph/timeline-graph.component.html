@@ -1,4 +1,4 @@
-<div class="speed-graph-surface" *ngIf="visibleIndex == 0"
+<div class="speed-graph-surface"
      [style.width.px]="timeline.timelineContentWidth" [style.height.px]="timeline.graphHeight()"
      (pointerdown)="timeline.beginScrub($event)">
   <svg [attr.width]="timeline.timelineContentWidth" [attr.height]="timeline.graphHeight()" [attr.viewBox]="'0 0 ' + timeline.timelineContentWidth + ' ' + timeline.graphHeight()">

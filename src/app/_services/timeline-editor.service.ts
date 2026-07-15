@@ -2,7 +2,7 @@ import { ChangeDetectorRef, ElementRef, EventEmitter, Injectable, NgZone, OnDest
 import { AnimationPlaybackService } from "src/app/_services/animation-playback.service";
 import { EditorService } from "src/app/_services/editor.service";
 import { EditorPreferencesService } from "src/app/_services/editor-preferences.service";
-import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, AnimationTrack, EasingType, evaluateTemporalSpeed, Keyframe, makeAnimationId, temporalTangentsForPreset, TemporalHandle } from "src/app/editor/objects/animation.object";
+import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, AnimationTrack, applyEasingPresetToKeyframe, EasingType, evaluateTemporalSpeed, Keyframe, makeAnimationId, temporalTangentsForPreset, TemporalHandle } from "src/app/editor/objects/animation.object";
 import { findAnimationTarget, matchingAnimationProperty, parsePathPointProperty, pathPointAnimationProperty, readAnimationProperty } from "src/app/editor/objects/animation-targets";
 import { Color } from "src/app/editor/objects/color.object";
 import { DocumentMutationService } from "src/app/_services/document-mutation.service";
@@ -40,6 +40,14 @@ const PATH_SHAPE_PROPERTY: AnimatablePropertyDefinition = {
     mvp: true,
 };
 
+const UNIFORM_SCALE_PROPERTY: AnimatablePropertyDefinition = {
+    property: "transform.scale",
+    label: "Scale",
+    valueType: "number",
+    group: "transform",
+    mvp: true,
+};
+
 @Injectable()
 export class TimelineEditorService implements OnDestroy {
     animationChange = new EventEmitter<void>();
@@ -50,7 +58,9 @@ export class TimelineEditorService implements OnDestroy {
     get selectingKeyframes() { return !!this.marquee; }
     get panningTimeline() { return !!this.viewportPan; }
 
-    readonly properties = ANIMATABLE_PROPERTIES;
+    readonly properties = ANIMATABLE_PROPERTIES.flatMap((property) => property.property === "transform.scaleX"
+        ? [UNIFORM_SCALE_PROPERTY, property]
+        : [property]);
     readonly easingOptions: readonly EasingToolbarOption[] = [
         { type: "linear", label: "Linear", icon: keyframeEasingIcon("linear") },
         { type: "ease-in", label: "Ease In", icon: keyframeEasingIcon("ease-in") },
@@ -99,6 +109,7 @@ export class TimelineEditorService implements OnDestroy {
     private layerSummaryCache = new Map<string, { revision: number; keyframes: TimelineKeyframe[] }>();
     private rowCacheKey = "";
     private rowCache: TimelineRow[] = [];
+    private scaleLinkOverrides = new Map<string, boolean>();
     private historyRestoreSubscription: Subscription;
 
     constructor(
@@ -118,6 +129,7 @@ export class TimelineEditorService implements OnDestroy {
             this.layerSummaryCache.clear();
             this.speedCurveCache.clear();
             this.colorCache.clear();
+            this.scaleLinkOverrides.clear();
             this.changeDetector.markForCheck();
         });
     }
@@ -134,7 +146,7 @@ export class TimelineEditorService implements OnDestroy {
 
     get rows(): TimelineRow[] {
         const elements = this.editor.selectedSVG?.elements ?? [];
-        const cacheKey = `${this.editor.selectedSVG?.id ?? ""}|${[...this.expandedLayerIds].sort().join(",")}|${this.rowStructureKey(elements)}`;
+        const cacheKey = `${this.editor.selectedSVG?.id ?? ""}|${this.animation.revision}|${[...this.expandedLayerIds].sort().join(",")}|${this.rowStructureKey(elements)}`;
         if(cacheKey === this.rowCacheKey) return this.rowCache;
         this.rowCacheKey = cacheKey;
         this.rowCache = this.editing.projectRows(
@@ -174,7 +186,8 @@ export class TimelineEditorService implements OnDestroy {
             const first = this.animation.tracksForElement(row.element).find((track) => track.valueType === "number");
             if(first) {
                 this.selectedGraphTargetId = row.element.id;
-                this.selectedGraphProperty = first.property;
+                this.selectedGraphProperty = (first.property === "transform.scaleX" || first.property === "transform.scaleY")
+                    && this.elementScaleLinked(row.element) ? UNIFORM_SCALE_PROPERTY.property : first.property;
                 this.fitSpeed();
             }
         }
@@ -239,6 +252,7 @@ export class TimelineEditorService implements OnDestroy {
 
     keyframes(row: TimelineRow): TimelineKeyframe[] {
         if(row.type === "property") {
+            if(this.isUniformScaleRow(row)) return this.uniformScaleKeyframes(row.element);
             if(this.isPathShapeRow(row)) {
                 return this.pathShapeKeyframes(row.element);
             }
@@ -252,7 +266,8 @@ export class TimelineEditorService implements OnDestroy {
         const cached = this.layerSummaryCache.get(cacheKey);
         if(cached?.revision === this.animation.revision) return cached.keyframes;
         const summaries: TimelineKeyframe[] = [];
-        this.animation.tracksForElement(row.element)
+        this.summaryElements(row.element)
+            .flatMap((element) => this.animation.tracksForElement(element))
             .flatMap((track) => track.keyframes)
             .sort((a, b) => a.time - b.time)
             .forEach((keyframe) => {
@@ -272,6 +287,12 @@ export class TimelineEditorService implements OnDestroy {
         return summaries;
     }
 
+    private summaryElements(element: AnyElement): AnyElement[] {
+        return element instanceof Group
+            ? [element, ...element.elements.flatMap((child) => this.summaryElements(child))]
+            : [element];
+    }
+
     get visibleRows(): TimelineRow[] {
         const rows = this.rows;
         if(rows.length <= this.virtualCount) return rows;
@@ -287,12 +308,30 @@ export class TimelineEditorService implements OnDestroy {
 
     updateTimelineViewport(event: Event): void {
         const viewport = event.currentTarget as HTMLElement;
-        const rowStart = Math.max(0, Math.floor((viewport.scrollTop - 30) / 30) - 8);
+        this.updateLayerWindow(viewport.scrollTop, viewport.clientHeight - 30);
+        this.updateVisibleTime(viewport.scrollLeft, viewport.clientWidth, 360);
+    }
+
+    updateLayerViewport(event: Event): void {
+        const viewport = event.currentTarget as HTMLElement;
+        this.updateLayerWindow(viewport.scrollTop, viewport.clientHeight);
+    }
+
+    updateGraphViewport(event: Event): void {
+        const viewport = event.currentTarget as HTMLElement;
+        this.updateVisibleTime(viewport.scrollLeft, viewport.clientWidth, 0);
+    }
+
+    private updateLayerWindow(scrollTop: number, clientHeight: number): void {
+        const rowStart = Math.max(0, Math.floor(scrollTop / 30) - 8);
         this.virtualStart = Math.min(rowStart, Math.max(0, this.rows.length - this.virtualCount));
-        this.virtualCount = Math.max(40, Math.ceil(viewport.clientHeight / 30) + 16);
-        const timelineLeft = Math.max(0, viewport.scrollLeft - 360 - this.timePadding);
+        this.virtualCount = Math.max(40, Math.ceil(clientHeight / 30) + 16);
+    }
+
+    private updateVisibleTime(scrollLeft: number, clientWidth: number, layerWidth: number): void {
+        const timelineLeft = Math.max(0, scrollLeft - layerWidth - this.timePadding);
         this.visibleTimeStart = Math.max(0, timelineLeft / this.pixelsPerSecond - 0.5);
-        this.visibleTimeEnd = (timelineLeft + viewport.clientWidth + 360) / this.pixelsPerSecond + 0.5;
+        this.visibleTimeEnd = (timelineLeft + clientWidth + layerWidth) / this.pixelsPerSecond + 0.5;
     }
 
     visibleKeyframes(row: TimelineRow): TimelineKeyframe[] {
@@ -308,6 +347,7 @@ export class TimelineEditorService implements OnDestroy {
 
     toggleSurfaceMode(mode: "timeline" | "graph"): void {
         this.surfaceMode = mode;
+        this.virtualStart = 0;
         if(mode === "graph") {
             if(!this.selectedNumericRow()) {
                 const first = this.rows.find((row): row is PropertyTimelineRow => row.type === "property" && row.property.valueType === "number"
@@ -320,7 +360,9 @@ export class TimelineEditorService implements OnDestroy {
                     const track = this.editor.selectedSVG?.animation.tracks.find((candidate) => candidate.valueType === "number");
                     if(track) {
                         this.selectedGraphTargetId = track.targetId;
-                        this.selectedGraphProperty = track.property;
+                        const element = findAnimationTarget(this.editor.selectedSVG?.elements ?? [], track.targetId);
+                        this.selectedGraphProperty = element && (track.property === "transform.scaleX" || track.property === "transform.scaleY")
+                            && this.elementScaleLinked(element) ? UNIFORM_SCALE_PROPERTY.property : track.property;
                     }
                 }
             }
@@ -337,6 +379,9 @@ export class TimelineEditorService implements OnDestroy {
         const element = findAnimationTarget(this.editor.selectedSVG?.elements ?? [], this.selectedGraphTargetId ?? "");
         const track = this.editor.selectedSVG?.animation.tracks.find((candidate) => candidate.targetId === this.selectedGraphTargetId
             && candidate.property === this.selectedGraphProperty && candidate.valueType === "number");
+        if(element && this.selectedGraphProperty === UNIFORM_SCALE_PROPERTY.property && this.elementScaleLinked(element)) {
+            return { type: "property", element, depth: 1, property: UNIFORM_SCALE_PROPERTY };
+        }
         if(!element || !track) return undefined;
         return {
             type: "property",
@@ -349,6 +394,11 @@ export class TimelineEditorService implements OnDestroy {
     graphTracks(): GraphTrack[] {
         const row = this.selectedNumericRow();
         if(!row) return [];
+        if(this.isUniformScaleRow(row)) {
+            const track = this.animation.trackFor(row.element, "transform.scaleX")
+                ?? this.animation.trackFor(row.element, "transform.scaleY");
+            return track ? [{ track, label: UNIFORM_SCALE_PROPERTY.label, axis: "scalar", selected: true, color: "#a78bfa" }] : [];
+        }
         const primary = this.animation.trackFor(row.element, row.property.property);
         const partnerProperty = semanticPartnerProperty(row.property.property);
         const partner = partnerProperty ? this.animation.trackFor(row.element, partnerProperty) : undefined;
@@ -361,6 +411,14 @@ export class TimelineEditorService implements OnDestroy {
         const seen = new Set<string>();
         return (this.editor.selectedSVG?.animation.tracks ?? []).flatMap((track) => {
             if(track.targetId !== targetId || track.valueType !== "number" || seen.has(track.property)) return [];
+            const target = findAnimationTarget(this.editor.selectedSVG?.elements ?? [], track.targetId);
+            if(target && (track.property === "transform.scaleX" || track.property === "transform.scaleY") && this.elementScaleLinked(target)) {
+                if(seen.has(UNIFORM_SCALE_PROPERTY.property)) return [];
+                seen.add(UNIFORM_SCALE_PROPERTY.property);
+                seen.add("transform.scaleX");
+                seen.add("transform.scaleY");
+                return [{ property: UNIFORM_SCALE_PROPERTY.property, label: UNIFORM_SCALE_PROPERTY.label }];
+            }
             seen.add(track.property);
             return [{ property: track.property, label: this.propertyLabel(track.property) }];
         });
@@ -371,11 +429,13 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     selectGraphProperty(property: string): void {
-        this.selectedGraphProperty = property;
+        const target = findAnimationTarget(this.editor.selectedSVG?.elements ?? [], this.selectedGraphTargetId ?? "");
+        this.selectedGraphProperty = target && (property === "transform.scaleX" || property === "transform.scaleY")
+            && this.elementScaleLinked(target) ? UNIFORM_SCALE_PROPERTY.property : property;
         this.fitSpeed();
     }
 
-    graphHeight(): number { return Math.max(120, this.timelineHeight - 72); }
+    graphHeight(): number { return Math.max(120, this.timelineHeight - 82); }
     graphZeroY(): number { return this.graphSpeedY(0); }
     graphPlayheadX(): number { return this.timeToX(this.animation.currentTime); }
 
@@ -425,6 +485,7 @@ export class TimelineEditorService implements OnDestroy {
 
     graphHandleY(handle: GraphHandle): number { return this.graphSpeedY(handle.speed); }
     graphHandleDisplayY(handle: GraphHandle): number {
+        if(this.selectedGraphProperty === UNIFORM_SCALE_PROPERTY.property) return this.graphHandleY(handle);
         const axis = this.graphAxis(handle.track.property);
         return this.graphHandleY(handle) + (axis === "x" ? -5 : axis === "y" ? 5 : 0);
     }
@@ -481,6 +542,7 @@ export class TimelineEditorService implements OnDestroy {
             latestX: event.clientX,
             latestY: event.clientY,
             moved: false,
+            uniformScale: this.selectedGraphProperty === UNIFORM_SCALE_PROPERTY.property,
             capture: (event.currentTarget as Element).closest<HTMLElement>(".speed-graph-surface") ?? undefined,
             snapshots: selected.map((candidate) => ({ handle: candidate, temporal: originalTemporal.get(this.graphHandleKey(candidate)) })),
         };
@@ -510,7 +572,14 @@ export class TimelineEditorService implements OnDestroy {
         const moved = drag.moved;
         if(!moved) {
             drag.snapshots.forEach((snapshot) => snapshot.handle.keyframe.temporal = this.cloneValue(snapshot.temporal));
-            this.animation.invalidate(new Set(drag.snapshots.map((snapshot) => snapshot.handle.track.id)));
+            const trackIds = new Set(drag.snapshots.map((snapshot) => snapshot.handle.track.id));
+            if(drag.uniformScale) {
+                drag.snapshots.forEach((snapshot) => {
+                    const partner = this.mirrorScaleTrack(snapshot.handle.track);
+                    if(partner) trackIds.add(partner.id);
+                });
+            }
+            this.animation.invalidate(trackIds);
             this.animation.previewAt(this.animation.currentTime);
         }
         try { drag.capture?.releasePointerCapture(event.pointerId); } catch {}
@@ -526,7 +595,12 @@ export class TimelineEditorService implements OnDestroy {
         const handle = this.initializeGraphHandle(this.activeGraphHandle);
         handle[field] = field === "influence" ? Math.max(0, Math.min(1, numeric)) : numeric;
         this.linkGraphHandleSpeed(this.activeGraphHandle);
-        this.animation.invalidate([this.activeGraphHandle.track.id]);
+        const trackIds = new Set([this.activeGraphHandle.track.id]);
+        if(this.selectedGraphProperty === UNIFORM_SCALE_PROPERTY.property) {
+            const partner = this.mirrorScaleTrack(this.activeGraphHandle.track);
+            if(partner) trackIds.add(partner.id);
+        }
+        this.animation.invalidate(trackIds);
         this.animation.previewAt(this.animation.currentTime);
         this.animationChange.emit();
     }
@@ -540,6 +614,13 @@ export class TimelineEditorService implements OnDestroy {
         const source = temporal[active.side];
         const opposite = active.side === "in" ? temporal.out : temporal.in;
         if(source && opposite) opposite.speed = source.speed;
+        const trackIds = new Set([active.track.id]);
+        if(this.selectedGraphProperty === UNIFORM_SCALE_PROPERTY.property) {
+            const partner = this.mirrorScaleTrack(active.track);
+            if(partner) trackIds.add(partner.id);
+        }
+        this.animation.invalidate(trackIds);
+        this.animation.previewAt(this.animation.currentTime);
         this.animationChange.emit();
     }
 
@@ -557,6 +638,7 @@ export class TimelineEditorService implements OnDestroy {
     activeHandleAxisLabel(): string {
         const active = this.activeGraphHandle;
         if(!active) return "";
+        if(this.selectedGraphProperty === UNIFORM_SCALE_PROPERTY.property) return UNIFORM_SCALE_PROPERTY.label;
         const axis = this.graphAxis(active.track.property);
         return axis === "scalar" ? this.propertyLabel(active.track.property) : `${axis.toUpperCase()} · ${this.propertyLabel(active.track.property)}`;
     }
@@ -661,7 +743,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     zoomTimelineAt(factor: number, clientX?: number): void {
-        const table = this.host.nativeElement.querySelector<HTMLElement>(".timeline-table");
+        const table = this.host.nativeElement.querySelector<HTMLElement>(".timeline-table, .graph-time-pane");
         const oldScale = this.pixelsPerSecond;
         const nextScale = this.clampTimelineScale(oldScale * factor);
         if(nextScale === oldScale) return;
@@ -670,17 +752,18 @@ export class TimelineEditorService implements OnDestroy {
             return;
         }
         const rect = table.getBoundingClientRect();
-        let anchorScreen = clientX == null ? 360 + (table.clientWidth - 360) / 2 : clientX - rect.left;
+        const layerWidth = table.classList.contains("timeline-table") ? 360 : 0;
+        let anchorScreen = clientX == null ? layerWidth + (table.clientWidth - layerWidth) / 2 : clientX - rect.left;
         let anchorTime: number;
         if(clientX == null) {
             anchorTime = this.animation.currentTime;
-            const playheadScreen = 360 + this.timePadding + anchorTime * oldScale - table.scrollLeft;
-            if(playheadScreen >= 360 && playheadScreen <= table.clientWidth) anchorScreen = playheadScreen;
+            const playheadScreen = layerWidth + this.timePadding + anchorTime * oldScale - table.scrollLeft;
+            if(playheadScreen >= layerWidth && playheadScreen <= table.clientWidth) anchorScreen = playheadScreen;
         } else {
-            anchorTime = Math.max(0, (table.scrollLeft + anchorScreen - 360 - this.timePadding) / oldScale);
+            anchorTime = Math.max(0, (table.scrollLeft + anchorScreen - layerWidth - this.timePadding) / oldScale);
         }
         this.pixelsPerSecond = nextScale;
-        table.scrollLeft = Math.max(0, 360 + this.timePadding + anchorTime * nextScale - anchorScreen);
+        table.scrollLeft = Math.max(0, layerWidth + this.timePadding + anchorTime * nextScale - anchorScreen);
     }
 
     fitTimeline() {
@@ -741,6 +824,21 @@ export class TimelineEditorService implements OnDestroy {
             return;
         }
 
+        if(this.isUniformScaleRow(row)) {
+            if(this.hasKeyAtTime(row)) {
+                this.animation.removeKeyframeAtCurrentTime(row.element, "transform.scaleX");
+                this.animation.removeKeyframeAtCurrentTime(row.element, "transform.scaleY");
+                this.pruneKeyframeSelection();
+            } else {
+                const value = readAnimationProperty(row.element, "transform.scaleX");
+                this.animation.upsertKeyframe(row.element, "transform.scaleX", "number", value);
+                this.animation.upsertKeyframe(row.element, "transform.scaleY", "number", value);
+            }
+            this.animationChange.emit();
+            return;
+        }
+
+        const scalePartner = this.linkedScalePartner(row);
         if(this.hasKeyAtTime(row)) {
             if(this.isPathShapeRow(row)) {
                 this.removePathShapeKeyframesAtCurrentTime(row.element);
@@ -748,6 +846,7 @@ export class TimelineEditorService implements OnDestroy {
                 this.removeGradientGroupKeyframesAtCurrentTime(row);
             } else {
                 this.animation.removeKeyframeAtCurrentTime(row.element, row.property.property);
+                if(scalePartner) this.animation.removeKeyframeAtCurrentTime(row.element, scalePartner.property);
             }
             this.pruneKeyframeSelection();
         } else {
@@ -756,7 +855,9 @@ export class TimelineEditorService implements OnDestroy {
             } else if(this.isGradientGroupRow(row)) {
                 this.addGradientGroupKeyframesAtCurrentTime(row);
             } else {
-                this.animation.upsertKeyframe(row.element, row.property.property, row.property.valueType);
+                const value = readAnimationProperty(row.element, row.property.property);
+                this.animation.upsertKeyframe(row.element, row.property.property, row.property.valueType, value);
+                if(scalePartner) this.animation.upsertKeyframe(row.element, scalePartner.property, scalePartner.valueType, value);
             }
         }
 
@@ -788,16 +889,7 @@ export class TimelineEditorService implements OnDestroy {
         }
 
         entries.forEach((entry) => {
-            entry.keyframe.easing = { type };
-            entry.keyframe.temporal = undefined;
-            const index = entry.track.keyframes.indexOf(entry.keyframe);
-            if(index >= 0 && index + 1 < entry.track.keyframes.length) {
-                const next = entry.track.keyframes[index + 1];
-                if(next.temporal?.in) {
-                    delete next.temporal.in;
-                    if(!next.temporal.out) next.temporal = undefined;
-                }
-            }
+            applyEasingPresetToKeyframe(entry.track, entry.keyframe, type);
         });
         this.animation.invalidate(new Set(entries.map((entry) => entry.track.id)));
         this.animation.previewAt(this.animation.currentTime);
@@ -825,8 +917,13 @@ export class TimelineEditorService implements OnDestroy {
         event.stopPropagation();
         this.scrubbing = false;
         this.activeGraphHandle = handle;
+        const ids = [handle.keyframe.id];
+        if(this.selectedGraphProperty === UNIFORM_SCALE_PROPERTY.property) {
+            const partner = this.scalePartnerKeyframe(handle.track, handle.keyframe);
+            if(partner) ids.push(partner.id);
+        }
         this.startKeyframeDrag(
-            [handle.keyframe.id],
+            ids,
             event,
             (event.currentTarget as Element).closest<HTMLElement>(".speed-graph-surface"),
             true,
@@ -967,6 +1064,10 @@ export class TimelineEditorService implements OnDestroy {
             return false;
         }
 
+        if(this.isUniformScaleRow(row)) {
+            return this.animation.hasKeyframeAtCurrentTime(row.element, "transform.scaleX")
+                && this.animation.hasKeyframeAtCurrentTime(row.element, "transform.scaleY");
+        }
         if(this.isPathShapeRow(row)) {
             return this.pathShapeKeyframes(row.element).some((keyframe) => this.timesMatch(keyframe.time, this.animation.currentTime));
         }
@@ -1013,6 +1114,9 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     propertyValue(row: TimelineRow): unknown {
+        if(row.type === "property" && this.isUniformScaleRow(row)) {
+            return readAnimationProperty(row.element, "transform.scaleX");
+        }
         if(row.type === "property" && this.isPathShapeRow(row)) {
             return `${this.pathShapeAnimatedPointCount(row.element)} pts`;
         }
@@ -1208,10 +1312,54 @@ export class TimelineEditorService implements OnDestroy {
         }
 
         const normalized = this.normalizeValue(row.property, value);
+        if(this.isUniformScaleRow(row)) {
+            this.animation.setAnimatedPropertyValue(row.element, "transform.scaleX", "number", normalized);
+            this.animation.setAnimatedPropertyValue(row.element, "transform.scaleY", "number", normalized);
+            if(emitChange) this.animationChange.emit();
+            return;
+        }
         this.animation.setAnimatedPropertyValue(row.element, row.property.property, row.property.valueType, normalized);
+        const scalePartner = this.linkedScalePartner(row);
+        if(scalePartner) this.animation.setAnimatedPropertyValue(row.element, scalePartner.property, scalePartner.valueType, normalized);
         if(emitChange) {
             this.animationChange.emit();
         }
+    }
+
+    isScaleRow(row: TimelineRow): row is PropertyTimelineRow {
+        return row.type === "property"
+            && (row.property.property === UNIFORM_SCALE_PROPERTY.property
+                || row.property.property === "transform.scaleX"
+                || row.property.property === "transform.scaleY");
+    }
+
+    private isUniformScaleRow(row: TimelineRow): boolean {
+        return row.type === "property" && row.property.property === UNIFORM_SCALE_PROPERTY.property;
+    }
+
+    private isScaleAxisRow(row: TimelineRow): boolean {
+        return row.type === "property"
+            && (row.property.property === "transform.scaleX" || row.property.property === "transform.scaleY");
+    }
+
+    scaleLinked(row: TimelineRow): boolean {
+        return this.isScaleRow(row) && this.elementScaleLinked(row.element);
+    }
+
+    toggleScaleLinked(row: TimelineRow, event: MouseEvent): void {
+        event.stopPropagation();
+        if(!this.isScaleRow(row)) return;
+        const linked = !this.scaleLinked(row);
+        this.scaleLinkOverrides.set(row.element.id, linked);
+        if(linked) {
+            this.synchronizeScaleTracks(row.element, row.property.property === "transform.scaleY" ? "transform.scaleY" : "transform.scaleX");
+            this.selectedGraphTargetId = row.element.id;
+            this.selectedGraphProperty = UNIFORM_SCALE_PROPERTY.property;
+        } else {
+            this.selectedGraphProperty = "transform.scaleX";
+        }
+        this.rowCacheKey = "";
+        this.animationChange.emit();
     }
 
     beginScrub(event: PointerEvent) {
@@ -1527,7 +1675,14 @@ export class TimelineEditorService implements OnDestroy {
             value.influence = Math.max(0, Math.min(1, original.influence + direction * (drag.latestX - drag.startX) / (duration * this.pixelsPerSecond)));
             this.linkGraphHandleSpeed(snapshot.handle);
         });
-        this.animation.invalidate(new Set(drag.snapshots.map((snapshot) => snapshot.handle.track.id)));
+        const trackIds = new Set(drag.snapshots.map((snapshot) => snapshot.handle.track.id));
+        if(drag.uniformScale) {
+            drag.snapshots.forEach((snapshot) => {
+                const partner = this.mirrorScaleTrack(snapshot.handle.track);
+                if(partner) trackIds.add(partner.id);
+            });
+        }
+        this.animation.invalidate(trackIds);
         this.animation.previewAt(this.animation.currentTime);
     }
 
@@ -1537,10 +1692,17 @@ export class TimelineEditorService implements OnDestroy {
         if(this.graphFrame != null) cancelAnimationFrame(this.graphFrame);
         this.graphFrame = undefined;
         drag.snapshots.forEach((snapshot) => snapshot.handle.keyframe.temporal = this.cloneValue(snapshot.temporal));
+        const trackIds = new Set(drag.snapshots.map((snapshot) => snapshot.handle.track.id));
+        if(drag.uniformScale) {
+            drag.snapshots.forEach((snapshot) => {
+                const partner = this.mirrorScaleTrack(snapshot.handle.track);
+                if(partner) trackIds.add(partner.id);
+            });
+        }
         try { drag.capture?.releasePointerCapture(drag.pointerId); } catch {}
         this.graphDrag = undefined;
         this.clearGlobalPointerTracking();
-        this.animation.invalidate(new Set(drag.snapshots.map((snapshot) => snapshot.handle.track.id)));
+        this.animation.invalidate(trackIds);
         this.animation.previewAt(this.animation.currentTime);
     }
 
@@ -1597,6 +1759,10 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private propertySupported(element: AnyElement, property: AnimatablePropertyDefinition): boolean {
+        if(property.property === UNIFORM_SCALE_PROPERTY.property) return this.elementScaleLinked(element);
+        if(property.property === "transform.scaleX" || property.property === "transform.scaleY") {
+            return !this.elementScaleLinked(element);
+        }
         if(property.property === "path.drawProgress") {
             return element instanceof Path;
         }
@@ -1637,6 +1803,93 @@ export class TimelineEditorService implements OnDestroy {
         }
 
         return value;
+    }
+
+    private linkedScalePartner(row: TimelineRow): AnimatablePropertyDefinition | undefined {
+        if(row.type !== "property" || !this.isScaleAxisRow(row) || !this.scaleLinked(row)) return undefined;
+        const partner = row.property.property === "transform.scaleX" ? "transform.scaleY" : "transform.scaleX";
+        return this.properties.find((property) => property.property === partner);
+    }
+
+    private elementScaleLinked(element: AnyElement): boolean {
+        const override = this.scaleLinkOverrides.get(element.id);
+        return override ?? this.inferredScaleLinked(element);
+    }
+
+    private inferredScaleLinked(element: AnyElement): boolean {
+        if(Math.abs(element.transform.scaleX - element.transform.scaleY) > 0.000001) return false;
+        const x = this.animation.trackFor(element, "transform.scaleX");
+        const y = this.animation.trackFor(element, "transform.scaleY");
+        if(!x && !y) return true;
+        if(!x || !y || x.keyframes.length !== y.keyframes.length) return false;
+        const signature = (track: AnimationTrack) => JSON.stringify(track.keyframes.map((keyframe) => ({
+            time: keyframe.time,
+            value: keyframe.value,
+            easing: keyframe.easing,
+            temporal: keyframe.temporal,
+        })));
+        return signature(x) === signature(y);
+    }
+
+    private synchronizeScaleTracks(element: AnyElement, preferredProperty: "transform.scaleX" | "transform.scaleY"): void {
+        const partnerProperty = preferredProperty === "transform.scaleX" ? "transform.scaleY" : "transform.scaleX";
+        const preferred = this.animation.trackFor(element, preferredProperty);
+        const partner = this.animation.trackFor(element, partnerProperty);
+        const source = preferred ?? partner;
+        if(!source) {
+            const value = readAnimationProperty(element, preferredProperty);
+            this.animation.setAnimatedPropertyValue(element, preferredProperty, "number", value);
+            this.animation.setAnimatedPropertyValue(element, partnerProperty, "number", value);
+            return;
+        }
+
+        const destination = this.mirrorScaleTrack(source);
+        if(!destination) return;
+        this.animation.invalidate([source.id, destination.id]);
+        this.animation.previewAt(this.animation.currentTime);
+    }
+
+    private mirrorScaleTrack(source: AnimationTrack): AnimationTrack | undefined {
+        if(source.property !== "transform.scaleX" && source.property !== "transform.scaleY") return undefined;
+        const destinationProperty = source.property === "transform.scaleX" ? "transform.scaleY" : "transform.scaleX";
+        const destination = this.ensureTimelineTrack(source.targetId, destinationProperty, "number");
+        const existing = destination.keyframes;
+        destination.enabled = source.enabled;
+        destination.keyframes = source.keyframes.map((keyframe, index) => ({
+            id: existing[index]?.id ?? makeAnimationId("key"),
+            time: keyframe.time,
+            value: this.cloneValue(keyframe.value),
+            easing: this.cloneValue(keyframe.easing),
+            temporal: this.cloneValue(keyframe.temporal),
+        }));
+        return destination;
+    }
+
+    private scalePartnerKeyframe(track: AnimationTrack, keyframe: Keyframe): Keyframe | undefined {
+        if(track.property !== "transform.scaleX" && track.property !== "transform.scaleY") return undefined;
+        const partnerProperty = track.property === "transform.scaleX" ? "transform.scaleY" : "transform.scaleX";
+        const partner = this.editor.selectedSVG?.animation.tracks.find((candidate) => candidate.targetId === track.targetId
+            && candidate.property === partnerProperty);
+        const index = track.keyframes.indexOf(keyframe);
+        if(!partner || index < 0) return undefined;
+        const indexed = partner.keyframes[index];
+        if(indexed && this.timesMatch(indexed.time, keyframe.time)) return indexed;
+        return partner.keyframes.find((candidate) => this.timesMatch(candidate.time, keyframe.time));
+    }
+
+    private uniformScaleKeyframes(element: AnyElement): TimelineKeyframe[] {
+        const x = this.animation.trackFor(element, "transform.scaleX");
+        const y = this.animation.trackFor(element, "transform.scaleY");
+        if(!x || !y) return [];
+        return x.keyframes.flatMap((keyframe, index) => {
+            const partner = y.keyframes[index];
+            if(!partner || !this.timesMatch(keyframe.time, partner.time)) return [];
+            return [{
+                ...keyframe,
+                id: `uniform-scale-${element.id}-${keyframe.time}`,
+                groupedKeyframeIds: [keyframe.id, partner.id],
+            }];
+        });
     }
 
     private numericDragStep(property: AnimatablePropertyDefinition, event: PointerEvent): number {
@@ -2150,6 +2403,7 @@ interface GraphHandleDrag {
     latestX: number;
     latestY: number;
     moved: boolean;
+    uniformScale: boolean;
     capture?: HTMLElement;
     snapshots: GraphHandleSnapshot[];
 }

@@ -20,7 +20,13 @@ const EDITABLE_DEFINITION_TAGS = new Set([
     "lineargradient", "radialgradient", "stop",
 ]);
 
-export interface SVGImportOptions { name?: string; }
+export const MAX_SVG_IMPORT_BYTES = 10 * 1024 * 1024;
+
+export interface SVGImportOptions {
+    name?: string;
+    /** Prefixes every source and generated ID when merging into another SVG document. */
+    idNamespace?: string;
+}
 
 export interface SVGImportResult {
     document: SVGSave;
@@ -45,7 +51,9 @@ export class SVGImporterService {
             throw error;
         }
 
-        const context = new ImportContext(sanitized.root, options.name);
+        const idNamespace = normalizeIdNamespace(options.idNamespace);
+        if(idNamespace) namespaceSVGIds(sanitized.root, idNamespace);
+        const context = new ImportContext(sanitized.root, options.name, idNamespace);
         const dimensions = rootDimensions(sanitized.root);
         const elements = context.normalizeViewBox(context.importChildren(sanitized.root, null), dimensions.minX, dimensions.minY);
         const document: SVGSave = {
@@ -59,7 +67,7 @@ export class SVGImporterService {
 
         return {
             document,
-            sanitizedMarkup: sanitized.markup,
+            sanitizedMarkup: new XMLSerializer().serializeToString(sanitized.root),
             editability: context.sourceNodes.length === 0 ? "native" : "partial",
             warnings: [...sanitized.warnings, ...context.warnings],
             nativeElementCount: countElements(elements),
@@ -79,7 +87,7 @@ class ImportContext {
     private readonly resolvingDefinitions = new Set<string>();
     private counter = 0;
 
-    constructor(root: SVGSVGElement, requestedName?: string) {
+    constructor(root: SVGSVGElement, requestedName?: string, private readonly idNamespace?: string) {
         this.documentId = this.id(root.getAttribute("id"), "document");
         this.documentName = cleanDocumentName(requestedName)
             || root.querySelector(":scope > title")?.textContent?.trim()
@@ -526,11 +534,56 @@ class ImportContext {
         let generated: string;
         do {
             this.counter += 1;
-            generated = `${prefix}-${this.counter}`;
+            generated = `${this.idNamespace ? `${this.idNamespace}-` : ""}${prefix}-${this.counter}`;
         } while(this.ids.has(generated));
         this.ids.add(generated);
         return generated;
     }
+}
+
+function normalizeIdNamespace(value?: string): string | undefined {
+    const normalized = value?.trim().replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    if(!normalized) return undefined;
+    return /^[A-Za-z_]/.test(normalized) ? normalized : `import-${normalized}`;
+}
+
+function namespaceSVGIds(root: SVGSVGElement, namespace: string): void {
+    const elements = [root as unknown as Element, ...Array.from(root.querySelectorAll("[id]"))];
+    const ids = new Map<string, string>();
+    elements.forEach((element) => {
+        const id = element.getAttribute("id")?.trim();
+        if(id && !ids.has(id)) ids.set(id, `${namespace}-${id}`);
+    });
+    elements.forEach((element) => {
+        const id = element.getAttribute("id")?.trim();
+        if(!id) return;
+        if(!element.hasAttribute("aria-label") && !element.hasAttribute("data-name")) {
+            element.setAttribute("data-name", id);
+        }
+        element.setAttribute("id", ids.get(id)!);
+    });
+
+    Array.from(root.querySelectorAll("*")).forEach((element) => {
+        Array.from(element.attributes).forEach((attribute) => {
+            const rewritten = rewriteLocalIdReferences(attribute.value, ids, attribute.name.toLowerCase());
+            if(rewritten !== attribute.value) element.setAttribute(attribute.name, rewritten);
+        });
+    });
+}
+
+function rewriteLocalIdReferences(value: string, ids: Map<string, string>, attributeName: string): string {
+    let rewritten = value.replace(/url\(\s*(['"]?)#([^)'"\s]+)\1\s*\)/gi, (match, quote: string, id: string) => {
+        const replacement = ids.get(id);
+        return replacement ? `url(${quote}#${replacement}${quote})` : match;
+    });
+    if((attributeName === "href" || attributeName === "xlink:href") && rewritten.startsWith("#")) {
+        const replacement = ids.get(rewritten.slice(1));
+        if(replacement) rewritten = `#${replacement}`;
+    }
+    if(attributeName === "aria-labelledby" || attributeName === "aria-describedby") {
+        rewritten = rewritten.split(/\s+/).map((id) => ids.get(id) ?? id).join(" ");
+    }
+    return rewritten;
 }
 
 function localUrlReference(value?: string): string | undefined {

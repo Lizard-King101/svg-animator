@@ -3,6 +3,9 @@ import { AnimationPlaybackService } from "./animation-playback.service";
 import { EditorService } from "./editor.service";
 import { moveNativeGeometry, resizeNativeGeometry } from "../editor/objects/element-geometry";
 import { Shape } from "../editor/objects/elements/shape.object";
+import { Path } from "../editor/objects/elements/path.object";
+import { Line } from "../editor/objects/line.object";
+import { pathPointAnimationProperty } from "../editor/objects/animation-targets";
 import { Point } from "../editor/objects/point.object";
 
 describe("AnimationGestureService geometry gestures", () => {
@@ -47,6 +50,53 @@ describe("AnimationGestureService geometry gestures", () => {
         expect(properties).toContain("geometry.height");
         expect(properties).not.toContain("transform.scaleX");
         expect(properties).not.toContain("transform.scaleY");
+    });
+
+    it("creates only position tracks for a rigid path move", () => {
+        const editor = editorDouble();
+        const path = new Path(editor);
+        path.lines = [new Line(editor, { points: [new Point(10, 20), new Point(30, 40)] })];
+        editor.selectedElement = path;
+        const writes: Array<{ property: string; value: unknown; baseline: unknown }> = [];
+        const animation = {
+            mode: "animate",
+            upsertKeyframe(_element: Path, property: string, _type: string, value: unknown, baseline: unknown) {
+                writes.push({ property, value, baseline });
+            },
+        } as unknown as AnimationPlaybackService;
+        const gestures = new AnimationGestureService(editor, animation);
+
+        gestures.begin();
+        moveNativeGeometry(path, { x: 7, y: -4 });
+        gestures.end();
+
+        expect(writes).toEqual([
+            { property: "geometry.x", value: 17, baseline: 10 },
+            { property: "geometry.y", value: 16, baseline: 20 },
+        ]);
+    });
+
+    it("keeps path deformation on point tracks instead of changing position", () => {
+        const editor = editorDouble();
+        const path = new Path(editor);
+        const start = new Point(10, 20);
+        const end = new Point(30, 40);
+        path.lines = [new Line(editor, { points: [start, end] })];
+        editor.selectedElement = path;
+        const properties: string[] = [];
+        const animation = {
+            mode: "animate",
+            upsertKeyframe(_element: Path, property: string) { properties.push(property); },
+        } as unknown as AnimationPlaybackService;
+        const gestures = new AnimationGestureService(editor, animation);
+
+        gestures.begin();
+        start.x = 5;
+        gestures.end();
+
+        expect(properties).toEqual([pathPointAnimationProperty(start.id, "x")]);
+        expect(properties).not.toContain("geometry.x");
+        expect(properties).not.toContain("geometry.y");
     });
 });
 

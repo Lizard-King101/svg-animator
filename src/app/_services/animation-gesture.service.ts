@@ -2,7 +2,7 @@ import { Injectable } from "@angular/core";
 import { AnimationPlaybackService } from "./animation-playback.service";
 import { EditorService } from "./editor.service";
 import { ANIMATABLE_PROPERTIES } from "../editor/objects/animation.object";
-import { geometryAnimationValues, readAnimationProperty } from "../editor/objects/animation-targets";
+import { geometryAnimationChanges, geometryAnimationValues, readAnimationProperty } from "../editor/objects/animation-targets";
 import { AnyElement } from "../editor/objects/svg.object";
 
 /** Converts direct canvas edits into animation keyframes at gesture boundaries. */
@@ -71,9 +71,7 @@ export class AnimationGestureService {
         this.geometryStart = undefined;
         if(this.animation.mode !== "animate" || !start || this.editor.selectedElement !== start.element) return;
         const current = capturedValues ?? geometryAnimationValues(start.element);
-        Object.entries(current).forEach(([property, value]) => {
-            const baseline = start.values[property];
-            if(baseline == null || Math.abs(value - baseline) < 0.0005) return;
+        geometryAnimationChanges(start.element, start.values, current).forEach(({ property, value, baseline }) => {
             this.animation.upsertKeyframe(start.element, property, "number", value, baseline);
         });
     }

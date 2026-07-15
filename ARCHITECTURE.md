@@ -14,6 +14,7 @@ Architecture is part of feature delivery. Pages and shells compose; components o
 | Session | `EditorService`, `EditorUiStateService` | Open documents, active document, primary selection, tools, viewport conversion, context menus, and ephemeral shell/dialog state |
 | Mutation | `DocumentMutationService` | Compare base state, classify mutation domains, create one shared history entry, and schedule persistence/thumbnail work |
 | Construction | `ElementFactory` | Element/group construction and deep cloning while model constructors still require `EditorService` |
+| SVG import | `SVGImporterService`, `CurrentDocumentSVGImportService` | Sanitize and normalize external SVG, namespace merge IDs, restore editable layers, and insert one grouped artwork mutation into the active document |
 | Layer structure | `LayerOperationsService` | Group/combine/clip/duplicate/delete/order/visibility/lock/motion-path structural operations |
 | Layer commands | `LayerCommandService` | Multi-selection, rename/collapse state, mutation-aware layer commands, context actions, and reorder gestures shared with global shortcuts |
 | Property editing | `PropertiesPanelComponent` | Frame, anchor, transform, attribute, paint, and gradient editing with animation-aware writes |

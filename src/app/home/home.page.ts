@@ -3,7 +3,7 @@ import { NgFor, NgIf, DatePipe } from "@angular/common";
 import { Router } from "@angular/router";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { ProjectRecord, ProjectService } from "../_services/project.service";
-import { SVGImporterService } from "../editor/import/svg-importer.service";
+import { MAX_SVG_IMPORT_BYTES, SVGImporterService } from "../editor/import/svg-importer.service";
 
 @Component({
     standalone: true,
@@ -46,7 +46,7 @@ export class HomePage implements OnInit {
 
         this.importError = undefined;
         this.importMessage = undefined;
-        if(file.size > 10 * 1024 * 1024) {
+        if(file.size > MAX_SVG_IMPORT_BYTES) {
             this.importError = 'SVG files must be smaller than 10 MB.';
             return;
         }

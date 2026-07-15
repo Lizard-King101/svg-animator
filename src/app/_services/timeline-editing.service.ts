@@ -32,7 +32,7 @@ export class TimelineEditingService {
                     .forEach((property) => rows.push({ type: "property", element, depth: depth + 1, property }));
                 if(element instanceof Path) rows.push({ type: "property", element, depth: depth + 1, property: pathShapeProperty });
             }
-            if(element instanceof Group) append(element.elements, depth + 1);
+            if(element instanceof Group && expanded.has(element.id)) append(element.elements, depth + 1);
         });
         append(elements, 0);
         return rows;

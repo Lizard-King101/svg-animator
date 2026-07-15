@@ -276,6 +276,57 @@ animation-timeline {
   overflow: auto;
 }
 
+.timeline-graph-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 360px minmax(360px, 1fr);
+  overflow: hidden;
+}
+
+.graph-layer-pane {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 30px minmax(0, 1fr);
+  border-right: 1px solid var(--border);
+
+  > .timeline-head-left {
+    position: static;
+  }
+}
+
+.graph-layer-scroll {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--bg-base);
+
+  .timeline-left-cell {
+    position: relative;
+    left: auto;
+    width: 100%;
+  }
+}
+
+.graph-time-pane.timeline-time-cell {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--bg-base);
+}
+
+.graph-time-content {
+  position: relative;
+  min-width: 100%;
+}
+
+.graph-fixed-placeholder {
+  position: relative;
+  min-width: 100%;
+  background: var(--bg-base);
+}
+
 .timeline-head-left,
 .timeline-left-cell,
 .timeline-time-cell {
@@ -285,12 +336,6 @@ animation-timeline {
 .timeline-virtual-spacer {
   min-width: 0;
   pointer-events: none;
-}
-
-.graph-row-placeholder {
-  position: relative;
-  min-height: 30px;
-  background: var(--bg-base);
 }
 
 .speed-graph-surface {
@@ -520,6 +565,24 @@ animation-timeline {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
   text-align: right;
+}
+
+.scale-link-toggle {
+  flex: 0 0 auto;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 8px;
+  cursor: pointer;
+
+  &.active {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
 }
 
 .property-number {

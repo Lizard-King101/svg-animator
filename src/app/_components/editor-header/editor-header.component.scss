@@ -76,7 +76,10 @@
       }
     }
 
+    .file-input { display: none; }
+
     .btn-new,
+    .btn-import,
     .btn-export {
       display: inline-flex;
       align-items: center;
@@ -103,6 +106,42 @@
         opacity: 0.4;
         cursor: default;
       }
+    }
+  }
+
+  .header-notice {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 28px;
+    padding: 4px 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+    background: var(--accent-dim);
+    color: var(--text-primary);
+    font-size: 11px;
+
+    > fa-icon { color: var(--accent); }
+    span { flex: 1; }
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+
+      &:hover { background: var(--bg-elevated); color: var(--text-primary); }
+    }
+
+    &.error {
+      border-bottom-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+      background: rgba(244, 92, 122, 0.1);
+      > fa-icon { color: var(--danger); }
     }
   }
 

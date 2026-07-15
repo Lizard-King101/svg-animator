@@ -1,5 +1,6 @@
 import { Color } from "./color.object";
-import { resolvedOrigin } from "./element-bounds";
+import { localBounds, resolvedOrigin } from "./element-bounds";
+import { setGeometryFrameField } from "./element-geometry";
 import { Group } from "./elements/group.object";
 import { Path } from "./elements/path.object";
 import { Shape } from "./elements/shape.object";
@@ -50,9 +51,13 @@ export function readAnimationProperty(element: AnyElement, property: string): un
 
     switch(property) {
         case "geometry.x":
-            return element instanceof Shape || element instanceof TextElement ? element.position.x : undefined;
+            return element instanceof Path ? localBounds(element).x
+                : element instanceof Shape || element instanceof TextElement ? element.position.x
+                : undefined;
         case "geometry.y":
-            return element instanceof Shape || element instanceof TextElement ? element.position.y : undefined;
+            return element instanceof Path ? localBounds(element).y
+                : element instanceof Shape || element instanceof TextElement ? element.position.y
+                : undefined;
         case "geometry.width":
             return element instanceof Shape ? element.settings.width : undefined;
         case "geometry.height":
@@ -119,11 +124,15 @@ export function writeAnimationProperty(element: AnyElement, property: string, va
 
     switch(property) {
         case "geometry.x":
-            return element instanceof Shape || element instanceof TextElement
+            return element instanceof Path
+                ? writeNumber(value, (numeric) => setGeometryFrameField(element, "x", numeric))
+                : element instanceof Shape || element instanceof TextElement
                 ? writeNumber(value, (numeric) => element.position.x = numeric)
                 : false;
         case "geometry.y":
-            return element instanceof Shape || element instanceof TextElement
+            return element instanceof Path
+                ? writeNumber(value, (numeric) => setGeometryFrameField(element, "y", numeric))
+                : element instanceof Shape || element instanceof TextElement
                 ? writeNumber(value, (numeric) => element.position.y = numeric)
                 : false;
         case "geometry.width":
@@ -210,6 +219,55 @@ export function geometryAnimationValues(element: AnyElement): Record<string, num
             if(typeof value === "number") values[definition.property] = value;
         });
     return values;
+}
+
+export interface GeometryAnimationChange {
+    property: string;
+    value: number;
+    baseline: number;
+}
+
+/**
+ * Classifies native geometry edits into stable animation channels. A rigid path
+ * translation is Position X/Y; a path deformation remains point animation.
+ */
+export function geometryAnimationChanges(
+    element: AnyElement,
+    before: Record<string, number>,
+    after: Record<string, number>,
+): GeometryAnimationChange[] {
+    const changes = Object.entries(after).flatMap(([property, value]) => {
+        const baseline = before[property];
+        return baseline == null || Math.abs(value - baseline) < 0.0005
+            ? []
+            : [{ property, value, baseline }];
+    });
+    if(!(element instanceof Path)) return changes;
+
+    const points = element.pathPoints();
+    const first = points[0];
+    if(first) {
+        const firstX = pathPointAnimationProperty(first.id, "x");
+        const firstY = pathPointAnimationProperty(first.id, "y");
+        const deltaX = after[firstX] - before[firstX];
+        const deltaY = after[firstY] - before[firstY];
+        const rigidTranslation = Number.isFinite(deltaX) && Number.isFinite(deltaY)
+            && (Math.abs(deltaX) >= 0.0005 || Math.abs(deltaY) >= 0.0005)
+            && points.every((point) => {
+                const x = pathPointAnimationProperty(point.id, "x");
+                const y = pathPointAnimationProperty(point.id, "y");
+                return Number.isFinite(before[x]) && Number.isFinite(after[x])
+                    && Number.isFinite(before[y]) && Number.isFinite(after[y])
+                    && Math.abs((after[x] - before[x]) - deltaX) < 0.0005
+                    && Math.abs((after[y] - before[y]) - deltaY) < 0.0005;
+            });
+        if(rigidTranslation) {
+            return changes.filter((change) => change.property === "geometry.x" || change.property === "geometry.y");
+        }
+    }
+
+    // Bounds can move when one anchor changes; that is deformation, not position.
+    return changes.filter((change) => change.property !== "geometry.x" && change.property !== "geometry.y");
 }
 
 export function parsePathPointProperty(property: string): { pointId: string; axis: "x" | "y" } | undefined {

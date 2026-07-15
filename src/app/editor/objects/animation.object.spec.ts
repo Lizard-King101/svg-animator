@@ -1,5 +1,6 @@
 import {
     AnimationTrack,
+    applyEasingPresetToKeyframe,
     evaluateTemporalNumberSegment,
     evaluateTemporalSpeed,
     evaluateTrack,
@@ -36,6 +37,22 @@ describe("temporal animation math", () => {
             keyframes: [{ id: "a", time: 0, value: 0, easing: { type: "ease-in" } }, { id: "b", time: 1, value: 1 }],
         };
         expect(evaluateTrack(track, 0.5)).toBeCloseTo(0.25, 8);
+    });
+
+    it("materializes easing presets into stable speed-graph tangents", () => {
+        const track: AnimationTrack = {
+            id: "preset", targetId: "shape", property: "transform.scaleX", valueType: "number",
+            keyframes: [{ id: "a", time: 0, value: 0 }, { id: "b", time: 1, value: 10 }],
+        };
+
+        applyEasingPresetToKeyframe(track, track.keyframes[0], "ease-in-out");
+
+        expect(track.keyframes[0].temporal?.out?.speed).toBe(0);
+        expect(track.keyframes[1].temporal?.in?.speed).toBe(0);
+        expect(evaluateTemporalSpeed(track.keyframes[0], track.keyframes[1], 0)).toBeCloseTo(0, 8);
+        expect(evaluateTemporalSpeed(track.keyframes[0], track.keyframes[1], 0.5)).toBeCloseTo(15, 8);
+        expect(evaluateTemporalSpeed(track.keyframes[0], track.keyframes[1], 1)).toBeCloseTo(0, 8);
+        expect(evaluateTrack(track, 0.5)).toBeCloseTo(5, 8);
     });
 
     it("sorts keys and deterministically lets the later collision win", () => {

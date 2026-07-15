@@ -356,6 +356,16 @@ describe("editor topology boundaries", () => {
                 keyframes: [{ id: "opacity-key", time: 0.5, value: 0.4, easing: { type: "ease-in" } }],
             },
             {
+                id: "position-track",
+                targetId: path.id,
+                property: "geometry.x",
+                valueType: "number",
+                keyframes: [
+                    { id: "position-key", time: 0, value: 12, temporal: { linked: false, out: { speed: 18, influence: 0.42 } } },
+                    { id: "position-key-2", time: 1, value: 42, temporal: { linked: false, in: { speed: 7, influence: 0.31 } } },
+                ],
+            },
+            {
                 id: "point-track",
                 targetId: path.id,
                 property: pathPointAnimationProperty(point.id, "x"),
@@ -376,12 +386,17 @@ describe("editor topology boundaries", () => {
         const duplicateTracks = svg.animation.tracks.filter((track) => track.targetId === duplicate.id);
         const duplicateGradient = duplicate.settings.fill as typeof gradient;
 
-        expect(duplicateTracks.length).toBe(3);
+        expect(duplicateTracks.length).toBe(4);
         expect(svg.animation.tracks.some((track) => track.targetId === duplicateGroup.id && track.property === "opacity")).toBeTrue();
         expect(duplicateTracks.map((track) => track.id)).not.toContain("opacity-track");
         expect(duplicateTracks.flatMap((track) => track.keyframes.map((keyframe) => keyframe.id)))
             .not.toContain("opacity-key");
         expect(duplicateTracks.some((track) => track.property === "opacity")).toBeTrue();
+        expect(duplicateTracks.find((track) => track.property === "geometry.x")?.keyframes.map((keyframe) => keyframe.value)).toEqual([12, 42]);
+        expect(duplicateTracks.find((track) => track.property === "geometry.x")?.keyframes.map((keyframe) => keyframe.temporal)).toEqual([
+            { linked: false, out: { speed: 18, influence: 0.42 } },
+            { linked: false, in: { speed: 7, influence: 0.31 } },
+        ]);
         expect(duplicateTracks.some((track) => track.property === pathPointAnimationProperty(duplicate.pathPoints()[0].id, "x"))).toBeTrue();
         expect(duplicateTracks.some((track) => track.property === `settings.fill.gradient.stops.${duplicateGradient.stops[0].id}.offset`)).toBeTrue();
         expect(duplicateTracks.find((track) => track.property === "opacity")!.keyframes[0].easing).toEqual({ type: "ease-in" });

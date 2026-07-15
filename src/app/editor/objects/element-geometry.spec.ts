@@ -97,4 +97,32 @@ describe("element native geometry", () => {
         expect(shape.width).toBe(1);
         expect(setGeometryFrameField(text, "width", 100)).toBeFalse();
     });
+
+    it("reads and writes path position channels without using transform offset", () => {
+        const path = new Path(editor);
+        path.lines = [new Line(editor, { points: [new Point(10, 20), new Point(40, 60)] })];
+        const gradient: GradientPaint = {
+            type: "linear-gradient", id: "path-gradient", units: "userSpaceOnUse", spreadMethod: "pad",
+            coordinates: { x1: 10, y1: 20, x2: 40, y2: 60 }, stops: [],
+        };
+        path.settings.fill = gradient;
+        path.transform.originX = 25;
+        path.transform.originY = 40;
+
+        expect(readAnimationProperty(path, "geometry.x")).toBe(10);
+        expect(readAnimationProperty(path, "geometry.y")).toBe(20);
+        expect(writeAnimationProperty(path, "geometry.x", 35)).toBeTrue();
+        expect(writeAnimationProperty(path, "geometry.y", 45)).toBeTrue();
+
+        expect(path.pathPoints().map((point) => [point.x, point.y])).toEqual([[35, 45], [65, 85]]);
+        expect(path.transform.translateX).toBe(0);
+        expect(path.transform.translateY).toBe(0);
+        expect(path.transform.originX).toBe(50);
+        expect(path.transform.originY).toBe(65);
+        expect(gradient.transform).toEqual([1, 0, 0, 1, 25, 25]);
+        expect(geometryAnimationValues(path)).toEqual(jasmine.objectContaining({
+            "geometry.x": 35,
+            "geometry.y": 45,
+        }));
+    });
 });
