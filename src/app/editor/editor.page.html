@@ -22,11 +22,7 @@
     </app-canvas-workspace>
 
     <!-- Right attribute panel -->
-    <div class="attribute-panel" *ngIf="animation.mode == 'edit'">
-      <app-properties-panel />
-
-      <app-layers-panel />
-    </div>
+    <app-editor-side-panel class="attribute-panel" *ngIf="animation.mode == 'edit'" />
 
   </div>
 

@@ -48,6 +48,10 @@ const UNIFORM_SCALE_PROPERTY: AnimatablePropertyDefinition = {
     mvp: true,
 };
 
+const TIMELINE_ROW_HEIGHT = 30;
+const TIMELINE_VIRTUALIZATION_THRESHOLD = 120;
+const TIMELINE_VIRTUAL_OVERSCAN = 8;
+
 @Injectable()
 export class TimelineEditorService implements OnDestroy {
     animationChange = new EventEmitter<void>();
@@ -295,20 +299,22 @@ export class TimelineEditorService implements OnDestroy {
 
     get visibleRows(): TimelineRow[] {
         const rows = this.rows;
-        if(rows.length <= this.virtualCount) return rows;
+        if(!this.timelineVirtualized) return rows;
         return rows.slice(this.virtualStart, Math.min(rows.length, this.virtualStart + this.virtualCount));
     }
 
-    get virtualTopHeight(): number { return this.rows.length > this.virtualCount ? this.virtualStart * 30 : 0; }
+    private get timelineVirtualized(): boolean { return this.rows.length > TIMELINE_VIRTUALIZATION_THRESHOLD; }
+
+    get virtualTopHeight(): number { return this.timelineVirtualized ? this.virtualStart * TIMELINE_ROW_HEIGHT : 0; }
     get virtualBottomHeight(): number {
-        return this.rows.length > this.virtualCount
-            ? Math.max(0, (this.rows.length - this.virtualStart - this.visibleRows.length) * 30)
+        return this.timelineVirtualized
+            ? Math.max(0, (this.rows.length - this.virtualStart - this.visibleRows.length) * TIMELINE_ROW_HEIGHT)
             : 0;
     }
 
     updateTimelineViewport(event: Event): void {
         const viewport = event.currentTarget as HTMLElement;
-        this.updateLayerWindow(viewport.scrollTop, viewport.clientHeight - 30);
+        this.updateLayerWindow(Math.max(0, viewport.scrollTop - 30), viewport.clientHeight - 30);
         this.updateVisibleTime(viewport.scrollLeft, viewport.clientWidth, 360);
     }
 
@@ -323,9 +329,12 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private updateLayerWindow(scrollTop: number, clientHeight: number): void {
-        const rowStart = Math.max(0, Math.floor(scrollTop / 30) - 8);
-        this.virtualStart = Math.min(rowStart, Math.max(0, this.rows.length - this.virtualCount));
-        this.virtualCount = Math.max(40, Math.ceil(clientHeight / 30) + 16);
+        const nextCount = Math.max(40, Math.ceil(Math.max(0, clientHeight) / TIMELINE_ROW_HEIGHT) + TIMELINE_VIRTUAL_OVERSCAN * 2);
+        const rowStart = Math.max(0, Math.floor(scrollTop / TIMELINE_ROW_HEIGHT) - TIMELINE_VIRTUAL_OVERSCAN);
+        this.virtualCount = nextCount;
+        this.virtualStart = this.timelineVirtualized
+            ? Math.min(rowStart, Math.max(0, this.rows.length - nextCount))
+            : 0;
     }
 
     private updateVisibleTime(scrollLeft: number, clientWidth: number, layerWidth: number): void {
@@ -650,10 +659,9 @@ export class TimelineEditorService implements OnDestroy {
     get overscrollHeight(): number {
         const toolbarHeight = 36;
         const rulerHeight = 30;
-        const rowHeight = 30;
         const availableHeight = this.timelineHeight - toolbarHeight - rulerHeight;
-        const usedRowHeight = this.rows.length * rowHeight;
-        return Math.max(96, availableHeight - usedRowHeight);
+        const usedRowHeight = this.rows.length * TIMELINE_ROW_HEIGHT;
+        return Math.max(0, availableHeight - usedRowHeight);
     }
 
     keyframeLeft(time: number): string {
@@ -2015,7 +2023,7 @@ export class TimelineEditorService implements OnDestroy {
 
     private clampTimelineHeight(value: number): number {
         const minHeight = 190;
-        const maxHeight = Math.min(720, Math.max(260, window.innerHeight * 0.68));
+        const maxHeight = Math.min(1024, Math.max(260, window.innerHeight * 0.68));
         return Math.round(Math.max(minHeight, Math.min(maxHeight, value)));
     }
 

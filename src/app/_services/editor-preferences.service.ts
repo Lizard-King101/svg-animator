@@ -9,6 +9,8 @@ interface EditorPreferences {
     canvasPosition?: CanvasPosition;
     mode: PersistedEditorMode;
     timelineHeight: number;
+    sidePanelWidth: number;
+    propertiesPanelRatio: number;
 }
 
 export interface CanvasPosition {
@@ -23,6 +25,8 @@ const DEFAULT_PREFERENCES: EditorPreferences = {
     zoom: 1,
     mode: 'edit',
     timelineHeight: 310,
+    sidePanelWidth: 272,
+    propertiesPanelRatio: 0.5,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -51,6 +55,14 @@ export class EditorPreferencesService {
         return this.preferences.timelineHeight;
     }
 
+    get sidePanelWidth(): number {
+        return this.preferences.sidePanelWidth;
+    }
+
+    get propertiesPanelRatio(): number {
+        return this.preferences.propertiesPanelRatio;
+    }
+
     setTool(tool: string) {
         if(tool && this.preferences.tool !== tool) {
             this.update({ tool });
@@ -75,6 +87,18 @@ export class EditorPreferencesService {
     setTimelineHeight(height: number) {
         if(Number.isFinite(height)) {
             this.update({ timelineHeight: Math.max(190, Math.min(720, Math.round(height))) });
+        }
+    }
+
+    setSidePanelWidth(width: number) {
+        if(Number.isFinite(width)) {
+            this.update({ sidePanelWidth: Math.max(220, Math.min(640, Math.round(width))) });
+        }
+    }
+
+    setPropertiesPanelRatio(ratio: number) {
+        if(Number.isFinite(ratio)) {
+            this.update({ propertiesPanelRatio: Math.max(0.2, Math.min(0.8, ratio)) });
         }
     }
 
@@ -113,6 +137,12 @@ export class EditorPreferencesService {
                 timelineHeight: typeof saved.timelineHeight === 'number' && Number.isFinite(saved.timelineHeight)
                     ? Math.max(190, Math.min(720, Math.round(saved.timelineHeight)))
                     : DEFAULT_PREFERENCES.timelineHeight,
+                sidePanelWidth: typeof saved.sidePanelWidth === 'number' && Number.isFinite(saved.sidePanelWidth)
+                    ? Math.max(220, Math.min(640, Math.round(saved.sidePanelWidth)))
+                    : DEFAULT_PREFERENCES.sidePanelWidth,
+                propertiesPanelRatio: typeof saved.propertiesPanelRatio === 'number' && Number.isFinite(saved.propertiesPanelRatio)
+                    ? Math.max(0.2, Math.min(0.8, saved.propertiesPanelRatio))
+                    : DEFAULT_PREFERENCES.propertiesPanelRatio,
             };
         } catch {
             return { ...DEFAULT_PREFERENCES };

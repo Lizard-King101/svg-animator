@@ -59,16 +59,18 @@
     <div class="timeline-virtual-spacer" [style.height.px]="timeline.virtualBottomHeight"></div>
   </ng-container>
 
-  <div class="timeline-left-cell timeline-overscroll"
-       [style.min-height.px]="timeline.overscrollHeight"></div>
-  <div class="timeline-time-cell timeline-overscroll"
-       [style.min-height.px]="timeline.overscrollHeight">
-    <div class="timeline-time-content timeline-lane timeline-overscroll"
-         [style.width.px]="timeline.timelineContentWidth"
-         [style.min-height.px]="timeline.overscrollHeight"
-         [style.--timeline-grid-step]="timeline.gridStepWidth()"
-         [style.--timeline-grid-offset]="timeline.gridOffset()"></div>
-  </div>
+  <ng-container *ngIf="timeline.overscrollHeight > 0">
+    <div class="timeline-left-cell timeline-overscroll"
+         [style.min-height.px]="timeline.overscrollHeight"></div>
+    <div class="timeline-time-cell timeline-overscroll"
+         [style.min-height.px]="timeline.overscrollHeight">
+      <div class="timeline-time-content timeline-lane timeline-overscroll"
+           [style.width.px]="timeline.timelineContentWidth"
+           [style.min-height.px]="timeline.overscrollHeight"
+           [style.--timeline-grid-step]="timeline.gridStepWidth()"
+           [style.--timeline-grid-offset]="timeline.gridOffset()"></div>
+    </div>
+  </ng-container>
 </div>
 
 <div class="timeline-graph-layout" *ngIf="timeline.surfaceMode == 'graph'">
@@ -79,7 +81,8 @@
       <div class="timeline-virtual-spacer" *ngIf="timeline.virtualTopHeight" [style.height.px]="timeline.virtualTopHeight"></div>
       <app-timeline-row *ngFor="let row of timeline.visibleRows; trackBy: timeline.trackRow" [row]="row" />
       <div class="timeline-virtual-spacer" *ngIf="timeline.virtualBottomHeight" [style.height.px]="timeline.virtualBottomHeight"></div>
-      <div class="timeline-left-cell timeline-overscroll" [style.min-height.px]="timeline.overscrollHeight"></div>
+      <div class="timeline-left-cell timeline-overscroll" *ngIf="timeline.overscrollHeight > 0"
+           [style.min-height.px]="timeline.overscrollHeight"></div>
     </div>
   </section>
 

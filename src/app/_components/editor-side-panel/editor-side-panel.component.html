@@ -1,0 +1,23 @@
+<div class="side-panel-width-handle"
+     role="separator" aria-orientation="vertical" tabindex="0"
+     [attr.aria-valuenow]="width" [attr.aria-valuemin]="220" [attr.aria-valuemax]="640"
+     title="Resize sidebar · double-click to reset"
+     (pointerdown)="beginWidthResize($event)" (pointermove)="updateResize($event)"
+     (pointerup)="endResize($event)" (pointercancel)="cancelResize($event)"
+     (keydown)="handleWidthKey($event)" (dblclick)="resetWidth($event)"></div>
+
+<section class="side-panel-region properties-region" [style.flex-basis]="propertiesBasis">
+  <app-properties-panel />
+</section>
+
+<div class="side-panel-split-handle"
+     role="separator" aria-orientation="horizontal" tabindex="0"
+     [attr.aria-valuenow]="(propertiesRatio * 100).toFixed(0)" [attr.aria-valuemin]="20" [attr.aria-valuemax]="80"
+     title="Resize Properties and Layers · double-click to reset"
+     (pointerdown)="beginSplitResize($event)" (pointermove)="updateResize($event)"
+     (pointerup)="endResize($event)" (pointercancel)="cancelResize($event)"
+     (keydown)="handleSplitKey($event)" (dblclick)="resetSplit($event)"><span></span></div>
+
+<section class="side-panel-region layers-region">
+  <app-layers-panel />
+</section>

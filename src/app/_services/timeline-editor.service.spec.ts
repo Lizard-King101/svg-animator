@@ -120,7 +120,64 @@ describe("TimelineEditorService scale and viewport policy", () => {
         expect(timeline.virtualStart).toBe(virtualStart);
         expect(timeline.visibleTimeStart).toBeGreaterThan(0);
     });
+
+    it("renders ordinary expanded scenes without virtual spacer churn", () => {
+        const { timeline } = setupWithLayerCount(100);
+        const viewport = document.createElement("div");
+        Object.defineProperties(viewport, {
+            scrollTop: { value: 900 },
+            scrollLeft: { value: 0 },
+            clientHeight: { value: 300 },
+            clientWidth: { value: 800 },
+        });
+
+        timeline.updateTimelineViewport({ currentTarget: viewport } as unknown as Event);
+
+        expect(timeline.visibleRows).toHaveSize(100);
+        expect(timeline.virtualTopHeight).toBe(0);
+        expect(timeline.virtualBottomHeight).toBe(0);
+    });
+
+    it("keeps a large virtual window and its spacers stable at the bottom", () => {
+        const { timeline } = setupWithLayerCount(150);
+        const viewport = document.createElement("div");
+        Object.defineProperties(viewport, {
+            scrollTop: { value: 5000 },
+            scrollLeft: { value: 0 },
+            clientHeight: { value: 1200 },
+            clientWidth: { value: 800 },
+        });
+
+        timeline.updateTimelineViewport({ currentTarget: viewport } as unknown as Event);
+        const first = [timeline.virtualStart, timeline.visibleRows.length, timeline.virtualTopHeight, timeline.virtualBottomHeight];
+        timeline.updateTimelineViewport({ currentTarget: viewport } as unknown as Event);
+
+        expect([timeline.virtualStart, timeline.visibleRows.length, timeline.virtualTopHeight, timeline.virtualBottomHeight]).toEqual(first);
+        expect(timeline.virtualStart + timeline.visibleRows.length).toBe(150);
+        expect(timeline.virtualBottomHeight).toBe(0);
+    });
+
+    it("adds filler only when the timeline rows are shorter than the viewport", () => {
+        const { timeline } = setupWithLayerCount(1);
+        expect(timeline.overscrollHeight).toBeGreaterThan(0);
+
+        timeline.editor.selectedSVG!.elements = setupShapes(timeline.editor, 20);
+        expect(timeline.overscrollHeight).toBe(0);
+    });
 });
+
+function setupWithLayerCount(count: number): ReturnType<typeof setup> {
+    const result = setup();
+    result.timeline.editor.selectedSVG!.elements = setupShapes(result.timeline.editor, count);
+    return result;
+}
+
+function setupShapes(editor: EditorService, count: number): Shape[] {
+    return Array.from({ length: count }, (_unused, index) => new Shape(editor, {
+        type: "rectangle",
+        position: new Point(index, index),
+    }));
+}
 
 function setup(): { timeline: TimelineEditorService; writes: string[]; shape: Shape } {
     const editor = { get ID() { return Math.random().toString(36); } } as EditorService;

@@ -14,8 +14,7 @@ import { LayerCommandService } from "../_services/layer-command.service";
 import { SVGDisplay } from "../_components/svg-display/svg-display.component";
 import { AnimationTimelineComponent } from "../_components/animation-timeline/animation-timeline.component";
 import { CanvasWorkspaceComponent } from "../_components/canvas-workspace/canvas-workspace.component";
-import { LayersPanelComponent } from "../_components/layers-panel/layers-panel.component";
-import { PropertiesPanelComponent } from "../_components/properties-panel/properties-panel.component";
+import { EditorSidePanelComponent } from "../_components/editor-side-panel/editor-side-panel.component";
 import { EditorHeaderComponent } from "../_components/editor-header/editor-header.component";
 import { ToolPaletteComponent } from "../_components/tool-palette/tool-palette.component";
 import { EditorContextMenuComponent } from "../_components/editor-context-menu/editor-context-menu.component";
@@ -37,8 +36,7 @@ import { PlaybackPointerGuardDirective } from "./playback-pointer-guard.directiv
         SVGDisplay,
         AnimationTimelineComponent,
         CanvasWorkspaceComponent,
-        LayersPanelComponent,
-        PropertiesPanelComponent,
+        EditorSidePanelComponent,
         EditorHeaderComponent,
         ToolPaletteComponent,
         EditorContextMenuComponent,

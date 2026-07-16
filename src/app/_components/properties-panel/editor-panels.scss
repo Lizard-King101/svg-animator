@@ -1,17 +1,10 @@
-@use "../../editor/editor-tokens" as *;
-
 // ── Attribute panel ───────────────────────────────────────────────────────────
 
 .attribute-panel {
-  flex: 0 0 $panel-w;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-surface);
-  border-left: 1px solid var(--border);
-  overflow-y: auto;
-  overflow-x: hidden;
-
   .panel-header {
+    position: sticky;
+    z-index: 2;
+    top: 0;
     flex: 0 0 auto;
     padding: 10px 14px 8px;
     font-size: 10px;
@@ -19,11 +12,11 @@
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text-muted);
+    background: var(--bg-surface);
     border-bottom: 1px solid var(--border);
   }
 
   .attr-list {
-    flex: 1 1 50%;
     display: flex;
     flex-direction: column;
     padding: 4px 0;
@@ -36,14 +29,13 @@
   }
 
   .layer-list {
-    flex: 1 1 50%;
     display: flex;
     flex-direction: column;
     padding: 6px 0;
   }
 
   .panel-empty {
-    flex: 1 1 50%;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
