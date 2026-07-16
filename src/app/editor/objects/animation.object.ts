@@ -307,6 +307,64 @@ export function applyEasingPresetToKeyframe(track: AnimationTrack, keyframe: Key
     next.temporal = withTemporalHandle(next.temporal, "in", preset.in);
 }
 
+/** Applies toolbar easing using selected keyframes as the boundaries of adjacent segments. */
+export function applyEasingPresetToSelection(
+    track: AnimationTrack,
+    selectedKeyframeIds: ReadonlySet<string>,
+    type: EasingType,
+): void {
+    for(let index = 0; index < track.keyframes.length - 1; index++) {
+        const from = track.keyframes[index];
+        const to = track.keyframes[index + 1];
+        const fromSelected = selectedKeyframeIds.has(from.id);
+        const toSelected = selectedKeyframeIds.has(to.id);
+        if(!fromSelected && !toSelected) continue;
+        if(type === "hold") {
+            if(fromSelected) applyEasingPresetToKeyframe(track, from, type);
+            continue;
+        }
+
+        const currentType = from.easing?.type ?? "linear";
+        let easeStart = currentType === "ease-in" || currentType === "ease-in-out";
+        let easeEnd = currentType === "ease-out" || currentType === "ease-in-out";
+        let startChanged = false;
+        let endChanged = false;
+        switch(type) {
+            case "ease-in":
+                if(fromSelected) { easeStart = true; startChanged = true; }
+                break;
+            case "ease-out":
+                if(toSelected) { easeEnd = true; endChanged = true; }
+                break;
+            case "ease-in-out":
+                if(fromSelected) { easeStart = true; startChanged = true; }
+                if(toSelected) { easeEnd = true; endChanged = true; }
+                break;
+            case "linear":
+                if(fromSelected) { easeStart = false; startChanged = true; }
+                if(toSelected) { easeEnd = false; endChanged = true; }
+                break;
+        }
+        if(!startChanged && !endChanged) continue;
+
+        from.easing = { type: easeStart && easeEnd ? "ease-in-out" : easeStart ? "ease-in" : easeEnd ? "ease-out" : "linear" };
+        if(track.valueType !== "number") continue;
+
+        const duration = to.time - from.time;
+        const slope = duration > 0 ? (Number(to.value) - Number(from.value)) / duration : 0;
+        const outgoingSpeed = easeStart ? 0 : easeEnd ? slope * 2 : slope;
+        const incomingSpeed = easeEnd ? 0 : easeStart ? slope * 2 : slope;
+        if(startChanged) {
+            from.temporal = withTemporalHandle(from.temporal, "out", { speed: outgoingSpeed, influence: 1 / 3 });
+            if(!to.temporal?.in) to.temporal = withTemporalHandle(to.temporal, "in", { speed: incomingSpeed, influence: 1 / 3 });
+        }
+        if(endChanged) {
+            to.temporal = withTemporalHandle(to.temporal, "in", { speed: incomingSpeed, influence: 1 / 3 });
+            if(!from.temporal?.out) from.temporal = withTemporalHandle(from.temporal, "out", { speed: outgoingSpeed, influence: 1 / 3 });
+        }
+    }
+}
+
 function withTemporalHandle(
     temporal: TemporalTangents | undefined,
     side: "in" | "out",

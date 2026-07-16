@@ -6,7 +6,7 @@ import { EditorService } from "./editor.service";
 import { PaintEditingService } from "./paint-editing.service";
 import { TimelineEditingService, PropertyTimelineRow } from "./timeline-editing.service";
 import { TimelineEditorService } from "./timeline-editor.service";
-import { ANIMATABLE_PROPERTIES } from "../editor/objects/animation.object";
+import { ANIMATABLE_PROPERTIES, AnimationTrack } from "../editor/objects/animation.object";
 import { Shape } from "../editor/objects/elements/shape.object";
 import { Group } from "../editor/objects/elements/group.object";
 import { Point } from "../editor/objects/point.object";
@@ -98,6 +98,22 @@ describe("TimelineEditorService scale and viewport policy", () => {
 
         expect(animation.tracks[0].keyframes[0].temporal).toEqual(animation.tracks[1].keyframes[0].temporal);
         expect(animation.tracks[0].keyframes[0].temporal?.out?.speed).toBe(7);
+    });
+
+    it("routes Ease Out through the selected ending keyframe", () => {
+        const { timeline, shape } = setup();
+        const track: AnimationTrack = {
+            id: "position", targetId: shape.id, property: "transform.translateX", valueType: "number" as const,
+            keyframes: [{ id: "start", time: 0, value: 0 }, { id: "end", time: 1, value: 10 }],
+        };
+        timeline.editor.selectedSVG!.animation.tracks = [track];
+        timeline.selectedKeyframeIds = new Set(["end"]);
+
+        timeline.setSelectedEasing("ease-out");
+
+        expect(track.keyframes[0].easing?.type).toBe("ease-out");
+        expect(track.keyframes[1].temporal?.in?.speed).toBe(0);
+        expect(timeline.selectedEasingType()).toBe("ease-out");
     });
 
     it("updates layer virtualization and graph time visibility independently", () => {

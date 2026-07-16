@@ -1,6 +1,7 @@
 import {
     AnimationTrack,
     applyEasingPresetToKeyframe,
+    applyEasingPresetToSelection,
     evaluateTemporalNumberSegment,
     evaluateTemporalSpeed,
     evaluateTrack,
@@ -53,6 +54,61 @@ describe("temporal animation math", () => {
         expect(evaluateTemporalSpeed(track.keyframes[0], track.keyframes[1], 0.5)).toBeCloseTo(15, 8);
         expect(evaluateTemporalSpeed(track.keyframes[0], track.keyframes[1], 1)).toBeCloseTo(0, 8);
         expect(evaluateTrack(track, 0.5)).toBeCloseTo(5, 8);
+    });
+
+    it("applies ease out to the segment arriving at the selected end keyframe", () => {
+        const track = temporalTrack(10, 10);
+        track.keyframes.forEach((keyframe) => keyframe.temporal = undefined);
+
+        applyEasingPresetToSelection(track, new Set(["b"]), "ease-out");
+
+        expect(track.keyframes[0].easing?.type).toBe("ease-out");
+        expect(track.keyframes[0].temporal?.out?.speed).toBe(20);
+        expect(track.keyframes[1].temporal?.in?.speed).toBe(0);
+        expect(evaluateTemporalSpeed(track.keyframes[0], track.keyframes[1], 1)).toBeCloseTo(0, 8);
+    });
+
+    it("combines selected start and end boundaries into ease in out", () => {
+        const track = temporalTrack(10, 10);
+        track.keyframes.forEach((keyframe) => keyframe.temporal = undefined);
+
+        applyEasingPresetToSelection(track, new Set(["a", "b"]), "ease-in-out");
+
+        expect(track.keyframes[0].easing?.type).toBe("ease-in-out");
+        expect(track.keyframes[0].temporal?.out?.speed).toBe(0);
+        expect(track.keyframes[1].temporal?.in?.speed).toBe(0);
+    });
+
+    it("preserves separately applied entry and exit easing on one segment", () => {
+        const track = temporalTrack(10, 10);
+        track.keyframes.forEach((keyframe) => keyframe.temporal = undefined);
+
+        applyEasingPresetToSelection(track, new Set(["a"]), "ease-in");
+        applyEasingPresetToSelection(track, new Set(["b"]), "ease-out");
+
+        expect(track.keyframes[0].easing?.type).toBe("ease-in-out");
+        expect(track.keyframes[0].temporal?.out?.speed).toBe(0);
+        expect(track.keyframes[1].temporal?.in?.speed).toBe(0);
+        expect(evaluateTemporalSpeed(track.keyframes[0], track.keyframes[1], 0)).toBeCloseTo(0, 8);
+        expect(evaluateTemporalSpeed(track.keyframes[0], track.keyframes[1], 1)).toBeCloseTo(0, 8);
+    });
+
+    it("eases both sides of one selected middle keyframe", () => {
+        const track: AnimationTrack = {
+            id: "middle", targetId: "shape", property: "transform.translateX", valueType: "number",
+            keyframes: [
+                { id: "a", time: 0, value: 0 },
+                { id: "b", time: 1, value: 10 },
+                { id: "c", time: 2, value: 20 },
+            ],
+        };
+
+        applyEasingPresetToSelection(track, new Set(["b"]), "ease-in-out");
+
+        expect(track.keyframes[0].easing?.type).toBe("ease-out");
+        expect(track.keyframes[1].temporal?.in?.speed).toBe(0);
+        expect(track.keyframes[1].easing?.type).toBe("ease-in");
+        expect(track.keyframes[1].temporal?.out?.speed).toBe(0);
     });
 
     it("sorts keys and deterministically lets the later collision win", () => {

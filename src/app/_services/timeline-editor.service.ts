@@ -2,7 +2,7 @@ import { ChangeDetectorRef, ElementRef, EventEmitter, Injectable, NgZone, OnDest
 import { AnimationPlaybackService } from "src/app/_services/animation-playback.service";
 import { EditorService } from "src/app/_services/editor.service";
 import { EditorPreferencesService } from "src/app/_services/editor-preferences.service";
-import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, AnimationTrack, applyEasingPresetToKeyframe, EasingType, evaluateTemporalSpeed, Keyframe, makeAnimationId, temporalTangentsForPreset, TemporalHandle } from "src/app/editor/objects/animation.object";
+import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, AnimationTrack, applyEasingPresetToSelection, EasingType, evaluateTemporalSpeed, Keyframe, makeAnimationId, temporalTangentsForPreset, TemporalHandle } from "src/app/editor/objects/animation.object";
 import { findAnimationTarget, matchingAnimationProperty, parsePathPointProperty, pathPointAnimationProperty, readAnimationProperty } from "src/app/editor/objects/animation-targets";
 import { Color } from "src/app/editor/objects/color.object";
 import { DocumentMutationService } from "src/app/_services/document-mutation.service";
@@ -67,9 +67,9 @@ export class TimelineEditorService implements OnDestroy {
         : [property]);
     readonly easingOptions: readonly EasingToolbarOption[] = [
         { type: "linear", label: "Linear", icon: keyframeEasingIcon("linear") },
-        { type: "ease-in", label: "Ease In", icon: keyframeEasingIcon("ease-in") },
-        { type: "ease-out", label: "Ease Out", icon: keyframeEasingIcon("ease-out") },
-        { type: "ease-in-out", label: "Ease In Out", icon: keyframeEasingIcon("ease-in-out") },
+        { type: "ease-in", label: "Ease In · start slowly after selected keyframe", icon: keyframeEasingIcon("ease-in") },
+        { type: "ease-out", label: "Ease Out · stop smoothly at selected keyframe", icon: keyframeEasingIcon("ease-out") },
+        { type: "ease-in-out", label: "Ease In Out · smooth both selected boundaries", icon: keyframeEasingIcon("ease-in-out") },
     ];
     readonly timePadding = 28;
     expandedLayerIds = new Set<string>();
@@ -886,8 +886,7 @@ export class TimelineEditorService implements OnDestroy {
             return undefined;
         }
 
-        const types = new Set(entries.map((entry) => entry.keyframe.easing?.type ?? "linear"));
-        return types.size === 1 ? [...types][0] : "mixed";
+        return this.boundaryEasingType(entries);
     }
 
     setSelectedEasing(type: EasingType) {
@@ -896,10 +895,14 @@ export class TimelineEditorService implements OnDestroy {
             return;
         }
 
+        const selectedByTrack = new Map<AnimationTrack, Set<string>>();
         entries.forEach((entry) => {
-            applyEasingPresetToKeyframe(entry.track, entry.keyframe, type);
+            const selected = selectedByTrack.get(entry.track) ?? new Set<string>();
+            selected.add(entry.keyframe.id);
+            selectedByTrack.set(entry.track, selected);
         });
-        this.animation.invalidate(new Set(entries.map((entry) => entry.track.id)));
+        selectedByTrack.forEach((selected, track) => applyEasingPresetToSelection(track, selected, type));
+        this.animation.invalidate(new Set([...selectedByTrack.keys()].map((track) => track.id)));
         this.animation.previewAt(this.animation.currentTime);
         this.animationChange.emit();
     }
@@ -2044,23 +2047,45 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private timelineKeyframeEasingType(keyframe: TimelineKeyframe): EasingType | "mixed" {
-        if(!keyframe.groupedKeyframeIds?.length) {
-            return keyframe.easing?.type ?? "linear";
-        }
-
         const svg = this.editor.selectedSVG;
-        if(!svg) {
-            return "linear";
-        }
+        if(!svg) return "linear";
+        const ids = new Set(keyframe.groupedKeyframeIds?.length ? keyframe.groupedKeyframeIds : [keyframe.id]);
+        const entries = svg.animation.tracks.flatMap((track) => track.keyframes
+            .filter((candidate) => ids.has(candidate.id))
+            .map((candidate) => ({ track, keyframe: candidate })));
+        return entries.length ? this.boundaryEasingType(entries) : "linear";
+    }
 
-        const ids = new Set(keyframe.groupedKeyframeIds);
-        const types = new Set(svg.animation.tracks.flatMap((track) => {
-            return track.keyframes
-                .filter((candidate) => ids.has(candidate.id))
-                .map((candidate) => candidate.easing?.type ?? "linear");
-        }));
+    private boundaryEasingType(entries: readonly KeyframeEntry[]): EasingType | "mixed" {
+        let hasIncoming = false;
+        let hasOutgoing = false;
+        let incomingEased = true;
+        let outgoingEased = true;
+        let allLinear = true;
 
-        return types.size === 1 ? [...types][0] : "mixed";
+        entries.forEach(({ track, keyframe }) => {
+            const index = track.keyframes.indexOf(keyframe);
+            if(index > 0) {
+                const type = track.keyframes[index - 1].easing?.type ?? "linear";
+                hasIncoming = true;
+                incomingEased &&= type === "ease-out" || type === "ease-in-out";
+                allLinear &&= type === "linear";
+            }
+            if(index >= 0 && index < track.keyframes.length - 1) {
+                const type = keyframe.easing?.type ?? "linear";
+                hasOutgoing = true;
+                outgoingEased &&= type === "ease-in" || type === "ease-in-out";
+                allLinear &&= type === "linear";
+            }
+        });
+
+        if(allLinear) return "linear";
+        const easedIn = hasOutgoing && outgoingEased;
+        const easedOut = hasIncoming && incomingEased;
+        if(easedIn && easedOut) return "ease-in-out";
+        if(easedOut) return "ease-out";
+        if(easedIn) return "ease-in";
+        return "mixed";
     }
 
     private sortDraggedTracks() {
