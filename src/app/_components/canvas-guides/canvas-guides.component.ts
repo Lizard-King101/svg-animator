@@ -41,11 +41,14 @@ export class CanvasGuidesComponent {
         const svg = this.editor.selectedSVG;
         const viewport = this.workspace?.element;
         if(!svg || !viewport) return [];
-        const length = axis === "x" ? svg.width : svg.height;
+        const bounds = svg.canvasBounds ?? { x: 0, y: 0, width: svg.width, height: svg.height };
+        const start = axis === "x" ? bounds.x : bounds.y;
+        const length = axis === "x" ? bounds.width : bounds.height;
         const viewportLength = axis === "x" ? viewport.clientWidth : viewport.clientHeight;
         const step = this.rulerStep(svg.zoom);
         const marks: RulerMark[] = [];
-        for(let value = 0; value <= length + 0.0001; value += step) {
+        const first = Math.ceil(start / step) * step;
+        for(let value = first; value <= start + length + 0.0001; value += step) {
             const position = (axis === "x" ? this.toViewportX(value) : this.toViewportY(value)) - this.rulerSize;
             if(position >= -80 && position <= viewportLength - this.rulerSize + 80) marks.push({ position, label: String(Math.round(value)) });
         }
@@ -172,7 +175,7 @@ export class CanvasGuidesComponent {
         return canvasToWorkspaceProjection(
             this.canvas.getBoundingClientRect(),
             viewport.getBoundingClientRect(),
-            { x: 0, y: 0, width: svg.width, height: svg.height },
+            svg.canvasBounds ?? { x: 0, y: 0, width: svg.width, height: svg.height },
         );
     }
     private valueFromEvent(axis: "x" | "y", event: PointerEvent | MouseEvent, roundToTen: boolean): number {

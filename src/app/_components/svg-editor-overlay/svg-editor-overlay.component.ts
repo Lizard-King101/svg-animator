@@ -11,6 +11,7 @@ import { Point } from "../../editor/objects/point.object";
 import { AnyElement } from "../../editor/objects/svg.object";
 import { applyMatrix, Bounds, Matrix, matrixToSvg, multiplyMatrix, transformedBounds } from "../../editor/objects/transform.object";
 import type { CanvasWorkspaceComponent } from "../canvas-workspace/canvas-workspace.component";
+import { CropTool } from "../../_services/tools/crop.tool";
 
 @Component({
     selector: "svg[editorOverlay]",
@@ -25,6 +26,9 @@ export class SVGEditorOverlayComponent {
     @HostBinding("class.editor-overlay") readonly overlayClass = true;
     @HostBinding("attr.width") readonly width = "100%";
     @HostBinding("attr.height") readonly height = "100%";
+    @HostBinding("style.visibility") get visibility(): string | null {
+        return this.editor.selectedTool instanceof CropTool ? "hidden" : null;
+    }
 
     constructor(public editor: EditorService) {}
 
@@ -127,7 +131,7 @@ export class SVGEditorOverlayComponent {
         const projection = canvasToWorkspaceProjection(
             artwork.getBoundingClientRect(),
             workspace.getBoundingClientRect(),
-            { x: 0, y: 0, width: svg.width, height: svg.height },
+            svg.canvasBounds ?? { x: 0, y: 0, width: svg.width, height: svg.height },
         );
         return multiplyMatrix(projection.canvasToWorkspace, combinedMotionAdjustedMatrixFor(svg, element));
     }

@@ -5,7 +5,7 @@ import { Path } from "../editor/objects/elements/path.object";
 import { Line } from "../editor/objects/line.object";
 import { Point } from "../editor/objects/point.object";
 import { Group } from "../editor/objects/elements/group.object";
-import { clampKeyframeTimeDelta, clampTimelineScale, semanticPartnerProperty, TimelineEditingService, timelineRulerInterval } from "./timeline-editing.service";
+import { clampKeyframeTimeDelta, clampTimelineScale, semanticPartnerProperty, TimelineEditingService, timelineRulerInterval, timelineTimeToX, timelineXToTime } from "./timeline-editing.service";
 
 describe("speed graph semantic pairing", () => {
     it("pairs transform and motion channels", () => {
@@ -80,9 +80,15 @@ describe("comprehensive timeline zoom", () => {
 });
 
 describe("keyframe retiming", () => {
-    it("clamps a shared delta without changing multi-key spacing", () => {
-        expect(clampKeyframeTimeDelta([0.5, 1.5], -1, 3)).toBe(-0.5);
-        expect(clampKeyframeTimeDelta([0.5, 1.5], 2, 3)).toBe(1.5);
+    it("allows a shared delta beyond the playable range without changing multi-key spacing", () => {
+        expect(clampKeyframeTimeDelta([0.5, 1.5], -1, 3)).toBe(-1);
+        expect(clampKeyframeTimeDelta([0.5, 1.5], 2, 3)).toBe(2);
         expect(clampKeyframeTimeDelta([0.5, 1.5], 0.25, 3)).toBe(0.25);
+    });
+
+    it("projects authored domains that begin before zero", () => {
+        expect(timelineTimeToX(-2, 20, 100, -2)).toBe(20);
+        expect(timelineTimeToX(0, 20, 100, -2)).toBe(220);
+        expect(timelineXToTime(20, 20, 100, -2)).toBe(-2);
     });
 });

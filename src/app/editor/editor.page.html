@@ -12,6 +12,7 @@
     <app-canvas-workspace #workspace class="view-port">
       <svg #canvas="svgDisplay" display *ngIf="editor.selectedSVG"></svg>
       <svg editorOverlay *ngIf="editor.selectedSVG" [artwork]="canvas?.nativeElement" [workspace]="workspace"></svg>
+      <app-canvas-crop *ngIf="editor.selectedSVG && animation.mode == 'edit'" [artwork]="canvas?.nativeElement" [workspace]="workspace" />
       <app-canvas-guides *ngIf="editor.selectedSVG && animation.mode == 'edit'" [canvas]="canvas?.nativeElement" [workspace]="workspace" />
       <div class="canvas-empty" *ngIf="!editor.selectedSVG">
         <div class="empty-hint">

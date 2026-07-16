@@ -491,6 +491,45 @@ animation-timeline {
   cursor: ew-resize;
 }
 
+.playable-duration {
+  position: absolute;
+  inset-block: 0;
+  background: rgba(45, 212, 191, 0.035);
+  border-inline: 1px solid rgba(45, 212, 191, 0.18);
+  pointer-events: none;
+}
+
+.work-area-bar {
+  position: absolute;
+  z-index: 3;
+  bottom: 1px;
+  height: 6px;
+  min-width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  cursor: grab;
+  touch-action: none;
+
+  &:active { cursor: grabbing; }
+}
+
+.work-area-handle {
+  position: absolute;
+  top: -3px;
+  width: 9px;
+  height: 12px;
+  padding: 0;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  background: var(--bg-elevated);
+  cursor: ew-resize;
+  touch-action: none;
+
+  &.start { left: -4px; }
+  &.end { right: -4px; }
+  &:focus-visible { outline: 1px solid #fff; outline-offset: 1px; }
+}
+
 .ruler-mark {
   position: absolute;
   top: 7px;

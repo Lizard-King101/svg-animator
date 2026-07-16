@@ -475,7 +475,7 @@ describe("editor topology boundaries", () => {
         expect(animation.tracks[0].keyframes.map((keyframe) => keyframe.time)).toEqual([0.5]);
         expect(timelineTimeToX(1, 20, 100)).toBe(120);
         expect(timelineXToTime(120, 20, 100)).toBe(1);
-        expect(snapTimelineTime(3, 2)).toBe(2);
+        expect(snapTimelineTime(3, 2)).toBe(3);
     });
 
     it("pastes copied keyframes onto matching properties of a newly selected layer", () => {

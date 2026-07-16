@@ -3,14 +3,7 @@
      (pointerdown)="timeline.beginViewportPan($event)">
   <div class="timeline-head-left">Layers</div>
   <div class="timeline-time-cell timeline-ruler-cell">
-    <div class="timeline-time-content timeline-ruler"
-         [style.width.px]="timeline.timelineContentWidth"
-         (pointerdown)="timeline.beginScrub($event)">
-      <div class="playhead animation-playhead" [attr.data-pixels-per-second]="timeline.pixelsPerSecond" [attr.data-time-padding]="timeline.timePadding" [style.left]="timeline.playheadLeft()"></div>
-      <span class="ruler-mark"
-            *ngFor="let mark of timeline.rulerMarks()"
-            [style.left.px]="mark.left">{{ mark.label }}</span>
-    </div>
+    <app-timeline-ruler />
   </div>
 
   <ng-container *ngIf="timeline.virtualTopHeight">
@@ -31,7 +24,7 @@
            (pointermove)="timeline.updateLaneGesture($event)"
            (pointerup)="timeline.endLaneGesture($event)"
            (pointercancel)="timeline.endLaneGesture($event)">
-        <div class="playhead animation-playhead" [attr.data-pixels-per-second]="timeline.pixelsPerSecond" [attr.data-time-padding]="timeline.timePadding" [style.left]="timeline.playheadLeft()"></div>
+        <div class="playhead animation-playhead" [attr.data-pixels-per-second]="timeline.pixelsPerSecond" [attr.data-time-padding]="timeline.timePadding" [attr.data-domain-start]="timeline.timeDomainStart" [style.left]="timeline.playheadLeft()"></div>
         <button class="key-diamond"
                 *ngFor="let keyframe of row.type == 'property' ? timeline.visibleKeyframes(row) : []"
                 [attr.data-keyframe-id]="keyframe.id"
@@ -92,14 +85,7 @@
            (pointerdown)="timeline.beginViewportPan($event)">
     <div class="graph-time-content" [style.width.px]="timeline.timelineContentWidth">
       <div class="timeline-ruler-cell">
-        <div class="timeline-time-content timeline-ruler"
-             [style.width.px]="timeline.timelineContentWidth"
-             (pointerdown)="timeline.beginScrub($event)">
-          <div class="playhead animation-playhead" [attr.data-pixels-per-second]="timeline.pixelsPerSecond" [attr.data-time-padding]="timeline.timePadding" [style.left]="timeline.playheadLeft()"></div>
-          <span class="ruler-mark"
-                *ngFor="let mark of timeline.rulerMarks()"
-                [style.left.px]="mark.left">{{ mark.label }}</span>
-        </div>
+        <app-timeline-ruler />
       </div>
       <div class="graph-fixed-placeholder" [style.height.px]="timeline.graphHeight()">
         <app-timeline-graph />

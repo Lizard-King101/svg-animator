@@ -4,7 +4,7 @@
   <svg [attr.width]="timeline.timelineContentWidth" [attr.height]="timeline.graphHeight()" [attr.viewBox]="'0 0 ' + timeline.timelineContentWidth + ' ' + timeline.graphHeight()">
     <line class="speed-zero-line" [attr.x1]="0" [attr.x2]="timeline.timelineContentWidth" [attr.y1]="timeline.graphZeroY()" [attr.y2]="timeline.graphZeroY()"></line>
     <line class="graph-playhead animation-graph-playhead"
-          [attr.data-pixels-per-second]="timeline.pixelsPerSecond" [attr.data-time-padding]="timeline.timePadding"
+          [attr.data-pixels-per-second]="timeline.pixelsPerSecond" [attr.data-time-padding]="timeline.timePadding" [attr.data-domain-start]="timeline.timeDomainStart"
           [attr.x1]="timeline.graphPlayheadX()" [attr.x2]="timeline.graphPlayheadX()" y1="0" [attr.y2]="timeline.graphHeight()"></line>
     <ng-container *ngFor="let graphTrack of timeline.graphRenderTracks()">
       <path class="speed-curve" [attr.d]="timeline.speedCurvePath(graphTrack.track)" [attr.stroke]="graphTrack.color"></path>

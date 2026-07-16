@@ -25,7 +25,10 @@ export class SVGDisplay implements AfterViewInit {
 
     @HostBinding('attr.width') get width() { return this.editor.selectedSVG?.width }
     @HostBinding('attr.height') get height() { return this.editor.selectedSVG?.height }
-    @HostBinding('attr.viewBox') get viewbox() { return '0 0 ' + this.editor.selectedSVG?.width + ' ' + this.editor.selectedSVG?.height }
+    @HostBinding('attr.viewBox') get viewbox() {
+        const bounds = this.editor.selectedSVG?.canvasBounds;
+        return bounds ? `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}` : null;
+    }
     @HostBinding('style.top') get y() { return (this.editor.selectedSVG?.pos.y || 0) + 'px' }
     @HostBinding('style.left') get x() { return (this.editor.selectedSVG?.pos.x || 0) + 'px' }
     @HostBinding('style.scale') get zoom() { return this.editor.selectedSVG?.zoom }

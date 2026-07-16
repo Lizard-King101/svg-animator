@@ -11,6 +11,13 @@ export interface AnimationDocument {
     tracks: AnimationTrack[];
     markers: TimelineMarker[];
     variables?: RuntimeVariable[];
+    /** Authoring-only preview range. Runtime playback exports ignore it. */
+    workArea?: TimelineWorkArea;
+}
+
+export interface TimelineWorkArea {
+    start: number;
+    end: number;
 }
 
 export interface AnimationTrack {
@@ -114,6 +121,7 @@ export function createDefaultAnimation(): AnimationDocument {
         tracks: [],
         markers: [],
         variables: [],
+        workArea: { start: 0, end: 3 },
     };
 }
 
@@ -122,15 +130,29 @@ export function restoreAnimation(save?: (Omit<Partial<AnimationSave>, "version">
         return createDefaultAnimation();
     }
 
+    const duration = positiveNumber(save.duration, 3);
     return {
         version: 2,
-        duration: positiveNumber(save.duration, 3),
+        duration,
         fpsHint: positiveNumber(save.fpsHint, 60),
         loop: save.loop ?? false,
         tracks: Array.isArray(save.tracks) ? save.tracks.map(restoreTrack).filter((track): track is AnimationTrack => !!track) : [],
         markers: Array.isArray(save.markers) ? save.markers.map(restoreMarker).filter((marker): marker is TimelineMarker => !!marker) : [],
         variables: Array.isArray(save.variables) ? save.variables.map(restoreVariable).filter((variable): variable is RuntimeVariable => !!variable) : [],
+        workArea: normalizeWorkArea((save as Partial<AnimationDocument>).workArea, duration),
     };
+}
+
+export function normalizeWorkArea(workArea: Partial<TimelineWorkArea> | null | undefined, duration: number): TimelineWorkArea {
+    const safeDuration = Math.max(0.1, Number.isFinite(duration) ? duration : 3);
+    const start = Number(workArea?.start);
+    const end = Number(workArea?.end);
+    if(!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+        return { start: 0, end: safeDuration };
+    }
+    const clampedStart = Math.max(0, Math.min(safeDuration - 0.01, start));
+    const clampedEnd = Math.max(clampedStart + 0.01, Math.min(safeDuration, end));
+    return { start: clampedStart, end: clampedEnd };
 }
 
 export function cloneAnimation(animation: AnimationDocument): AnimationDocument {

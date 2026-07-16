@@ -1,4 +1,4 @@
-import { NgClass, NgFor, NgIf } from "@angular/common";
+import { NgClass, NgFor, NgIf, TitleCasePipe } from "@angular/common";
 import { Component } from "@angular/core";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { EditorService } from "../../_services/editor.service";
@@ -6,11 +6,11 @@ import { EditorService } from "../../_services/editor.service";
 @Component({
     selector: "app-tool-palette",
     standalone: true,
-    imports: [NgClass, NgFor, NgIf, FaIconComponent],
+    imports: [NgClass, NgFor, NgIf, TitleCasePipe, FaIconComponent],
     styles: [":host { display: contents; }"],
     template: `
       <div class="tool-bar">
-        <div class="tool" *ngFor="let tool of editor.tools" (click)="tool.select($event)" (contextmenu)="tool.select($event)"
+        <div class="tool" *ngFor="let tool of editor.tools" (click)="tool.select($event)" (contextmenu)="tool.select($event)" [title]="tool.preferenceKey | titlecase"
              [ngClass]="{'selected': tool.selected, 'has-children': tool.children.length}">
           <fa-icon *ngIf="tool.icon" [icon]="tool.getIcon"></fa-icon>
           <div class="child-tools" *ngIf="tool.showChildren">

@@ -49,7 +49,7 @@ export interface SVGMarkupOptions {
 export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string {
     const bakeRoundedCorners = options.bakeRoundedCorners ?? true;
     const lines: string[] = [
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${escapeXmlAttribute(svg.width)}" height="${escapeXmlAttribute(svg.height)}" viewBox="0 0 ${escapeXmlAttribute(svg.width)} ${escapeXmlAttribute(svg.height)}">`
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${escapeXmlAttribute(svg.width)}" height="${escapeXmlAttribute(svg.height)}" viewBox="${escapeXmlAttribute(svg.viewBoxX)} ${escapeXmlAttribute(svg.viewBoxY)} ${escapeXmlAttribute(svg.width)} ${escapeXmlAttribute(svg.height)}">`
     ];
     const gradients = collectGradients(svg.elements);
     if(gradients.length > 0) {

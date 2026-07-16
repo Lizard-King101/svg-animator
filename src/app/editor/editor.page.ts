@@ -27,6 +27,8 @@ import { PaintEditingService } from "../_services/paint-editing.service";
 import { CurrentDocumentSVGImportService } from "../_services/current-document-svg-import.service";
 import { isEditableEventTarget } from "./editable-event-target";
 import { PlaybackPointerGuardDirective } from "./playback-pointer-guard.directive";
+import { CanvasCropComponent } from "../_components/canvas-crop/canvas-crop.component";
+import { CanvasCropService } from "../_services/canvas-crop.service";
 
 @Component({
     standalone: true,
@@ -45,6 +47,7 @@ import { PlaybackPointerGuardDirective } from "./playback-pointer-guard.directiv
         CanvasGuidesComponent,
         SVGEditorOverlayComponent,
         PlaybackPointerGuardDirective,
+        CanvasCropComponent,
     ],
     providers: [
         EditorService,
@@ -58,6 +61,7 @@ import { PlaybackPointerGuardDirective } from "./playback-pointer-guard.directiv
         EditorUiStateService,
         PaintEditingService,
         CurrentDocumentSVGImportService,
+        CanvasCropService,
     ],
     templateUrl: 'editor.page.html',
     styleUrls: ['editor.page.scss'],

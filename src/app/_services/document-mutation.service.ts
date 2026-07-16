@@ -7,7 +7,7 @@ import { ProjectService } from "./project.service";
 import { SVG, SVGSave } from "../editor/objects/svg.object";
 import { Subject } from "rxjs";
 
-export type MutationDomain = "artwork" | "animation" | "guides" | "metadata" | "thumbnail-artwork";
+export type MutationDomain = "artwork" | "animation" | "guides" | "metadata" | "canvas" | "thumbnail-artwork";
 
 /**
  * Single commit boundary for persistent document changes. It compares the
@@ -90,7 +90,7 @@ export class DocumentMutationService implements OnDestroy {
         if(!svg) return;
         const save = captured ?? this.captureSave();
         if(!save) return;
-        const thumbnailChanged = domain === "artwork" || domain === "thumbnail-artwork";
+        const thumbnailChanged = domain === "artwork" || domain === "canvas" || domain === "thumbnail-artwork";
         const existingThumbnail = typeof this.projects.get === "function" ? this.projects.get(save.id)?.thumbnail ?? "" : "";
         this.projects.upsert(save, existingThumbnail, { thumbnailChanged: false });
         if(thumbnailChanged && typeof this.projects.updateThumbnail === "function") {
@@ -106,7 +106,7 @@ export class DocumentMutationService implements OnDestroy {
         this.animation.withBaseState(() => this.history.undo(this.editor));
         const after = this.captureSave();
         this.resetBaseline();
-        this.save(after, artworkChanged(before, after) ? "artwork" : "animation");
+        this.save(after, restoredDomain(before, after));
         this.finishHistoryRestore();
     }
 
@@ -116,7 +116,7 @@ export class DocumentMutationService implements OnDestroy {
         this.animation.withBaseState(() => this.history.redo(this.editor));
         const after = this.captureSave();
         this.resetBaseline();
-        this.save(after, artworkChanged(before, after) ? "artwork" : "animation");
+        this.save(after, restoredDomain(before, after));
         this.finishHistoryRestore();
     }
 
@@ -134,6 +134,8 @@ function serializeMutationState(save: SVGSave): string {
         name: save.name,
         width: save.width,
         height: save.height,
+        viewBoxX: save.viewBoxX,
+        viewBoxY: save.viewBoxY,
         elements: save.elements,
         animation: save.animation,
         guides: save.guides,
@@ -143,11 +145,15 @@ function serializeMutationState(save: SVGSave): string {
 }
 
 function mergeDomain(current: MutationDomain, next: MutationDomain): MutationDomain {
-    const rank: Record<MutationDomain, number> = { metadata: 0, guides: 1, animation: 2, artwork: 3, "thumbnail-artwork": 4 };
+    const rank: Record<MutationDomain, number> = { metadata: 0, guides: 1, animation: 2, canvas: 3, artwork: 4, "thumbnail-artwork": 5 };
     return rank[next] > rank[current] ? next : current;
 }
 
-function artworkChanged(before?: SVGSave, after?: SVGSave): boolean {
-    if(!before || !after) return true;
-    return JSON.stringify([before.elements, before.importedSourceNodes]) !== JSON.stringify([after.elements, after.importedSourceNodes]);
+function restoredDomain(before?: SVGSave, after?: SVGSave): MutationDomain {
+    if(!before || !after) return "artwork";
+    if(JSON.stringify([before.elements, before.importedSourceNodes]) !== JSON.stringify([after.elements, after.importedSourceNodes])) return "artwork";
+    if(JSON.stringify([before.width, before.height, before.viewBoxX, before.viewBoxY]) !== JSON.stringify([after.width, after.height, after.viewBoxX, after.viewBoxY])) return "canvas";
+    if(JSON.stringify([before.guides, before.guidesLocked]) !== JSON.stringify([after.guides, after.guidesLocked])) return "guides";
+    if(JSON.stringify(before.animation) !== JSON.stringify(after.animation)) return "animation";
+    return "metadata";
 }

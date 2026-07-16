@@ -88,7 +88,7 @@ export class TimelineEditingService {
                 };
                 animation.tracks.push(track);
             }
-            const time = snapTimelineTime(currentTime + copied.timeOffset, animation.duration);
+            const time = snapTimelineTime(currentTime + copied.timeOffset);
             const existing = track.keyframes.find((keyframe) => timelineTimesMatch(keyframe.time, time));
             if(existing) {
                 existing.value = cloneValue(copied.value);
@@ -127,16 +127,16 @@ export class TimelineEditingService {
     }
 }
 
-export function timelineTimeToX(time: number, padding: number, pixelsPerSecond: number): number {
-    return padding + (Math.max(0, time) * pixelsPerSecond);
+export function timelineTimeToX(time: number, padding: number, pixelsPerSecond: number, domainStart = 0): number {
+    return padding + ((time - domainStart) * pixelsPerSecond);
 }
 
-export function timelineXToTime(x: number, padding: number, pixelsPerSecond: number): number {
-    return Math.max(0, (x - padding) / pixelsPerSecond);
+export function timelineXToTime(x: number, padding: number, pixelsPerSecond: number, domainStart = 0): number {
+    return domainStart + ((x - padding) / pixelsPerSecond);
 }
 
-export function snapTimelineTime(time: number, duration: number): number {
-    return Math.round(Math.max(0, Math.min(duration, time)) * 100) / 100;
+export function snapTimelineTime(time: number, _duration?: number): number {
+    return Math.round(time * 100) / 100;
 }
 
 export function timelineRulerInterval(pixelsPerSecond: number): number {
@@ -154,10 +154,7 @@ export function clampTimelineScale(value: number): number {
 
 /** Clamps one shared retiming delta so a multi-key selection keeps its spacing at the document bounds. */
 export function clampKeyframeTimeDelta(startTimes: readonly number[], requestedDelta: number, duration: number): number {
-    if(startTimes.length === 0) return 0;
-    const earliest = Math.min(...startTimes);
-    const latest = Math.max(...startTimes);
-    return Math.max(-earliest, Math.min(Math.max(0, duration) - latest, requestedDelta));
+    return startTimes.length === 0 || !Number.isFinite(requestedDelta) ? 0 : requestedDelta;
 }
 
 export function timelineTimesMatch(a: number, b: number): boolean { return Math.abs(a - b) < 0.0005; }

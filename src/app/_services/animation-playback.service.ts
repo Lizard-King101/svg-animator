@@ -6,7 +6,7 @@ import {
     readAnimationProperty,
     writeAnimationProperty,
 } from "../editor/objects/animation-targets";
-import { AnimationTrack, AnimationValueType, colorValueSpace, createAnimationColorValue, makeAnimationId } from "../editor/objects/animation.object";
+import { AnimationTrack, AnimationValueType, colorValueSpace, createAnimationColorValue, makeAnimationId, normalizeWorkArea, TimelineWorkArea } from "../editor/objects/animation.object";
 import { AnimationEvaluationPlan } from "../editor/animation/animation-evaluation-plan";
 import { ImperativeSvgRenderer } from "../editor/animation/imperative-svg-renderer";
 import { AnyElement, SVG } from "../editor/objects/svg.object";
@@ -51,6 +51,11 @@ export class AnimationPlaybackService implements OnDestroy {
         return this.editor.selectedSVG?.animation.loop ?? false;
     }
 
+    get workArea(): TimelineWorkArea {
+        const animation = this.editor.selectedSVG?.animation;
+        return normalizeWorkArea(animation?.workArea, animation?.duration ?? 0.1);
+    }
+
     setMode(mode: EditorMode) {
         this.preferences.setMode(mode);
         if(this.mode === mode) {
@@ -72,8 +77,49 @@ export class AnimationPlaybackService implements OnDestroy {
             return;
         }
 
+        const oldDuration = svg.animation.duration;
+        const oldArea = normalizeWorkArea(svg.animation.workArea, oldDuration);
+        const followsDuration = Math.abs(oldArea.start) < 0.0005 && Math.abs(oldArea.end - oldDuration) < 0.0005;
         svg.animation.duration = Math.max(0.1, duration);
+        svg.animation.workArea = followsDuration
+            ? { start: 0, end: svg.animation.duration }
+            : normalizeWorkArea(oldArea, svg.animation.duration);
         this.seek(this.currentTime);
+    }
+
+    setWorkArea(start: number, end: number): void {
+        const animation = this.editor.selectedSVG?.animation;
+        if(!animation || !Number.isFinite(start) || !Number.isFinite(end)) return;
+        const minimum = Math.min(0.01, animation.duration);
+        const safeStart = Math.max(0, Math.min(animation.duration - minimum, start));
+        const safeEnd = Math.max(safeStart + minimum, Math.min(animation.duration, end));
+        animation.workArea = { start: safeStart, end: safeEnd };
+    }
+
+    resetWorkArea(): void {
+        const animation = this.editor.selectedSVG?.animation;
+        if(animation) animation.workArea = { start: 0, end: animation.duration };
+    }
+
+    trimToWorkArea(): boolean {
+        const svg = this.editor.selectedSVG;
+        if(!svg) return false;
+        const range = this.workArea;
+        const offset = range.start;
+        const duration = Math.max(0.1, range.end - range.start);
+        if(Math.abs(offset) < 0.0005 && Math.abs(duration - svg.animation.duration) < 0.0005) return false;
+        this.pause();
+        this.restorePreview();
+        svg.animation.tracks.forEach((track) => track.keyframes.forEach((keyframe) => {
+            keyframe.time = roundTime(keyframe.time - offset);
+        }));
+        svg.animation.markers.forEach((marker) => marker.time = roundTime(marker.time - offset));
+        svg.animation.duration = duration;
+        svg.animation.workArea = { start: 0, end: duration };
+        this.currentTime = this.clampTime(this.currentTime - offset);
+        this.invalidate();
+        if(this.mode === "animate") this.previewAt(this.currentTime);
+        return true;
     }
 
     setLoop(loop: boolean) {
@@ -188,6 +234,10 @@ export class AnimationPlaybackService implements OnDestroy {
         }
 
         this.setMode("animate");
+        const range = this.workArea;
+        if(this.currentTime < range.start || this.currentTime >= range.end) {
+            this.seek(this.speed < 0 ? range.end : range.start);
+        }
         this.playing = true;
         this.setOverlaysVisible(false);
         this.ensureEvaluationPlan(true);
@@ -220,7 +270,7 @@ export class AnimationPlaybackService implements OnDestroy {
 
     stop() {
         this.pause();
-        this.seek(0);
+        this.seek(this.workArea.start);
     }
 
     seek(time: number) {
@@ -359,25 +409,26 @@ export class AnimationPlaybackService implements OnDestroy {
     }
 
     private advance(deltaSeconds: number) {
-        const duration = this.duration;
-        if(duration <= 0) {
+        const range = this.workArea;
+        const span = range.end - range.start;
+        if(span <= 0) {
             this.currentTime = 0;
             this.previewAt(this.currentTime);
             return;
         }
 
         let nextTime = this.currentTime + deltaSeconds;
-        if(nextTime > duration) {
+        if(nextTime > range.end) {
             if(this.loop) {
-                nextTime = nextTime % duration;
+                nextTime = range.start + ((nextTime - range.start) % span);
             } else {
-                nextTime = duration;
+                nextTime = range.end;
                 this.zone.run(() => this.pause());
             }
         }
 
-        if(nextTime < 0) {
-            nextTime = this.loop ? duration + (nextTime % duration) : 0;
+        if(nextTime < range.start) {
+            nextTime = this.loop ? range.end - ((range.start - nextTime) % span) : range.start;
         }
 
         this.currentTime = this.clampTime(nextTime);
@@ -398,12 +449,14 @@ export class AnimationPlaybackService implements OnDestroy {
         document.querySelectorAll<HTMLElement>(".animation-playhead").forEach((playhead) => {
             const padding = Number(playhead.dataset["timePadding"] ?? 28);
             const scale = Number(playhead.dataset["pixelsPerSecond"] ?? 120);
-            playhead.style.left = `${padding + this.currentTime * scale}px`;
+            const domainStart = Number(playhead.dataset["domainStart"] ?? 0);
+            playhead.style.left = `${padding + (this.currentTime - domainStart) * scale}px`;
         });
         document.querySelectorAll<SVGLineElement>(".animation-graph-playhead").forEach((playhead) => {
             const padding = Number(playhead.dataset["timePadding"] ?? 28);
             const scale = Number(playhead.dataset["pixelsPerSecond"] ?? 120);
-            const x = padding + this.currentTime * scale;
+            const domainStart = Number(playhead.dataset["domainStart"] ?? 0);
+            const x = padding + (this.currentTime - domainStart) * scale;
             playhead.setAttribute("x1", String(x));
             playhead.setAttribute("x2", String(x));
         });
@@ -422,4 +475,8 @@ export class AnimationPlaybackService implements OnDestroy {
 
         return Math.max(0, Math.min(time, this.duration || 0));
     }
+}
+
+function roundTime(value: number): number {
+    return Math.round(value * 10000) / 10000;
 }

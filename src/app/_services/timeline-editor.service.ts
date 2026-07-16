@@ -96,6 +96,7 @@ export class TimelineEditorService implements OnDestroy {
     private scrubClientX = 0;
     private scrubFrame?: number;
     private scrubCapture?: HTMLElement;
+    private workAreaDrag?: WorkAreaDrag;
     private resizeStartY = 0;
     private resizeStartHeight = 310;
     private keyframeDrag?: KeyframeDrag;
@@ -114,6 +115,7 @@ export class TimelineEditorService implements OnDestroy {
     private rowCacheKey = "";
     private rowCache: TimelineRow[] = [];
     private scaleLinkOverrides = new Map<string, boolean>();
+    private timeDomainCache?: { documentId: string; revision: number; duration: number; start: number; end: number };
     private historyRestoreSubscription: Subscription;
 
     constructor(
@@ -339,8 +341,8 @@ export class TimelineEditorService implements OnDestroy {
 
     private updateVisibleTime(scrollLeft: number, clientWidth: number, layerWidth: number): void {
         const timelineLeft = Math.max(0, scrollLeft - layerWidth - this.timePadding);
-        this.visibleTimeStart = Math.max(0, timelineLeft / this.pixelsPerSecond - 0.5);
-        this.visibleTimeEnd = (timelineLeft + clientWidth + layerWidth) / this.pixelsPerSecond + 0.5;
+        this.visibleTimeStart = this.timeDomainStart + timelineLeft / this.pixelsPerSecond - 0.5;
+        this.visibleTimeEnd = this.timeDomainStart + (timelineLeft + clientWidth + layerWidth) / this.pixelsPerSecond + 0.5;
     }
 
     visibleKeyframes(row: TimelineRow): TimelineKeyframe[] {
@@ -653,8 +655,11 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     get timelineContentWidth(): number {
-        return Math.max(360, (this.animation.duration * this.pixelsPerSecond) + (this.timePadding * 2));
+        return Math.max(360, ((this.timeDomainEnd - this.timeDomainStart) * this.pixelsPerSecond) + (this.timePadding * 2));
     }
+
+    get timeDomainStart(): number { return this.timeDomainBounds().start; }
+    get timeDomainEnd(): number { return this.timeDomainBounds().end; }
 
     get overscrollHeight(): number {
         const toolbarHeight = 36;
@@ -671,6 +676,11 @@ export class TimelineEditorService implements OnDestroy {
     playheadLeft(): string {
         return this.keyframeLeft(this.animation.currentTime);
     }
+
+    workAreaLeft(): number { return this.timeToX(this.animation.workArea.start); }
+    workAreaWidth(): number { return Math.max(2, (this.animation.workArea.end - this.animation.workArea.start) * this.pixelsPerSecond); }
+    playableStartLeft(): number { return this.timeToX(0); }
+    playableWidth(): number { return this.animation.duration * this.pixelsPerSecond; }
 
     zoomTimeline(delta: number) {
         this.zoomTimelineAt(delta > 0 ? 1.25 : 0.8);
@@ -765,27 +775,28 @@ export class TimelineEditorService implements OnDestroy {
         let anchorTime: number;
         if(clientX == null) {
             anchorTime = this.animation.currentTime;
-            const playheadScreen = layerWidth + this.timePadding + anchorTime * oldScale - table.scrollLeft;
+            const playheadScreen = layerWidth + this.timePadding + (anchorTime - this.timeDomainStart) * oldScale - table.scrollLeft;
             if(playheadScreen >= layerWidth && playheadScreen <= table.clientWidth) anchorScreen = playheadScreen;
         } else {
-            anchorTime = Math.max(0, (table.scrollLeft + anchorScreen - layerWidth - this.timePadding) / oldScale);
+            anchorTime = this.timeDomainStart + (table.scrollLeft + anchorScreen - layerWidth - this.timePadding) / oldScale;
         }
         this.pixelsPerSecond = nextScale;
-        table.scrollLeft = Math.max(0, layerWidth + this.timePadding + anchorTime * nextScale - anchorScreen);
+        table.scrollLeft = Math.max(0, layerWidth + this.timePadding + (anchorTime - this.timeDomainStart) * nextScale - anchorScreen);
     }
 
     fitTimeline() {
         const visibleWidth = this.host.nativeElement.querySelector<HTMLElement>(".timeline-ruler-cell")?.clientWidth ?? 600;
-        const duration = Math.max(0.1, this.animation.duration);
-        this.pixelsPerSecond = this.clampTimelineScale((visibleWidth - (this.timePadding * 2)) / duration);
+        const span = Math.max(0.1, this.timeDomainEnd - this.timeDomainStart);
+        this.pixelsPerSecond = this.clampTimelineScale((visibleWidth - (this.timePadding * 2)) / span);
     }
 
     rulerMarks(): TimelineRulerMark[] {
-        const duration = Math.max(0, this.animation.duration);
+        const start = this.timeDomainStart;
+        const duration = this.timeDomainEnd;
         const interval = this.rulerInterval();
         const marks: TimelineRulerMark[] = [];
 
-        for(let time = 0; time <= duration + 0.0001; time += interval) {
+        for(let time = Math.ceil(start / interval) * interval; time <= duration + 0.0001; time += interval) {
             const rounded = Math.round(time * 1000) / 1000;
             marks.push({
                 time: rounded,
@@ -810,7 +821,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     gridOffset(): string {
-        return `${this.timePadding}px`;
+        return `${this.timeToX(0)}px`;
     }
 
     setDuration(value: number | string | null) {
@@ -824,6 +835,79 @@ export class TimelineEditorService implements OnDestroy {
 
     setLoop(value: boolean) {
         this.animation.setLoop(value);
+        this.animationChange.emit();
+    }
+
+    beginWorkAreaDrag(side: "start" | "end" | "range", event: PointerEvent): void {
+        if(event.button !== 0) return;
+        event.preventDefault(); event.stopPropagation();
+        const area = this.animation.workArea;
+        this.workAreaDrag = {
+            pointerId: event.pointerId,
+            side,
+            startX: event.clientX,
+            start: area.start,
+            end: area.end,
+            capture: event.currentTarget as HTMLElement,
+        };
+        try { this.workAreaDrag.capture.setPointerCapture(event.pointerId); } catch {}
+        this.installGlobalPointerTracking(event.pointerId,
+            (pointerEvent) => this.updateWorkAreaDrag(pointerEvent),
+            (pointerEvent) => this.zone.run(() => this.endWorkAreaDrag(pointerEvent)));
+    }
+
+    updateWorkAreaDrag(event: PointerEvent): void {
+        const drag = this.workAreaDrag;
+        if(!drag || drag.pointerId !== event.pointerId) return;
+        event.preventDefault(); event.stopPropagation();
+        const delta = (event.clientX - drag.startX) / this.pixelsPerSecond;
+        const minimum = 0.01;
+        if(drag.side === "start") {
+            this.animation.setWorkArea(Math.min(drag.end - minimum, Math.max(0, this.snapUnclamped(drag.start + delta))), drag.end);
+        } else if(drag.side === "end") {
+            this.animation.setWorkArea(drag.start, Math.max(drag.start + minimum, Math.min(this.animation.duration, this.snapUnclamped(drag.end + delta))));
+        } else {
+            const span = drag.end - drag.start;
+            const start = Math.max(0, Math.min(this.animation.duration - span, this.snapUnclamped(drag.start + delta)));
+            this.animation.setWorkArea(start, start + span);
+        }
+        this.changeDetector.markForCheck();
+    }
+
+    endWorkAreaDrag(event: PointerEvent): void {
+        const drag = this.workAreaDrag;
+        if(!drag || drag.pointerId !== event.pointerId) return;
+        if(event.type === "pointercancel") this.animation.setWorkArea(drag.start, drag.end);
+        else this.updateWorkAreaDrag(event);
+        try { drag.capture.releasePointerCapture(event.pointerId); } catch {}
+        this.workAreaDrag = undefined;
+        this.clearGlobalPointerTracking();
+        if(event.type !== "pointercancel") this.animationChange.emit();
+    }
+
+    adjustWorkArea(side: "start" | "end", event: KeyboardEvent): void {
+        if(event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault(); event.stopPropagation();
+        const delta = (event.key === "ArrowRight" ? 1 : -1) * (event.shiftKey ? 0.1 : 0.01);
+        const area = this.animation.workArea;
+        if(side === "start") this.animation.setWorkArea(area.start + delta, area.end);
+        else this.animation.setWorkArea(area.start, area.end + delta);
+        this.animationChange.emit();
+    }
+
+    openWorkAreaContextMenu(event: MouseEvent): void {
+        event.preventDefault(); event.stopPropagation();
+        this.editor.openContextMenu(event.clientX, event.clientY, [
+            { label: "Set Work Area Start at Playhead", action: () => this.setWorkAreaBoundary("start") },
+            { label: "Set Work Area End at Playhead", action: () => this.setWorkAreaBoundary("end") },
+            { label: "Reset Work Area", action: () => { this.animation.resetWorkArea(); this.animationChange.emit(); } },
+            { label: "Trim Time to Work Area", action: () => this.trimToWorkArea() },
+        ]);
+    }
+
+    trimToWorkArea(): void {
+        if(!this.animation.trimToWorkArea()) return;
+        this.selectedKeyframeIds.clear();
         this.animationChange.emit();
     }
 
@@ -2031,15 +2115,39 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private timeToX(time: number): number {
-        return timelineTimeToX(time, this.timePadding, this.pixelsPerSecond);
+        return timelineTimeToX(time, this.timePadding, this.pixelsPerSecond, this.timeDomainStart);
     }
 
     private xToTime(x: number): number {
-        return timelineXToTime(x, this.timePadding, this.pixelsPerSecond);
+        return timelineXToTime(x, this.timePadding, this.pixelsPerSecond, this.timeDomainStart);
     }
 
     private snapTime(time: number): number {
-        return snapTimelineTime(time, this.animation.duration);
+        return snapTimelineTime(time);
+    }
+
+    private snapUnclamped(time: number): number { return snapTimelineTime(time); }
+
+    private timeDomainBounds(): { start: number; end: number } {
+        const animation = this.editor.selectedSVG?.animation;
+        const documentId = this.editor.selectedSVG?.id ?? "";
+        const cached = this.timeDomainCache;
+        if(this.keyframeDrag && cached?.documentId === documentId) return cached;
+        if(cached && cached.documentId === documentId && cached.revision === this.animation.revision
+            && cached.duration === this.animation.duration) return cached;
+        const times = animation ? [animation.duration, ...animation.markers.map((marker) => marker.time),
+            ...animation.tracks.flatMap((track) => track.keyframes.map((keyframe) => keyframe.time))] : [0];
+        const next = { documentId, revision: this.animation.revision, duration: this.animation.duration,
+            start: Math.min(0, ...times), end: Math.max(this.animation.duration, ...times) };
+        this.timeDomainCache = next;
+        return next;
+    }
+
+    private setWorkAreaBoundary(side: "start" | "end"): void {
+        const area = this.animation.workArea;
+        if(side === "start") this.animation.setWorkArea(this.animation.currentTime, area.end);
+        else this.animation.setWorkArea(area.start, this.animation.currentTime);
+        this.animationChange.emit();
     }
 
     private selectedKeyframeEntries(): KeyframeEntry[] {
@@ -2350,6 +2458,15 @@ interface TimelineRulerMark {
     time: number;
     label: string;
     left: number;
+}
+
+interface WorkAreaDrag {
+    pointerId: number;
+    side: "start" | "end" | "range";
+    startX: number;
+    start: number;
+    end: number;
+    capture: HTMLElement;
 }
 
 interface TimelineKeyframe extends Keyframe {

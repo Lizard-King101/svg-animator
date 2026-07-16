@@ -1,0 +1,28 @@
+<ng-container *ngIf="crop.active && frame as box">
+  <svg class="crop-overlay" width="100%" height="100%" aria-label="Canvas crop bounds">
+    <svg:rect x="0" y="0" width="100%" [attr.height]="Math.max(0, box.y)" class="crop-shade" />
+    <svg:rect x="0" [attr.y]="box.y" [attr.width]="Math.max(0, box.x)" [attr.height]="box.height" class="crop-shade" />
+    <svg:rect [attr.x]="box.x + box.width" [attr.y]="box.y" width="100%" [attr.height]="box.height" class="crop-shade" />
+    <svg:rect x="0" [attr.y]="box.y + box.height" width="100%" height="100%" class="crop-shade" />
+    <svg:rect [attr.x]="box.x" [attr.y]="box.y" [attr.width]="box.width" [attr.height]="box.height" class="crop-frame" />
+    <svg:rect *ngFor="let handle of handles"
+              [attr.data-crop-handle]="handle"
+              [attr.x]="handlePoint(handle).x - 6" [attr.y]="handlePoint(handle).y - 6"
+              width="12" height="12" [class]="'crop-handle crop-' + handle"
+              (pointerdown)="crop.beginDrag(handle, $event)"
+              (pointermove)="crop.updateDrag($event)"
+              (pointerup)="crop.endDrag($event)"
+              (pointercancel)="crop.endDrag($event)" />
+  </svg>
+
+  <form class="crop-options" [ngStyle]="panelStyle()"
+        (submit)="$event.preventDefault(); apply()"
+        (keydown.escape)="$event.preventDefault(); $event.stopPropagation(); cancelOrExit()">
+    <label>X <input type="number" step="0.01" [ngModel]="crop.draft?.x" name="cropX" (ngModelChange)="crop.setField('x', $event)" /></label>
+    <label>Y <input type="number" step="0.01" [ngModel]="crop.draft?.y" name="cropY" (ngModelChange)="crop.setField('y', $event)" /></label>
+    <label>W <input type="number" min="1" step="0.01" [ngModel]="crop.draft?.width" name="cropWidth" (ngModelChange)="crop.setField('width', $event)" /></label>
+    <label>H <input type="number" min="1" step="0.01" [ngModel]="crop.draft?.height" name="cropHeight" (ngModelChange)="crop.setField('height', $event)" /></label>
+    <button type="submit" class="apply">Apply</button>
+    <button type="button" (click)="cancelOrExit()">Cancel</button>
+  </form>
+</ng-container>

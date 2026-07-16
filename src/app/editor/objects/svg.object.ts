@@ -4,6 +4,7 @@ import { Path, PathSave } from "./elements/path.object";
 import { Shape, ShapeSave } from "./elements/shape.object";
 import { TextElement, TextSave } from "./elements/text.object";
 import { Point } from "./point.object";
+import { Bounds } from "./transform.object";
 import { AnimationDocument, AnimationSave, cloneAnimation, createDefaultAnimation, restoreAnimation } from "./animation.object";
 
 export type ElementSave = PathSave | ShapeSave | GroupSave | TextSave;
@@ -33,6 +34,8 @@ export interface SVGSave {
     importedSourceNodes?: ImportedSourceNode[];
     width: number;
     height: number;
+    viewBoxX?: number;
+    viewBoxY?: number;
 }
 
 export class SVG {
@@ -46,6 +49,8 @@ export class SVG {
     importedSourceNodes: ImportedSourceNode[] = [];
     width: number;
     height: number;
+    viewBoxX = 0;
+    viewBoxY = 0;
     zoom: number;
     pos: Point;
 
@@ -56,6 +61,7 @@ export class SVG {
 
     get canUndo() { return this._past.length > 1; }
     get canRedo() { return this._future.length > 0; }
+    get canvasBounds(): Bounds { return { x: this.viewBoxX, y: this.viewBoxY, width: this.width, height: this.height }; }
 
     constructor(private editor: EditorService, options: SVGOptions) {
         this.id = this.editor.ID;
@@ -79,6 +85,8 @@ export class SVG {
             ),
         });
         (svg as any).id = save.id;
+        svg.viewBoxX = finiteNumber(save.viewBoxX, 0);
+        svg.viewBoxY = finiteNumber(save.viewBoxY, 0);
         svg.elements = SVG._restoreElements(save.elements, editor);
         svg.animation = restoreAnimation(save.animation);
         svg.guides = Array.isArray(save.guides)
@@ -108,6 +116,8 @@ export class SVG {
             importedSourceNodes: this.importedSourceNodes.map((node) => ({ ...node })),
             width: this.width,
             height: this.height,
+            viewBoxX: this.viewBoxX || undefined,
+            viewBoxY: this.viewBoxY || undefined,
         };
     }
 
@@ -127,6 +137,8 @@ export class SVG {
         this.name = snap.name;
         this.width = snap.width;
         this.height = snap.height;
+        this.viewBoxX = finiteNumber(snap.viewBoxX, 0);
+        this.viewBoxY = finiteNumber(snap.viewBoxY, 0);
         this.elements = SVG._restoreElements(snap.elements, this.editor);
         this.animation = restoreAnimation(snap.animation);
         this.guides = Array.isArray(snap.guides)
@@ -164,7 +176,7 @@ export class SVG {
 
 interface SharedSection<T> { value: T; serialized: string; bytes: number; }
 interface SharedHistorySnapshot {
-    identity: SharedSection<Pick<SVGSave, "id" | "name" | "width" | "height">>;
+    identity: SharedSection<Pick<SVGSave, "id" | "name" | "width" | "height" | "viewBoxX" | "viewBoxY">>;
     artwork: SharedSection<Pick<SVGSave, "elements" | "importedSourceNodes">>;
     animation: SharedSection<SVGSave["animation"]>;
     guides: SharedSection<Pick<SVGSave, "guides" | "guidesLocked">>;
@@ -172,7 +184,7 @@ interface SharedHistorySnapshot {
 
 function sharedSnapshot(save: SVGSave, previous?: SharedHistorySnapshot): SharedHistorySnapshot {
     return {
-        identity: shareSection({ id: save.id, name: save.name, width: save.width, height: save.height }, previous?.identity),
+        identity: shareSection({ id: save.id, name: save.name, width: save.width, height: save.height, viewBoxX: save.viewBoxX, viewBoxY: save.viewBoxY }, previous?.identity),
         artwork: shareSection({ elements: save.elements, importedSourceNodes: save.importedSourceNodes }, previous?.artwork),
         animation: shareSection(save.animation, previous?.animation),
         guides: shareSection({ guides: save.guides, guidesLocked: save.guidesLocked }, previous?.guides),
@@ -236,6 +248,11 @@ function restoreGuide(save: Partial<CanvasGuide>): CanvasGuide | undefined {
 
 function round(value: number): number {
     return Math.round(value * 10000) / 10000;
+}
+
+function finiteNumber(value: unknown, fallback: number): number {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
 }
 
 interface SVGOptions {

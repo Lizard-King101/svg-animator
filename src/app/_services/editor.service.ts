@@ -221,7 +221,7 @@ export class EditorService {
                 const projection = canvasToWorkspaceProjection(
                     canvas.getBoundingClientRect(),
                     viewportRect,
-                    { x: 0, y: 0, width: this.selectedSVG.width, height: this.selectedSVG.height },
+                    this.selectedSVG.canvasBounds ?? { x: 0, y: 0, width: this.selectedSVG.width, height: this.selectedSVG.height },
                 );
                 const local = applyMatrix(
                     projection.workspaceToCanvas,
