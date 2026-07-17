@@ -20,11 +20,11 @@ A browser-based motion SVG studio for drawing, editing, and keyframe animation.
 - Project gallery — asynchronous IndexedDB autosave, thumbnail previews, project name + dimensions picker, and resilient localStorage/in-memory fallbacks
 - SVG import — safe native conversion with full path-command, clipping, and editable gradient support plus opaque preservation
 - Animation workspace — virtualized timeline, speed graph, per-axis keyframe retiming, velocity/influence handles, easing presets, playback, selection, clipboard, and motion paths
-- Export — clean static `.svg` file download
+- Publishing — editable Project JSON from project-card actions plus a focused editor export flow for clean Static SVG, Embedded Animation SVG, self-contained Animated SVG, Runtime Assets ZIP, and ready-to-run Web Bundle ZIP
 - Undo / redo — per-document, section-shared history (50 entries with a 64 MiB unique-section budget)
 - Hosted on Cloudflare Pages, routed with SPA fallback
 
-See [`FEATURES.md`](FEATURES.md) for shipped behavior, [`ANIMATION_GUIDE.md`](ANIMATION_GUIDE.md) for animation controls and a first-project walkthrough, [`ARCHITECTURE.md`](ARCHITECTURE.md) for ownership rules, [`CONTRIBUTING.md`](CONTRIBUTING.md) for the working agreement, and [`ROADMAP.md`](ROADMAP.md) for what comes next.
+See [`FEATURES.md`](FEATURES.md) for shipped behavior, [`ANIMATION_GUIDE.md`](ANIMATION_GUIDE.md) for animation controls, [`docs/RUNTIME.md`](docs/RUNTIME.md) for player/export integration, [`docs/RUNTIME_TESTING.md`](docs/RUNTIME_TESTING.md) for capturing user projects and adding parity fixtures, [`ARCHITECTURE.md`](ARCHITECTURE.md) for ownership rules, and [`ROADMAP.md`](ROADMAP.md) for what comes next.
 
 ---
 
@@ -40,6 +40,7 @@ Work is ordered around three milestones: SVG import/publishing, deeper native SV
 npm install
 npm start           # dev server → http://localhost:4200
 npm run build       # production build → dist/svg-animator/browser
+npm run verify      # runtime, fixtures, tests, app, API report, and size budget
 ```
 
 Deploy to Cloudflare Pages:
@@ -60,4 +61,4 @@ npx wrangler deploy
 | Icons | FontAwesome 7 via `@fortawesome/angular-fontawesome` |
 | Hosting | Cloudflare Pages |
 | Persistence | IndexedDB (`projects`, `documents`, `thumbnails`, `meta`) with localStorage and in-memory fallbacks |
-| Animation | Compiled evaluation plans with retained imperative SVG preview/playback |
+| Animation | Compiled evaluation plans, retained preview rendering, and dependency-free RuntimeBundleV1 playback |

@@ -2,6 +2,7 @@
 
 # Compiled output
 /dist
+/public/assets/runtime
 /tmp
 /out-tsc
 /bazel-out

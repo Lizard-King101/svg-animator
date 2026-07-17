@@ -31,6 +31,8 @@ We treat maintainability and UX quality as part of the feature, not cleanup defe
 
 ## Verification
 
+For export or playback differences, capture an editable Project JSON and follow [`docs/RUNTIME_TESTING.md`](docs/RUNTIME_TESTING.md) to add an immutable editor/runtime parity fixture.
+
 Run before handing off a change:
 
 ```bash

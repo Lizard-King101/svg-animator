@@ -1,12 +1,27 @@
 {
   "name": "svg-animator",
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "workspaces": [
+    "packages/runtime"
+  ],
   "scripts": {
     "ng": "ng",
+    "prestart": "npm run build:runtime",
     "start": "ng serve",
-    "build": "ng build",
+    "build": "npm run build:runtime && npm run build:editor",
+    "build:editor": "ng build",
+    "build:runtime": "npm --prefix packages/runtime run build && npm run copy:runtime",
+    "copy:runtime": "node scripts/copy-runtime-assets.mjs",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "runtime:size": "npm --prefix packages/runtime run size",
+    "runtime:web-smoke": "esbuild scripts/test-runtime-web-export.ts --bundle --platform=node --format=esm --outfile=/tmp/svg-animator-runtime-web-smoke.mjs && node /tmp/svg-animator-runtime-web-smoke.mjs",
+    "api:report": "npm run build:runtime && node scripts/generate-runtime-api-report.mjs --write",
+    "api:check": "node scripts/generate-runtime-api-report.mjs --check",
+    "docs:runtime": "npm --prefix packages/runtime run docs",
+    "fixtures:update": "esbuild scripts/generate-runtime-fixtures.ts --bundle --platform=node --format=esm --outfile=/tmp/svg-animator-runtime-fixtures.mjs && node /tmp/svg-animator-runtime-fixtures.mjs",
+    "fixtures:check": "esbuild scripts/generate-runtime-fixtures.ts --bundle --platform=node --format=esm --outfile=/tmp/svg-animator-runtime-fixtures.mjs && node /tmp/svg-animator-runtime-fixtures.mjs --check",
+    "verify": "npm run build:runtime && npm run fixtures:check && npm test -- --watch=false && npm run runtime:web-smoke && npm run build:editor && npm run api:check && npm run runtime:size && git diff --check"
   },
   "private": true,
   "dependencies": {
@@ -25,6 +40,7 @@
     "@ng-bootstrap/ng-bootstrap": "^20.0.0",
     "@popperjs/core": "^2.11.8",
     "bootstrap": "^5.3.8",
+    "fflate": "^0.8.2",
     "paper": "^0.12.18",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
@@ -41,6 +57,7 @@
     "karma-coverage": "~2.2.0",
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
+    "typedoc": "^0.28.14",
     "typescript": "~5.9.0"
   }
 }

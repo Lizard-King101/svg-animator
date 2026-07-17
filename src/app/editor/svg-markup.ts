@@ -44,17 +44,23 @@ function drawDashoffsetAttr(path: Path): number | null {
 
 export interface SVGMarkupOptions {
     bakeRoundedCorners?: boolean;
+    /** Adds deterministic player hooks. Static export leaves these absent. */
+    runtime?: { signature: string };
 }
+
+const PLUS_JAKARTA_SANS_STYLESHEET = "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap";
 
 export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string {
     const bakeRoundedCorners = options.bakeRoundedCorners ?? true;
     const lines: string[] = [
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${escapeXmlAttribute(svg.width)}" height="${escapeXmlAttribute(svg.height)}" viewBox="${escapeXmlAttribute(svg.viewBoxX)} ${escapeXmlAttribute(svg.viewBoxY)} ${escapeXmlAttribute(svg.width)} ${escapeXmlAttribute(svg.height)}">`
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${escapeXmlAttribute(svg.width)}" height="${escapeXmlAttribute(svg.height)}" viewBox="${escapeXmlAttribute(svg.viewBoxX)} ${escapeXmlAttribute(svg.viewBoxY)} ${escapeXmlAttribute(svg.width)} ${escapeXmlAttribute(svg.height)}"${options.runtime ? attr("data-svg-animator-signature", options.runtime.signature) : ""}>`
     ];
     const gradients = collectGradients(svg.elements);
-    if(gradients.length > 0) {
+    const webFontStylesheets = collectWebFontStylesheets(svg.elements);
+    if(gradients.length > 0 || webFontStylesheets.length > 0) {
         lines.push("  <defs>");
-        gradients.forEach((gradient) => appendGradient(gradient, lines, 2));
+        webFontStylesheets.forEach((stylesheet) => lines.push(`    <style type="text/css"><![CDATA[@import url("${stylesheet}");]]></style>`));
+        gradients.forEach((gradient) => appendGradient(gradient, lines, 2, !!options.runtime));
         lines.push("  </defs>");
     }
 
@@ -72,7 +78,7 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                     lines.push(`${indent}  </clipPath>`);
                     lines.push(`${indent}</defs>`);
                 }
-                lines.push(`${indent}<g${attr('id', element.id)}${attr('transform', transform)}${attr('opacity', opacityAttr(element.opacity))}${attr('clip-path', element.clipElement ? `url(#${element.clipPathId})` : null)}>`);
+                lines.push(`${indent}<g${attr('id', element.id)}${runtimeTargetAttr(!!options.runtime)}${attr('transform', transform)}${attr('opacity', opacityAttr(element.opacity))}${attr('clip-path', element.clipElement ? `url(#${element.clipPathId})` : null)}>`);
                 appendElements(element.renderedElements as AnyElement[], depth + 1, element.id, clipGeometry);
                 lines.push(`${indent}</g>`);
             } else if(element instanceof Path) {
@@ -85,12 +91,13 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                 const alignment = effectiveStrokeAlignment(element);
                 const authoredDash = strokeDasharrayAttr(s.stroke_dasharray);
                 if(alignment !== "center" || authoredDash) {
-                    appendAlignedPath(element, d, transform, lines, depth);
+                    appendAlignedPath(element, d, transform, lines, depth, !!options.runtime);
                     continue;
                 }
                 lines.push(
                     `${indent}<path` +
                     attr('id', element.id) +
+                    runtimeTargetAttr(!!options.runtime, "geometry fill stroke") +
                     attr('d', d) +
                     attr('transform', transform) +
                     attr('opacity', opacityAttr(element.opacity)) +
@@ -117,6 +124,7 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                 lines.push(
                     `${indent}<text` +
                     attr('id', element.id) +
+                    runtimeTargetAttr(!!options.runtime, "geometry fill") +
                     attr('x', element.x) +
                     attr('y', element.y) +
                     attr('transform', transform) +
@@ -137,7 +145,7 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                     continue;
                 }
                 if(effectiveStrokeAlignment(element) !== "center") {
-                    appendAlignedShape(element, transform, lines, depth);
+                    appendAlignedShape(element, transform, lines, depth, !!options.runtime);
                     continue;
                 }
                 const fillAttr = attr('fill', paintSVGValue(s.fill) ?? 'none');
@@ -153,6 +161,7 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                     lines.push(
                         `${indent}<rect` +
                         attr('id', element.id) +
+                        runtimeTargetAttr(!!options.runtime, "geometry fill stroke") +
                         attr('x', element.x) +
                         attr('y', element.y) +
                         attr('transform', transform) +
@@ -168,6 +177,7 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                     lines.push(
                         `${indent}<ellipse` +
                         attr('id', element.id) +
+                        runtimeTargetAttr(!!options.runtime, "geometry fill stroke") +
                         attr('cx', element.centerX) +
                         attr('cy', element.centerY) +
                         attr('transform', transform) +
@@ -194,7 +204,23 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
     return lines.join('\n');
 }
 
-function appendAlignedPath(path: Path, d: string, transform: string | null, lines: string[], depth: number): void {
+function collectWebFontStylesheets(elements: AnyElement[]): string[] {
+    const stylesheets = new Set<string>();
+    const visit = (items: AnyElement[]) => items.forEach((element) => {
+        if(element instanceof TextElement && normalizedPrimaryFontFamily(element.settings.font_family) === "plus jakarta sans") {
+            stylesheets.add(PLUS_JAKARTA_SANS_STYLESHEET);
+        }
+        if(element instanceof Group) visit(element.elements);
+    });
+    visit(elements);
+    return [...stylesheets].sort();
+}
+
+function normalizedPrimaryFontFamily(value: string | null | undefined): string {
+    return (value ?? "").split(",", 1)[0].trim().replace(/^(['"])(.*)\1$/, "$2").toLowerCase();
+}
+
+function appendAlignedPath(path: Path, d: string, transform: string | null, lines: string[], depth: number, runtime: boolean): void {
     const indent = "  ".repeat(depth);
     const child = "  ".repeat(depth + 1);
     const settings = path.settings;
@@ -203,23 +229,23 @@ function appendAlignedPath(path: Path, d: string, transform: string | null, line
     const drawId = `stroke-draw-${path.id}`;
     lines.push(`${indent}<defs>`);
     if(alignment === "inside") {
-        lines.push(`${child}<clipPath${attr('id', effectId)}><path${attr('d', d)}${attr('fill-rule', path.fillRule)}/></clipPath>`);
+        lines.push(`${child}<clipPath${attr('id', effectId)}><path${runtimeRoleAttr(runtime, "geometry-effect")}${attr('d', d)}${attr('fill-rule', path.fillRule)}/></clipPath>`);
     } else if(alignment === "outside") {
-        lines.push(`${child}<mask${attr('id', effectId)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/><path${attr('d', d)}${attr('fill-rule', path.fillRule)} fill="black"/></mask>`);
+        lines.push(`${child}<mask${attr('id', effectId)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/><path${runtimeRoleAttr(runtime, "geometry-effect")}${attr('d', d)}${attr('fill-rule', path.fillRule)} fill="black"/></mask>`);
     }
     if(settings.stroke_dasharray.length) {
-        lines.push(`${child}<mask${attr('id', drawId)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><path${attr('d', d)} fill="none" stroke="white"${attr('stroke-width', settings.stroke_width * 4)}${attr('stroke-linecap', settings.line_cap)} pathLength="1" stroke-dasharray="1"${attr('stroke-dashoffset', drawOffsetAttr(path))}/></mask>`);
+        lines.push(`${child}<mask${attr('id', drawId)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><path${runtimeRoleAttr(runtime, "geometry reveal")}${attr('d', d)} fill="none" stroke="white"${attr('stroke-width', settings.stroke_width * 4)}${attr('stroke-linecap', settings.line_cap)} pathLength="1" stroke-dasharray="1"${attr('stroke-dashoffset', drawOffsetAttr(path))}/></mask>`);
     }
     lines.push(`${indent}</defs>`);
-    lines.push(`${indent}<g${attr('id', path.id)}${attr('transform', transform)}${attr('opacity', opacityAttr(path.opacity))}>`);
-    lines.push(`${child}<path${attr('d', d)}${attr('fill', settings.fill_enabled ? paintSVGValue(settings.fill) ?? 'none' : 'none')}${attr('fill-opacity', settings.fill_enabled ? paintOpacity(settings.fill) : null)}${attr('fill-rule', path.fillRule)}/>`);
+    lines.push(`${indent}<g${attr('id', path.id)}${runtimeTargetAttr(runtime)}${attr('transform', transform)}${attr('opacity', opacityAttr(path.opacity))}>`);
+    lines.push(`${child}<path${runtimeRoleAttr(runtime, "geometry fill")}${attr('d', d)}${attr('fill', settings.fill_enabled ? paintSVGValue(settings.fill) ?? 'none' : 'none')}${attr('fill-opacity', settings.fill_enabled ? paintOpacity(settings.fill) : null)}${attr('fill-rule', path.fillRule)}/>`);
     if(alignment === "outside") lines.push(`${child}<g${attr('mask', `url(#${effectId})`)}>`);
-    lines.push(`${alignment === 'outside' ? child + '  ' : child}<path${attr('d', d)} fill="none"${strokePaintAttrs(settings, alignment === 'center' ? 1 : 2)}${attr('pathLength', settings.stroke_dasharray.length ? null : drawAttr(path, 1))}${attr('stroke-dasharray', settings.stroke_dasharray.length ? strokeDasharrayAttr(settings.stroke_dasharray) : drawAttr(path, 1))}${attr('stroke-dashoffset', settings.stroke_dasharray.length ? settings.stroke_dashoffset : drawDashoffsetAttr(path))}${attr('clip-path', alignment === 'inside' ? `url(#${effectId})` : null)}${attr('mask', settings.stroke_dasharray.length ? `url(#${drawId})` : null)}/>`);
+    lines.push(`${alignment === 'outside' ? child + '  ' : child}<path${runtimeRoleAttr(runtime, "geometry stroke")}${attr('d', d)} fill="none"${strokePaintAttrs(settings, alignment === 'center' ? 1 : 2)}${attr('pathLength', settings.stroke_dasharray.length ? null : drawAttr(path, 1))}${attr('stroke-dasharray', settings.stroke_dasharray.length ? strokeDasharrayAttr(settings.stroke_dasharray) : drawAttr(path, 1))}${attr('stroke-dashoffset', settings.stroke_dasharray.length ? settings.stroke_dashoffset : drawDashoffsetAttr(path))}${attr('clip-path', alignment === 'inside' ? `url(#${effectId})` : null)}${attr('mask', settings.stroke_dasharray.length ? `url(#${drawId})` : null)}/>`);
     if(alignment === "outside") lines.push(`${child}</g>`);
     lines.push(`${indent}</g>`);
 }
 
-function appendAlignedShape(shape: Shape, transform: string | null, lines: string[], depth: number): void {
+function appendAlignedShape(shape: Shape, transform: string | null, lines: string[], depth: number, runtime: boolean): void {
     const indent = "  ".repeat(depth);
     const child = "  ".repeat(depth + 1);
     const settings = shape.settings;
@@ -228,14 +254,14 @@ function appendAlignedShape(shape: Shape, transform: string | null, lines: strin
     const geometry = shapeGeometryMarkup(shape, null, "");
     lines.push(`${indent}<defs>`);
     if(alignment === "inside") {
-        lines.push(`${child}<clipPath${attr('id', effectId)}>${geometry}</clipPath>`);
+        lines.push(`${child}<clipPath${attr('id', effectId)}>${geometry.replace('/>', `${runtimeRoleAttr(runtime, "geometry-effect")}/>` )}</clipPath>`);
     } else {
-        lines.push(`${child}<mask${attr('id', effectId)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/>${geometry.replace('/>', ' fill="black"/>')}</mask>`);
+        lines.push(`${child}<mask${attr('id', effectId)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/>${geometry.replace('/>', `${runtimeRoleAttr(runtime, "geometry-effect")} fill="black"/>`)}</mask>`);
     }
     lines.push(`${indent}</defs>`);
-    lines.push(`${indent}<g${attr('id', shape.id)}${attr('transform', transform)}${attr('opacity', opacityAttr(shape.opacity))}>`);
-    lines.push(`${child}${geometry.replace('/>', `${attr('fill', paintSVGValue(settings.fill) ?? 'none')}${attr('fill-opacity', paintOpacity(settings.fill))}/>` )}`);
-    lines.push(`${child}${geometry.replace('/>', ` fill="none"${strokePaintAttrs(settings, 2)}${attr('stroke-dasharray', strokeDasharrayAttr(settings.stroke_dasharray))}${attr('stroke-dashoffset', settings.stroke_dasharray.length ? settings.stroke_dashoffset : null)}${attr(alignment === 'inside' ? 'clip-path' : 'mask', `url(#${effectId})`)}/>` )}`);
+    lines.push(`${indent}<g${attr('id', shape.id)}${runtimeTargetAttr(runtime)}${attr('transform', transform)}${attr('opacity', opacityAttr(shape.opacity))}>`);
+    lines.push(`${child}${geometry.replace('/>', `${runtimeRoleAttr(runtime, "geometry fill")}${attr('fill', paintSVGValue(settings.fill) ?? 'none')}${attr('fill-opacity', paintOpacity(settings.fill))}/>` )}`);
+    lines.push(`${child}${geometry.replace('/>', `${runtimeRoleAttr(runtime, "geometry stroke")} fill="none"${strokePaintAttrs(settings, 2)}${attr('stroke-dasharray', strokeDasharrayAttr(settings.stroke_dasharray))}${attr('stroke-dashoffset', settings.stroke_dasharray.length ? settings.stroke_dashoffset : null)}${attr(alignment === 'inside' ? 'clip-path' : 'mask', `url(#${effectId})`)}/>` )}`);
     lines.push(`${indent}</g>`);
 }
 
@@ -268,16 +294,24 @@ function collectGradients(elements: AnyElement[]): GradientPaint[] {
     return [...gradients.values()];
 }
 
-function appendGradient(gradient: GradientPaint, lines: string[], depth: number): void {
+function appendGradient(gradient: GradientPaint, lines: string[], depth: number, runtime: boolean): void {
     const indent = "  ".repeat(depth);
     const tag = gradient.type === "linear-gradient" ? "linearGradient" : "radialGradient";
     const coordinateAttrs = Object.entries(gradient.coordinates)
         .map(([name, value]) => attr(name, value)).join("");
-    lines.push(`${indent}<${tag}${attr("id", gradient.id)}${attr("gradientUnits", gradient.units)}${attr("spreadMethod", gradient.spreadMethod)}${attr("gradientTransform", gradientTransformValue(gradient))}${coordinateAttrs}>`);
+    lines.push(`${indent}<${tag}${attr("id", gradient.id)}${runtimeRoleAttr(runtime, "gradient")}${attr("gradientUnits", gradient.units)}${attr("spreadMethod", gradient.spreadMethod)}${attr("gradientTransform", gradientTransformValue(gradient))}${coordinateAttrs}>`);
     gradient.stops.forEach((stop) => lines.push(
-        `${indent}  <stop${attr("id", stop.id)}${attr("offset", stop.offset)}${attr("stop-color", stop.color.hex)}${attr("stop-opacity", stop.color.alpha < 0.9999 ? stop.color.alpha : null)}/>`
+        `${indent}  <stop${attr("id", stop.id)}${runtimeRoleAttr(runtime, "gradient-stop")}${attr("offset", stop.offset)}${attr("stop-color", stop.color.hex)}${attr("stop-opacity", stop.color.alpha < 0.9999 ? stop.color.alpha : null)}/>`
     ));
     lines.push(`${indent}</${tag}>`);
+}
+
+function runtimeTargetAttr(runtime: boolean, roles?: string): string {
+    return runtime ? attr("data-svg-animator-target", "") + runtimeRoleAttr(true, roles) : "";
+}
+
+function runtimeRoleAttr(runtime: boolean, roles?: string): string {
+    return runtime && roles ? attr("data-render-role", roles) : "";
 }
 
 function appendImportedSource(node: ImportedSourceNode, lines: string[], depth: number): void {

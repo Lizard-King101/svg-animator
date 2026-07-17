@@ -1,0 +1,6 @@
+README.md
+animation.json
+artwork.svg
+index.html
+runtime/svg-animator-runtime.esm.js
+runtime/svg-animator-runtime.min.js

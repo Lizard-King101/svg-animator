@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SVG Animator browser global example</title>
+<object id="artwork" data="../fixtures/runtime-showcase-v1/runtime-artwork.svg" type="image/svg+xml"></object>
+<button id="play">Play</button><button id="reverse">Reverse</button><button id="stop">Stop</button>
+<pre id="markers"></pre>
+<script src="../packages/runtime/dist/svg-animator-runtime.min.js"></script>
+<script>
+Promise.all([
+  fetch('../fixtures/runtime-showcase-v1/runtime-bundle-v1.json').then(response => response.json()),
+  new Promise(resolve => artwork.addEventListener('load', resolve, { once: true }))
+]).then(([bundle]) => {
+  const player = SVGAnimatorRuntime.createPlayer(artwork.contentDocument.documentElement, bundle);
+  play.onclick = () => player.setPlaybackRate(1).play();
+  reverse.onclick = () => player.setPlaybackRate(-1).play();
+  stop.onclick = () => player.stop();
+  player.on('marker', event => markers.textContent += `${event.direction}: ${event.marker.name}\n`);
+});
+</script>

@@ -3,6 +3,7 @@ import currentProjects from "./fixtures/current-projects-v1.json";
 import futureProjects from "./fixtures/future-projects.json";
 import invalidProjects from "./fixtures/invalid-projects.json";
 import documentV3AnimationV1 from "./fixtures/document-v3-animation-v1.json";
+import documentEnvelopeVersions from "./fixtures/document-envelope-versions.json";
 import {
     CURRENT_DOCUMENT_VERSION,
     CURRENT_PROJECT_DATABASE_VERSION,
@@ -110,6 +111,16 @@ describe("document migrations", () => {
         expect(result.status).toBe("unsupported");
         if(result.status !== "unsupported") return;
         expect(result.version).toBe(999);
+    });
+
+    it("retains immutable representatives for every accepted envelope and rejects the future fixture", () => {
+        documentEnvelopeVersions.slice(0, 5).forEach((fixture, index) => {
+            const result = migrateDocument(fixture);
+            expect(result.status).withContext(`document v${index + 1}`).toBe("ok");
+            if(result.status === "ok") expect(result.value.version).toBe(CURRENT_DOCUMENT_VERSION);
+        });
+        const future = migrateDocument(documentEnvelopeVersions[5]);
+        expect(future.status).toBe("unsupported");
     });
 });
 

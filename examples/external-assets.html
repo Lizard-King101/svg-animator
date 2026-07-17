@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SVG Animator external assets example</title>
+<div id="mount"></div>
+<script type="module">
+import { loadPlayer } from '../packages/runtime/dist/svg-animator-runtime.esm.js';
+const text = await fetch('../fixtures/runtime-showcase-v1/runtime-artwork.svg').then(response => response.text());
+mount.innerHTML = text;
+const player = await loadPlayer(mount.querySelector('svg'), '../fixtures/runtime-showcase-v1/runtime-bundle-v1.json');
+player.play();
+</script>

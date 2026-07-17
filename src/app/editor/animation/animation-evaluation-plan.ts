@@ -8,6 +8,7 @@ import {
     temporalSegmentCoefficients,
     TemporalSegmentCoefficients,
 } from "../objects/animation.object";
+import { evaluateTemporalCubic } from "../../../../packages/runtime/src/temporal.internal";
 import { animationPropertyKey, AppliedAnimationValue, readAnimationProperty } from "../objects/animation-targets";
 import { Group } from "../objects/elements/group.object";
 import { AnyElement } from "../objects/svg.object";
@@ -185,7 +186,7 @@ export function evaluateCompiledTrack(track: CompiledAnimationTrack, time: numbe
 
     let segment = track.cursor;
     if(time >= track.lastTime && segment < count - 1) {
-        while(segment < count - 2 && time > track.times[segment + 1]) segment++;
+        while(segment < count - 2 && time >= track.times[segment + 1]) segment++;
     } else {
         segment = findSegment(track.times, time);
     }
@@ -224,16 +225,11 @@ function findSegment(times: Float64Array, time: number): number {
 }
 
 function evaluateCoefficient(c: TemporalSegmentCoefficients, time: number): number {
-    const end = ((c.timeA + c.timeB) + c.timeC) + c.timeD;
-    let u = end === c.timeD ? 1 : Math.max(0, Math.min(1, (time - c.timeD) / (end - c.timeD)));
-    let low = 0;
-    let high = 1;
-    for(let i = 0; i < 12; i++) {
-        const x = ((c.timeA * u + c.timeB) * u + c.timeC) * u + c.timeD;
-        if(x < time) low = u; else high = u;
-        u = (low + high) / 2;
-    }
-    return ((c.valueA * u + c.valueB) * u + c.valueC) * u + c.valueD;
+    return evaluateTemporalCubic(
+        time,
+        c.timeA, c.timeB, c.timeC, c.timeD,
+        c.valueA, c.valueB, c.valueC, c.valueD,
+    );
 }
 
 function easingCode(type: string | undefined): number {

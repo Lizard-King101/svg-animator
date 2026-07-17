@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SVG Animator embedded animation example</title>
+<object id="artwork" data="../fixtures/runtime-showcase-v1/embedded-showcase.svg" type="image/svg+xml"></object>
+<button id="play" disabled>Play</button>
+<button id="pause" disabled>Pause</button>
+<script src="../packages/runtime/dist/svg-animator-runtime.min.js"></script>
+<script>
+const artwork = document.getElementById("artwork");
+const play = document.getElementById("play");
+const pause = document.getElementById("pause");
+artwork.addEventListener("load", () => {
+  const player = SVGAnimatorRuntime.createEmbeddedPlayer(artwork.contentDocument.documentElement);
+  play.disabled = false;
+  pause.disabled = false;
+  play.onclick = () => player.play();
+  pause.onclick = () => player.pause();
+}, { once: true });
+</script>

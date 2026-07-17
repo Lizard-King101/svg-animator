@@ -403,7 +403,10 @@ function writeGradientProperty(element: AnyElement, property: ParsedGradientProp
             stop.color.alpha = value.alpha ?? 1;
             stop.opacity = stop.color.alpha;
         }
-        else if(typeof value === "string") stop.color = new Color(value);
+        else if(typeof value === "string") {
+            stop.color = new Color(value);
+            stop.opacity = stop.color.alpha;
+        }
         else return false;
         return true;
     }

@@ -9,6 +9,7 @@ import { AnyElement, SVG } from "../objects/svg.object";
 import { matrixToSvg } from "../objects/transform.object";
 import { effectiveStrokeAlignment } from "../objects/stroke-style.object";
 import { CompiledAnimationTrack } from "./animation-evaluation-plan";
+import { pathRevealNodes } from "../../../../packages/runtime/src/render-roles.internal";
 
 type RenderDomain = "transform" | "geometry" | "appearance" | "visibility" | "gradient";
 
@@ -77,7 +78,7 @@ export class ImperativeSvgRenderer {
         if("stroke_width" in settings) strokeNodes.forEach((item) => setAttribute(item, "stroke-width",
             Number(settings["stroke_width"]) * ((target instanceof Path && effectiveStrokeAlignment(target) === "center") ? 1 : node.tagName.toLowerCase() === "g" ? 2 : 1)));
         if("stroke_width" in settings && target instanceof Path) {
-            node.querySelectorAll<SVGElement>('[data-render-role~="reveal"]').forEach((item) => setAttribute(item, "stroke-width", Number(settings["stroke_width"]) * 4));
+            pathRevealNodes(this.root, node, target.id).forEach((item) => setAttribute(item, "stroke-width", Number(settings["stroke_width"]) * 4));
         }
         if("stroke_dashoffset" in settings) strokeNodes.forEach((item) => setAttribute(item, "stroke-dashoffset", settings["stroke_dashoffset"] as number));
     }
@@ -87,7 +88,7 @@ export class ImperativeSvgRenderer {
             if(node.tagName.toLowerCase() === "g") node.querySelectorAll<SVGElement>('[data-render-role~="geometry"]').forEach((geometry) => setAttribute(geometry, "d", target.raw));
             else setAttribute(node, "d", target.raw);
             const progress = Math.max(0, Math.min(1, target.drawProgress));
-            if(target.settings.stroke_dasharray.length > 0) node.querySelectorAll<SVGElement>('[data-render-role~="reveal"]').forEach((reveal) => setAttribute(reveal, "stroke-dashoffset", 1 - progress));
+            if(target.settings.stroke_dasharray.length > 0) pathRevealNodes(this.root, node, target.id).forEach((reveal) => setAttribute(reveal, "stroke-dashoffset", 1 - progress));
             else {
                 const strokeNodes = node.tagName.toLowerCase() === "g" ? [...node.querySelectorAll<SVGElement>('[data-render-role~="stroke"]')] : [node];
                 strokeNodes.forEach((stroke) => {

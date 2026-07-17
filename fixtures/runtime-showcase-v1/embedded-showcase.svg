@@ -1,0 +1,1382 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="-40 20 480 300" data-svg-animator-signature="fnv1a32-5ad33bef">
+  <defs>
+    <linearGradient id="path-gradient" data-render-role="gradient" gradientUnits="userSpaceOnUse" spreadMethod="reflect" gradientTransform="matrix(1 0 0 1 0 0)" x1="20" y1="40" x2="170" y2="140">
+      <stop id="path-stop-a" data-render-role="gradient-stop" offset="0" stop-color="#ff0066" stop-opacity="0.85"/>
+      <stop id="path-stop-b" data-render-role="gradient-stop" offset="1" stop-color="#00ccff" stop-opacity="0.6666666666666666"/>
+    </linearGradient>
+    <radialGradient id="radial-gradient" data-render-role="gradient" gradientUnits="objectBoundingBox" spreadMethod="pad" cx="0.5" cy="0.5" r="0.5" fx="0.35" fy="0.35">
+      <stop id="radial-stop-a" data-render-role="gradient-stop" offset="0" stop-color="#fde047"/>
+      <stop id="radial-stop-b" data-render-role="gradient-stop" offset="1" stop-color="#f97316" stop-opacity="0.7"/>
+    </radialGradient>
+  </defs>
+  <g id="stage" data-svg-animator-target="" transform="matrix(1 0 0 1 8 -4)">
+    <defs>
+      <mask id="stroke-draw-motion-path" x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><path data-render-role="geometry reveal" d="M 30 190 C 120 20 270 250 360 70" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="0"/></mask>
+    </defs>
+    <g id="motion-path" data-svg-animator-target="" opacity="0.2">
+      <path data-render-role="geometry fill" d="M 30 190 C 120 20 270 250 360 70" fill="none" fill-rule="evenodd"/>
+      <path data-render-role="geometry stroke" d="M 30 190 C 120 20 270 250 360 70" fill="none" stroke="#64748b" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" stroke-dasharray="6 4" stroke-dashoffset="0" mask="url(#stroke-draw-motion-path)"/>
+    </g>
+    <defs>
+      <clipPath id="stroke-inside-compound-path"><path data-render-role="geometry-effect" d="M 20 40 L 152 40 C 161.941 40 170 48.059 170 58 L 170 138 C 170 144.627 164.627 150 158 150 L 40 150 C 28.954 150 20 141.046 20 130 L 20 40 Z M 70 75 C 105 55 145 95 125 115 L 70 75 Z" fill-rule="evenodd"/></clipPath>
+      <mask id="stroke-draw-compound-path" x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><path data-render-role="geometry reveal" d="M 20 40 L 152 40 C 161.941 40 170 48.059 170 58 L 170 138 C 170 144.627 164.627 150 158 150 L 40 150 C 28.954 150 20 141.046 20 130 L 20 40 Z M 70 75 C 105 55 145 95 125 115 L 70 75 Z" fill="none" stroke="white" stroke-width="32" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="0.15000000000000002"/></mask>
+    </defs>
+    <g id="compound-path" data-svg-animator-target="">
+      <path data-render-role="geometry fill" d="M 20 40 L 152 40 C 161.941 40 170 48.059 170 58 L 170 138 C 170 144.627 164.627 150 158 150 L 40 150 C 28.954 150 20 141.046 20 130 L 20 40 Z M 70 75 C 105 55 145 95 125 115 L 70 75 Z" fill="url(#path-gradient)" fill-rule="evenodd"/>
+      <path data-render-role="geometry stroke" d="M 20 40 L 152 40 C 161.941 40 170 48.059 170 58 L 170 138 C 170 144.627 164.627 150 158 150 L 40 150 C 28.954 150 20 141.046 20 130 L 20 40 Z M 70 75 C 105 55 145 95 125 115 L 70 75 Z" fill="none" stroke="#111827" stroke-opacity="0.8" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="6" stroke-dasharray="12 6" stroke-dashoffset="2" clip-path="url(#stroke-inside-compound-path)" mask="url(#stroke-draw-compound-path)"/>
+    </g>
+    <defs>
+      <mask id="stroke-outside-reflecting-rect" x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/><rect id="" x="215" y="42" width="90" height="80" rx="14" ry="14" data-render-role="geometry-effect" fill="black"/></mask>
+    </defs>
+    <g id="reflecting-rect" data-svg-animator-target="" transform="matrix(0.9903 -0.1392 0.1392 0.9903 -8.8819 36.983)" opacity="0.9">
+      <rect id="" x="215" y="42" width="90" height="80" rx="14" ry="14" data-render-role="geometry fill" fill="#7c3aed" fill-opacity="0.8"/>
+      <rect id="" x="215" y="42" width="90" height="80" rx="14" ry="14" data-render-role="geometry stroke" fill="none" stroke="#f8fafc" stroke-width="10" stroke-linecap="square" stroke-linejoin="bevel" stroke-miterlimit="4" mask="url(#stroke-outside-reflecting-rect)"/>
+    </g>
+    <defs>
+      <clipPath id="clip-clipped-group">
+        <ellipse id="clip-circle" cx="355" cy="170" rx="45" ry="45"/>
+      </clipPath>
+    </defs>
+    <g id="clipped-group" data-svg-animator-target="" clip-path="url(#clip-clipped-group)">
+      <defs>
+        <clipPath id="stroke-inside-radial-ellipse"><ellipse id="" cx="355" cy="170" rx="65" ry="55" data-render-role="geometry-effect"/></clipPath>
+      </defs>
+      <g id="radial-ellipse" data-svg-animator-target="">
+        <ellipse id="" cx="355" cy="170" rx="65" ry="55" data-render-role="geometry fill" fill="url(#radial-gradient)"/>
+        <ellipse id="" cx="355" cy="170" rx="65" ry="55" data-render-role="geometry stroke" fill="none" stroke="#0f172a" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" clip-path="url(#stroke-inside-radial-ellipse)"/>
+      </g>
+    </g>
+    <rect id="motion-dot" data-svg-animator-target="" data-render-role="geometry fill stroke" x="8" y="8" transform="matrix(0.7096 -0.7046 0.7046 0.7096 0.3269 182.8232)" width="16" height="16" fill="#06b6d4" stroke="#ffffff" stroke-width="2" stroke-miterlimit="4"/>
+    <text id="caption" data-svg-animator-target="" data-render-role="geometry fill" x="205" y="245" font-size="18" font-family="system-ui" font-weight="700" text-anchor="start" fill="#e2e8f0" dominant-baseline="hanging">
+      <tspan>Runtime v1</tspan>
+      <tspan x="205" dy="21.599999999999998">Showcase</tspan>
+    </text>
+  </g>
+  <circle cx="440" cy="280" r="6" fill="#94a3b8"/>
+  <script type="application/json" data-svg-animator-bundle="">{
+  "animation": {
+    "duration": 4,
+    "loop": true,
+    "markers": [
+      {
+        "id": "intro",
+        "name": "Intro",
+        "time": 0.5
+      },
+      {
+        "id": "turn",
+        "name": "Turn",
+        "time": 2
+      },
+      {
+        "id": "outro",
+        "name": "Outro",
+        "time": 3.5
+      }
+    ],
+    "properties": [
+      "settings.color",
+      "path.drawProgress",
+      "path.points.ob.x",
+      "settings.fill.gradient.stops.path-stop-a.color",
+      "settings.fill.gradient.stops.path-stop-b.offset",
+      "settings.fill.gradient.x2",
+      "settings.stroke_dashoffset",
+      "motion.offsetAngle",
+      "motion.progress",
+      "motion.rotateToPath",
+      "settings.fill.gradient.r",
+      "geometry.width",
+      "opacity",
+      "settings.fill",
+      "transform.originX",
+      "transform.scaleX",
+      "transform.scaleY",
+      "transform.translateX",
+      "visible",
+      "transform.rotation"
+    ],
+    "targets": [
+      "caption",
+      "compound-path",
+      "motion-dot",
+      "radial-ellipse",
+      "reflecting-rect",
+      "stage"
+    ],
+    "tracks": [
+      {
+        "interpolationSpaces": [
+          "rgb",
+          "rgb"
+        ],
+        "kind": "color",
+        "property": 0,
+        "segmentModes": [
+          "linear",
+          "linear"
+        ],
+        "target": 0,
+        "times": [
+          0,
+          2,
+          4
+        ],
+        "values": [
+          3806916863,
+          1743321514,
+          3806916863
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 1,
+        "segmentModes": [
+          "linear",
+          "linear"
+        ],
+        "target": 1,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          2,
+          4
+        ],
+        "values": [
+          0,
+          1,
+          0.35
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 2,
+        "segmentModes": [
+          "linear",
+          "linear"
+        ],
+        "target": 1,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          2,
+          4
+        ],
+        "values": [
+          170,
+          195,
+          170
+        ]
+      },
+      {
+        "interpolationSpaces": [
+          "hsl",
+          "rgb"
+        ],
+        "kind": "color",
+        "property": 3,
+        "segmentModes": [
+          "linear",
+          "linear"
+        ],
+        "target": 1,
+        "times": [
+          0,
+          2,
+          4
+        ],
+        "values": [
+          4278216409,
+          583360166,
+          4278216409
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 4,
+        "segmentModes": [
+          "linear",
+          "linear"
+        ],
+        "target": 1,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          2,
+          4
+        ],
+        "values": [
+          1,
+          0.65,
+          1
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 5,
+        "segmentModes": [
+          "linear"
+        ],
+        "target": 1,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          4
+        ],
+        "values": [
+          170,
+          260
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 6,
+        "segmentModes": [
+          "linear"
+        ],
+        "target": 1,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          4
+        ],
+        "values": [
+          2,
+          -34
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 7,
+        "segmentModes": [
+          "linear"
+        ],
+        "target": 2,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          4
+        ],
+        "values": [
+          15,
+          375
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 8,
+        "segmentModes": [
+          "linear"
+        ],
+        "target": 2,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          4
+        ],
+        "values": [
+          0,
+          1
+        ]
+      },
+      {
+        "kind": "boolean",
+        "property": 9,
+        "target": 2,
+        "times": [
+          0,
+          3
+        ],
+        "values": [
+          true,
+          false
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 10,
+        "segmentModes": [
+          "linear",
+          "linear"
+        ],
+        "target": 3,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          2,
+          4
+        ],
+        "values": [
+          0.3,
+          0.7,
+          0.3
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 11,
+        "segmentModes": [
+          "linear",
+          "linear"
+        ],
+        "target": 4,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          2,
+          4
+        ],
+        "values": [
+          90,
+          120,
+          90
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 12,
+        "segmentModes": [
+          "linear",
+          "linear"
+        ],
+        "target": 4,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          1,
+          4
+        ],
+        "values": [
+          0.35,
+          1,
+          0.35
+        ]
+      },
+      {
+        "interpolationSpaces": [
+          "hsl",
+          "rgb"
+        ],
+        "kind": "color",
+        "property": 13,
+        "segmentModes": [
+          "linear",
+          "linear"
+        ],
+        "target": 4,
+        "times": [
+          0,
+          2,
+          4
+        ],
+        "values": [
+          2084236748,
+          3964180876,
+          2084236748
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 14,
+        "segmentModes": [
+          "linear"
+        ],
+        "target": 4,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          4
+        ],
+        "values": [
+          260,
+          275
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 15,
+        "segmentModes": [
+          "linear",
+          "ease-in-out"
+        ],
+        "target": 4,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          2,
+          4
+        ],
+        "values": [
+          1,
+          -1,
+          1
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 16,
+        "segmentModes": [
+          "linear",
+          "linear"
+        ],
+        "target": 4,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          2,
+          4
+        ],
+        "values": [
+          1,
+          1.25,
+          1
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 17,
+        "segmentModes": [
+          "linear",
+          "temporal",
+          "linear"
+        ],
+        "target": 4,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.5,
+          -0.9,
+          2.4,
+          0,
+          23,
+          -174,
+          216,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          -1,
+          0,
+          2,
+          5
+        ],
+        "values": [
+          -30,
+          0,
+          65,
+          0
+        ]
+      },
+      {
+        "kind": "boolean",
+        "property": 18,
+        "target": 4,
+        "times": [
+          0,
+          3.75
+        ],
+        "values": [
+          true,
+          false
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 19,
+        "segmentModes": [
+          "linear"
+        ],
+        "target": 5,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0,
+          4
+        ],
+        "values": [
+          0,
+          3
+        ]
+      }
+    ],
+    "variables": [
+      {
+        "name": "intensity",
+        "value": 0.8
+      },
+      {
+        "name": "interactive",
+        "value": false
+      },
+      {
+        "name": "theme",
+        "value": "night"
+      }
+    ]
+  },
+  "artwork": {
+    "height": 300,
+    "id": "runtime-showcase-v1",
+    "signature": "fnv1a32-5ad33bef",
+    "targets": [
+      {
+        "geometry": {
+          "height": 258.6,
+          "width": 412,
+          "x": 8,
+          "y": 8
+        },
+        "id": "stage",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 1,
+        "paints": {},
+        "parentId": null,
+        "transform": {
+          "autoOrigin": false,
+          "originX": 200,
+          "originY": 150,
+          "rotation": 0,
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 8,
+          "translateY": -4
+        },
+        "type": "group",
+        "visible": true
+      },
+      {
+        "geometry": {
+          "height": 230,
+          "width": 330,
+          "x": 30,
+          "y": 20
+        },
+        "id": "motion-path",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 0.2,
+        "paints": {
+          "fill": null,
+          "stroke": {
+            "color": "#64748b",
+            "kind": "solid",
+            "opacity": 1
+          }
+        },
+        "parentId": "stage",
+        "path": {
+          "contours": [
+            {
+              "closed": false,
+              "id": "motion-contour",
+              "lines": [
+                {
+                  "controlEnd": {
+                    "id": "mp-c2",
+                    "x": 270,
+                    "y": 250
+                  },
+                  "controlStart": {
+                    "id": "mp-c1",
+                    "x": 120,
+                    "y": 20
+                  },
+                  "id": "motion-curve",
+                  "points": [
+                    {
+                      "id": "mp-a",
+                      "x": 30,
+                      "y": 190
+                    },
+                    {
+                      "id": "mp-b",
+                      "x": 360,
+                      "y": 70
+                    }
+                  ],
+                  "type": "bezier"
+                }
+              ]
+            }
+          ],
+          "drawProgress": 1,
+          "fillRule": "evenodd",
+          "rounded": true
+        },
+        "stroke": {
+          "alignment": "center",
+          "dasharray": [
+            6,
+            4
+          ],
+          "dashoffset": 0,
+          "width": 1
+        },
+        "transform": {
+          "autoOrigin": false,
+          "originX": 180,
+          "originY": 120,
+          "rotation": 0,
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 0,
+          "translateY": 0
+        },
+        "type": "path",
+        "visible": true
+      },
+      {
+        "geometry": {
+          "height": 110,
+          "width": 150,
+          "x": 20,
+          "y": 40
+        },
+        "id": "compound-path",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 1,
+        "paints": {
+          "fill": {
+            "coordinates": {
+              "x1": 20,
+              "x2": 170,
+              "y1": 40,
+              "y2": 140
+            },
+            "gradientType": "linear-gradient",
+            "id": "path-gradient",
+            "kind": "gradient",
+            "spreadMethod": "reflect",
+            "stops": [
+              {
+                "color": "#ff0066",
+                "id": "path-stop-a",
+                "offset": 0,
+                "opacity": 0.85
+              },
+              {
+                "color": "#00ccff",
+                "id": "path-stop-b",
+                "offset": 1,
+                "opacity": 1
+              }
+            ],
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ],
+            "units": "userSpaceOnUse"
+          },
+          "stroke": {
+            "color": "#111827",
+            "kind": "solid",
+            "opacity": 0.8
+          }
+        },
+        "parentId": "stage",
+        "path": {
+          "contours": [
+            {
+              "closed": true,
+              "id": "outer-contour",
+              "lines": [
+                {
+                  "id": "outer-a",
+                  "points": [
+                    {
+                      "id": "oa",
+                      "x": 20,
+                      "y": 40
+                    },
+                    {
+                      "cornerRadius": 18,
+                      "id": "ob",
+                      "x": 170,
+                      "y": 40
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "outer-b",
+                  "points": [
+                    {
+                      "cornerRadius": 18,
+                      "id": "ob",
+                      "x": 170,
+                      "y": 40
+                    },
+                    {
+                      "cornerRadius": 12,
+                      "id": "oc",
+                      "x": 170,
+                      "y": 150
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "outer-c",
+                  "points": [
+                    {
+                      "cornerRadius": 12,
+                      "id": "oc",
+                      "x": 170,
+                      "y": 150
+                    },
+                    {
+                      "cornerRadius": 20,
+                      "id": "od",
+                      "x": 20,
+                      "y": 150
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "outer-d",
+                  "points": [
+                    {
+                      "cornerRadius": 20,
+                      "id": "od",
+                      "x": 20,
+                      "y": 150
+                    },
+                    {
+                      "id": "oa",
+                      "x": 20,
+                      "y": 40
+                    }
+                  ],
+                  "type": "line"
+                }
+              ]
+            },
+            {
+              "closed": true,
+              "id": "inner-contour",
+              "lines": [
+                {
+                  "controlEnd": {
+                    "id": "ic2",
+                    "x": 145,
+                    "y": 95
+                  },
+                  "controlStart": {
+                    "id": "ic1",
+                    "x": 105,
+                    "y": 55
+                  },
+                  "id": "inner-a",
+                  "points": [
+                    {
+                      "id": "ia",
+                      "x": 70,
+                      "y": 75
+                    },
+                    {
+                      "id": "ib",
+                      "x": 125,
+                      "y": 115
+                    }
+                  ],
+                  "type": "bezier"
+                },
+                {
+                  "id": "inner-b",
+                  "points": [
+                    {
+                      "id": "ib",
+                      "x": 125,
+                      "y": 115
+                    },
+                    {
+                      "id": "ia",
+                      "x": 70,
+                      "y": 75
+                    }
+                  ],
+                  "type": "line"
+                }
+              ]
+            }
+          ],
+          "drawProgress": 0.85,
+          "fillRule": "evenodd",
+          "rounded": true
+        },
+        "stroke": {
+          "alignment": "inside",
+          "dasharray": [
+            12,
+            6
+          ],
+          "dashoffset": 2,
+          "width": 8
+        },
+        "transform": {
+          "autoOrigin": false,
+          "originX": 95,
+          "originY": 95,
+          "rotation": 0,
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 0,
+          "translateY": 0
+        },
+        "type": "path",
+        "visible": true
+      },
+      {
+        "geometry": {
+          "height": 80,
+          "width": 90,
+          "x": 215,
+          "y": 42
+        },
+        "id": "reflecting-rect",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 0.9,
+        "paints": {
+          "fill": {
+            "color": "#7c3aed",
+            "kind": "solid",
+            "opacity": 0.8
+          },
+          "stroke": {
+            "color": "#f8fafc",
+            "kind": "solid",
+            "opacity": 1
+          }
+        },
+        "parentId": "stage",
+        "stroke": {
+          "alignment": "outside",
+          "dasharray": [],
+          "dashoffset": 0,
+          "width": 5
+        },
+        "transform": {
+          "autoOrigin": false,
+          "originX": 260,
+          "originY": 82,
+          "rotation": -8,
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 0,
+          "translateY": 0
+        },
+        "type": "rectangle",
+        "visible": true
+      },
+      {
+        "clipping": {
+          "clipElementId": "clip-circle",
+          "clipPathId": "clip-clipped-group"
+        },
+        "geometry": {
+          "height": 110,
+          "width": 130,
+          "x": 290,
+          "y": 115
+        },
+        "id": "clipped-group",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 1,
+        "paints": {},
+        "parentId": "stage",
+        "transform": {
+          "autoOrigin": false,
+          "originX": 350,
+          "originY": 165,
+          "rotation": 0,
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 0,
+          "translateY": 0
+        },
+        "type": "group",
+        "visible": true
+      },
+      {
+        "geometry": {
+          "height": 90,
+          "width": 90,
+          "x": 310,
+          "y": 125
+        },
+        "id": "clip-circle",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 1,
+        "paints": {
+          "fill": {
+            "color": "#000000",
+            "kind": "solid",
+            "opacity": 1
+          },
+          "stroke": null
+        },
+        "parentId": "clipped-group",
+        "stroke": {
+          "alignment": "center",
+          "dasharray": [],
+          "dashoffset": 0,
+          "width": 0
+        },
+        "transform": {
+          "autoOrigin": true,
+          "originX": 355,
+          "originY": 170,
+          "rotation": 0,
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 0,
+          "translateY": 0
+        },
+        "type": "ellipse",
+        "visible": true
+      },
+      {
+        "geometry": {
+          "height": 110,
+          "width": 130,
+          "x": 290,
+          "y": 115
+        },
+        "id": "radial-ellipse",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 1,
+        "paints": {
+          "fill": {
+            "coordinates": {
+              "cx": 0.5,
+              "cy": 0.5,
+              "fx": 0.35,
+              "fy": 0.35,
+              "r": 0.5
+            },
+            "gradientType": "radial-gradient",
+            "id": "radial-gradient",
+            "kind": "gradient",
+            "spreadMethod": "pad",
+            "stops": [
+              {
+                "color": "#fde047",
+                "id": "radial-stop-a",
+                "offset": 0,
+                "opacity": 1
+              },
+              {
+                "color": "#f97316",
+                "id": "radial-stop-b",
+                "offset": 1,
+                "opacity": 0.7
+              }
+            ],
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ],
+            "units": "objectBoundingBox"
+          },
+          "stroke": {
+            "color": "#0f172a",
+            "kind": "solid",
+            "opacity": 1
+          }
+        },
+        "parentId": "clipped-group",
+        "stroke": {
+          "alignment": "inside",
+          "dasharray": [],
+          "dashoffset": 0,
+          "width": 7
+        },
+        "transform": {
+          "autoOrigin": true,
+          "originX": 355,
+          "originY": 170,
+          "rotation": 0,
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 0,
+          "translateY": 0
+        },
+        "type": "ellipse",
+        "visible": true
+      },
+      {
+        "geometry": {
+          "height": 16,
+          "width": 16,
+          "x": 8,
+          "y": 8
+        },
+        "id": "motion-dot",
+        "motion": {
+          "offsetAngle": 15,
+          "offsetX": 0,
+          "offsetY": -10,
+          "pathId": "motion-path",
+          "progress": 0,
+          "rotateToPath": true
+        },
+        "opacity": 1,
+        "paints": {
+          "fill": {
+            "color": "#06b6d4",
+            "kind": "solid",
+            "opacity": 1
+          },
+          "stroke": {
+            "color": "#ffffff",
+            "kind": "solid",
+            "opacity": 1
+          }
+        },
+        "parentId": "stage",
+        "stroke": {
+          "alignment": "center",
+          "dasharray": [],
+          "dashoffset": 0,
+          "width": 2
+        },
+        "transform": {
+          "autoOrigin": false,
+          "originX": 16,
+          "originY": 16,
+          "rotation": 0,
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 0,
+          "translateY": 0
+        },
+        "type": "rectangle",
+        "visible": true
+      },
+      {
+        "geometry": {
+          "height": 21.6,
+          "width": 0,
+          "x": 205,
+          "y": 245
+        },
+        "id": "caption",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 1,
+        "paints": {
+          "color": {
+            "color": "#e2e8f0",
+            "kind": "solid",
+            "opacity": 1
+          }
+        },
+        "parentId": "stage",
+        "transform": {
+          "autoOrigin": false,
+          "originX": 270,
+          "originY": 260,
+          "rotation": 0,
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 0,
+          "translateY": 0
+        },
+        "type": "text",
+        "visible": true
+      }
+    ],
+    "viewBox": [
+      -40,
+      20,
+      480,
+      300
+    ],
+    "width": 480
+  },
+  "formatVersion": 1,
+  "generator": {
+    "name": "SVG Animator",
+    "version": "1.0.0"
+  },
+  "kind": "svg-animator/runtime-bundle",
+  "requiredCapabilities": [
+    "render.clipping-v1",
+    "render.geometry-v1",
+    "render.gradient-v1",
+    "render.motion-path-v1",
+    "render.paint-v1",
+    "render.path-v1",
+    "render.transforms-v1",
+    "tracks.color-v1",
+    "tracks.discrete-v1",
+    "tracks.numeric-v1"
+  ]
+}
+</script>
+</svg>

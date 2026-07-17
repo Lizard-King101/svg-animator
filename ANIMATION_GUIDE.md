@@ -1,6 +1,6 @@
 # Animation Guide
 
-This guide covers the shipped timeline and speed-graph workflow. The editor can author and preview animation now; animated export and the standalone player remain future work.
+This guide covers the shipped timeline and speed-graph workflow. Authored animation can be published as an Embedded Animation SVG for a shared player, a self-contained Animated SVG, external runtime assets, or a ready-to-run Web Bundle.
 
 ## Make a first animation
 
@@ -117,6 +117,6 @@ The impact is physically discontinuous, so broken handles are appropriate there.
 
 Editor projects keep rich, editable keyframes and temporal handles in animation schema v2. Existing projects with preset easing load without temporal handles and retain their original appearance. Preview values are temporary and never overwrite the saved base artwork.
 
-Static SVG export still exports static artwork. The editor already has a deterministic compiled-runtime boundary, but animated JSON publishing and the lightweight standalone player are not exposed yet.
+The project card's three-dot menu exports the editable v5 Project JSON and remains available when invalid or orphaned tracks prevent runtime publishing; use it for reproducible parity fixtures. The editor Export dialog separates script-free Static SVG artwork from animated delivery formats. Animated/runtime exports always use the complete project duration (not the editor work area), preserve negative and after-duration keys, and reject enabled invalid/orphaned tracks before download. Trim to the work area explicitly if that is the intended published duration. See [the runtime guide](docs/RUNTIME.md) for controls, embedding, MIME types, reduced motion, CSP, and cleanup, and [the runtime testing guide](docs/RUNTIME_TESTING.md) for turning a real project into a regression fixture.
 
 For implementation details, see [ANIMATION_MVP.md](ANIMATION_MVP.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ANIMATION_PERFORMANCE.md](ANIMATION_PERFORMANCE.md).

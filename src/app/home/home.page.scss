@@ -187,7 +187,13 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     transform: translateY(-2px);
 
-    .card-delete { opacity: 1; }
+    .card-menu-trigger { opacity: 1; }
+  }
+
+  &:focus-within,
+  &.menu-open {
+    border-color: var(--border-bright);
+    .card-menu-trigger { opacity: 1; }
   }
 
   .card-preview {
@@ -227,7 +233,7 @@
     color: var(--text-muted);
   }
 
-  .card-delete {
+  .card-menu-trigger {
     position: absolute;
     top: 8px;
     right: 8px;
@@ -242,14 +248,76 @@
     color: var(--text-secondary);
     font-size: 11px;
     cursor: pointer;
-    opacity: 0;
+    opacity: 0.72;
     transition: opacity 0.15s, background 0.12s, color 0.12s, border-color 0.12s;
     backdrop-filter: blur(4px);
 
     &:hover {
-      background: rgba(244, 92, 122, 0.15);
-      border-color: var(--danger);
-      color: var(--danger);
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    &:focus-visible {
+      opacity: 1;
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+  }
+
+  .card-menu {
+    position: absolute;
+    z-index: 4;
+    top: 42px;
+    right: 8px;
+    display: flex;
+    flex-direction: column;
+    width: 154px;
+    padding: 5px;
+    background: rgba(22, 22, 29, 0.97);
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius-md);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+
+    button {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      width: 100%;
+      min-height: 32px;
+      padding: 6px 8px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 11px;
+      text-align: left;
+      cursor: pointer;
+
+      fa-icon {
+        width: 14px;
+        color: var(--text-muted);
+        font-size: 10px;
+        text-align: center;
+      }
+
+      &:hover,
+      &:focus-visible {
+        outline: none;
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+      }
+
+      &.danger {
+        &:hover,
+        &:focus-visible {
+          background: rgba(244, 92, 122, 0.12);
+          color: var(--danger);
+          fa-icon { color: var(--danger); }
+        }
+      }
     }
   }
 }

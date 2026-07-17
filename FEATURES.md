@@ -13,7 +13,7 @@ SVG Animator is a motion SVG studio: a browser-based drawing, editing, and keyfr
 - `DOMParser` ingestion for groups, paths, rectangles, circles/ellipses, lines, polylines, polygons, and basic text.
 - Full path-command normalization for absolute/relative line, cubic, shorthand, quadratic, elliptical-arc, and close commands.
 - Unsupported safe SVG nodes survive as sanitized source through save, reload, editor rendering, and static export.
-- Clean static SVG export with an option to bake rounded path corners.
+- Project-card actions for deterministic editable Project JSON export and deletion, plus a sectioned editor publishing dialog for Static SVG, Embedded Animation SVG, self-contained Animated SVG, Runtime Assets ZIP, and Web Bundle ZIP exports with deterministic runtime JSON, markup, manifests, filenames, and build diagnostics.
 - Canvas pan/zoom, rulers, draggable numeric guides, guide expressions, and guide locking.
 
 ## Artwork editing
@@ -45,11 +45,12 @@ SVG Animator is a motion SVG studio: a browser-based drawing, editing, and keyfr
 - Animatable transforms, visibility, opacity, fill/stroke, stroke width, draw progress, motion progress/orientation/offsets, and path-point positions.
 - Compiled evaluation plans sort and validate tracks once, use active-segment cursors for forward playback, and binary search for seeks/reverse movement.
 - Playback and scrubbing use a retained direct-SVG renderer outside Angular, while edit-mode artwork remains Angular-rendered.
-- A pure deterministic `compileRuntimeAnimation(document)` boundary produces versioned, compact numeric/color/discrete tracks and diagnostics for the future player/export pipeline.
+- A pure deterministic `compileRuntimeAnimation(document)` boundary produces `RuntimeBundleV1` scene data and compact numeric/color/discrete tracks, with diagnostics returned separately.
+- A dependency-free standalone player provides typed ESM and `SVGAnimatorRuntime` browser builds, scoped multiple instances, controls/events/markers, reverse/rate/loop playback, reduced-motion autoplay handling, signature/capability validation, and destroy/restore cleanup.
 
 ## Current limits
 
-- Animated/runtime publishing UI and the standalone player are not shipped yet; the runtime compiler contract is present.
+- Runtime variables are serialized metadata but do not yet drive expressions or state transitions.
 - Complex imported transforms with skew, patterns, effects, rich text, and other non-native features are preserved but are not directly editable.
 - Multi-layer canvas marquee and multi-object transforms are not yet available.
 - Boolean editing is currently used by stroke conversion rather than exposed as a complete user-facing boolean toolset.

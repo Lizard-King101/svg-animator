@@ -32,6 +32,21 @@ describe("temporal animation math", () => {
         expect(Math.max(...samples)).toBeGreaterThan(10);
     });
 
+    it("preserves negative and after-duration keys when restoring", () => {
+        const animation = restoreAnimation({
+            version: 2,
+            duration: 1,
+            loop: false,
+            markers: [],
+            variables: [],
+            tracks: [{
+                id: "outside", targetId: "shape", property: "opacity", valueType: "number",
+                keyframes: [{ id: "before", time: -1, value: 0 }, { id: "after", time: 2, value: 1 }],
+            }],
+        });
+        expect(animation.tracks[0].keyframes.map((keyframe) => keyframe.time)).toEqual([-1, 2]);
+    });
+
     it("keeps preset easing exact when temporal data is absent", () => {
         const track: AnimationTrack = {
             id: "preset", targetId: "shape", property: "opacity", valueType: "number",

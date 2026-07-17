@@ -12,9 +12,10 @@ The authoring system is implemented end to end inside the editor:
 - compiled track evaluation
 - retained imperative SVG playback and scrubbing
 - project migration, history, autosave, and reload
-- a deterministic compiler contract for future runtime export
+- deterministic `RuntimeBundleV1` compilation and publishing
+- a dependency-free typed ESM/browser standalone player
 
-Static SVG export remains available. Animated JSON publishing, an embedded/external export UI, and the standalone player are not shipped.
+Static SVG, Embedded Animation SVG, self-contained Animated SVG, Runtime Assets ZIP, and Web Bundle ZIP publishing are shipped.
 
 ## Model
 
@@ -23,7 +24,7 @@ An editor document has two connected layers:
 1. The artwork model owns shapes, paths, text, groups, clipping, gradients, base geometry/styles, and base transform channels.
 2. The animation model targets stable element IDs and property paths without destructively rewriting the artwork.
 
-The persisted document envelope is version 4. Its animation document is version 2:
+The persisted document envelope is version 5. Its animation document is version 2:
 
 ```ts
 interface AnimationDocument {
@@ -144,26 +145,18 @@ Existing localStorage projects migrate once, are validated by the sequential doc
 
 ## Runtime compiler contract
 
-`compileRuntimeAnimation(document)` is pure and deterministic. It emits:
+`compileRuntimeAnimation(document)` is pure and deterministic. It returns a portable bundle and separate diagnostics:
 
 ```ts
-interface CompiledAnimationV1 {
-  kind: "svg-animator/compiled-animation";
-  version: 1;
-  targets: string[];
-  properties: string[];
-  duration: number;
-  loop: boolean;
-  markers: TimelineMarker[];
-  variables: RuntimeVariable[];
-  tracks: CompiledRuntimeTrackV1[];
+interface RuntimeCompileResultV1 {
+  bundle: RuntimeBundleV1;
   diagnostics: RuntimeCompileDiagnostic[];
 }
 ```
 
-The payload interns target/property strings, stores numeric time/value arrays with segment modes and temporal coefficients, packs colors with interpolation-space metadata, and preserves discrete boolean/string tracks. Diagnostics report orphaned targets, unsupported properties, invalid values, and skipped tracks.
+The bundle includes format/generator metadata, required capabilities, artwork identity/signature/dimensions/viewBox, plain scene targets, markers/loop settings, interned target/property strings, numeric time/value arrays with temporal coefficients, packed colors, and discrete tracks. Diagnostics report orphaned targets, unsupported properties, invalid values, and corrections without entering the portable payload.
 
-Compiled caches are never persisted in editable project documents. Golden tests compare compiled evaluation with authoring evaluation at endpoints and sampled intermediate times. A later export cut will combine the static base SVG with this payload for embedded JSON, external JSON, and the lightweight player.
+Compiled caches are never persisted in editable project documents. Golden tests compare runtime and authoring evaluation at endpoints and intermediate times. See [docs/RUNTIME.md](docs/RUNTIME.md) for the player and export contracts.
 
 ## Compatibility rules
 

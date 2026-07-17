@@ -1,0 +1,58 @@
+{
+  "kind": "svg-animator/document",
+  "version": 5,
+  "data": {
+    "id": "runtime-auto-origin-v1",
+    "name": "Runtime Auto Origin v1",
+    "width": 120,
+    "height": 80,
+    "elements": [
+      {
+        "type": "path",
+        "id": "moving-scaled-path",
+        "name": "Moving Scaled Path",
+        "visible": true,
+        "locked": false,
+        "opacity": 1,
+        "drawProgress": 1,
+        "settings": {
+          "stroke_width": 0,
+          "fill_enabled": true,
+          "fill": "#2563eb",
+          "stroke": null,
+          "line_cap": null,
+          "line_join": null,
+          "stroke_alignment": "center",
+          "stroke_dasharray": [],
+          "stroke_dashoffset": 0,
+          "stroke_miterlimit": 4
+        },
+        "fillRule": "evenodd",
+        "contours": [
+          {
+            "id": "moving-contour",
+            "closed": true,
+            "lines": [
+              { "id": "top", "type": "line", "points": [{"id":"top-left","x":10,"y":10},{"id":"top-right","x":30,"y":10}] },
+              { "id": "right", "type": "line", "points": [{"id":"top-right","x":30,"y":10},{"id":"bottom-right","x":30,"y":30}] },
+              { "id": "bottom", "type": "line", "points": [{"id":"bottom-right","x":30,"y":30},{"id":"bottom-left","x":10,"y":30}] },
+              { "id": "left", "type": "line", "points": [{"id":"bottom-left","x":10,"y":30},{"id":"top-left","x":10,"y":10}] }
+            ]
+          }
+        ]
+      }
+    ],
+    "animation": {
+      "version": 2,
+      "duration": 1,
+      "loop": false,
+      "markers": [],
+      "variables": [],
+      "tracks": [
+        { "id": "move-x", "targetId": "moving-scaled-path", "property": "geometry.x", "valueType": "number", "keyframes": [{"id":"mx0","time":0,"value":10},{"id":"mx1","time":1,"value":50}] },
+        { "id": "scale-x", "targetId": "moving-scaled-path", "property": "transform.scaleX", "valueType": "number", "keyframes": [{"id":"sx0","time":0,"value":1},{"id":"sx1","time":1,"value":2}] },
+        { "id": "scale-y", "targetId": "moving-scaled-path", "property": "transform.scaleY", "valueType": "number", "keyframes": [{"id":"sy0","time":0,"value":1},{"id":"sy1","time":1,"value":2}] }
+      ]
+    }
+  }
+}

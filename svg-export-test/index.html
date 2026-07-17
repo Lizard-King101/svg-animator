@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Animation Example</title>
+<style>body{font:14px system-ui;margin:2rem;background:#111;color:#eee}object{display:block;max-width:100%;background:white}button{margin:.75rem .25rem 0 0}</style></head>
+<body><object id="artwork" data="artwork.svg" type="image/svg+xml"></object>
+<button id="play">Play</button><button id="pause">Pause</button><button id="stop">Stop</button><pre id="events"></pre>
+<script src="runtime/svg-animator-runtime.min.js?v=fnv1a32-8a37dde0"></script>
+<script>
+Promise.all([fetch('animation.json').then(r=>r.json()),new Promise(resolve=>artwork.addEventListener('load',resolve,{once:true}))]).then(([bundle])=>{
+ const svg=artwork.contentDocument.documentElement;
+ const player=SVGAnimatorRuntime.createPlayer(svg,bundle);
+ play.onclick=()=>player.play(); pause.onclick=()=>player.pause(); stop.onclick=()=>player.stop();
+ player.on('marker',event=>events.textContent+='marker: '+event.marker.name+'\n');
+});
+</script></body></html>

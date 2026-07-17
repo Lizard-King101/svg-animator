@@ -1,8 +1,9 @@
-import { Component, OnInit } from "@angular/core";
+import { Component, HostListener, OnInit } from "@angular/core";
 import { NgFor, NgIf, DatePipe } from "@angular/common";
 import { Router } from "@angular/router";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { ProjectRecord, ProjectService } from "../_services/project.service";
+import { ProjectExportService } from "../_services/project-export.service";
 import { MAX_SVG_IMPORT_BYTES, SVGImporterService } from "../editor/import/svg-importer.service";
 
 @Component({
@@ -17,9 +18,12 @@ export class HomePage implements OnInit {
     loading = true;
     importMessage?: string;
     importError?: string;
+    openProjectMenuId?: string;
+    private projectMenuTrigger?: HTMLElement;
 
     constructor(
         public projectService: ProjectService,
+        private projectExporter: ProjectExportService,
         private svgImporter: SVGImporterService,
         private router: Router,
     ) {}
@@ -74,10 +78,43 @@ export class HomePage implements OnInit {
         this.router.navigate(['/editor'], { queryParams: { id: project.id } });
     }
 
+    toggleProjectMenu(event: MouseEvent, project: ProjectRecord): void {
+        event.stopPropagation();
+        const trigger = event.currentTarget as HTMLElement;
+        if(this.openProjectMenuId === project.id) {
+            this.closeProjectMenu();
+            return;
+        }
+        this.openProjectMenuId = project.id;
+        this.projectMenuTrigger = trigger;
+    }
+
+    exportProject(event: MouseEvent, project: ProjectRecord): void {
+        event.stopPropagation();
+        this.projectExporter.download(project);
+        this.closeProjectMenu();
+    }
+
     deleteProject(event: MouseEvent, project: ProjectRecord) {
         event.stopPropagation();
+        this.closeProjectMenu();
         this.projectService.remove(project.id);
         this.projects = this.projectService.list();
+    }
+
+    @HostListener("document:click")
+    closeProjectMenu(): void {
+        this.openProjectMenuId = undefined;
+        this.projectMenuTrigger = undefined;
+    }
+
+    @HostListener("document:keydown.escape", ["$event"])
+    closeProjectMenuFromKeyboard(event: Event): void {
+        if(!this.openProjectMenuId) return;
+        const trigger = this.projectMenuTrigger;
+        this.closeProjectMenu();
+        trigger?.focus();
+        event.preventDefault();
     }
 
     thumbnailUrl(project: ProjectRecord): string {

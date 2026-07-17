@@ -46,7 +46,7 @@
     </div>
 
     <div class="gallery-grid" *ngIf="!loading && projects.length > 0">
-      <div class="project-card" *ngFor="let project of projects" (click)="openProject(project)">
+      <div class="project-card" *ngFor="let project of projects" [class.menu-open]="openProjectMenuId === project.id" (click)="openProject(project)">
         <div class="card-preview">
           <img [src]="thumbnailUrl(project)" [alt]="project.name" />
         </div>
@@ -54,10 +54,22 @@
           <span class="card-name">{{ project.name }}</span>
           <span class="card-date">{{ project.updatedAt | date: 'MMM d, y' }}</span>
         </div>
-        <button class="card-delete" title="Delete project"
-                (click)="deleteProject($event, project)">
-          <fa-icon icon="trash"></fa-icon>
+        <button class="card-menu-trigger" type="button" title="Project actions" [attr.aria-label]="'Actions for ' + project.name"
+                aria-haspopup="menu" [attr.aria-expanded]="openProjectMenuId === project.id"
+                [attr.aria-controls]="'project-menu-' + project.id"
+                (click)="toggleProjectMenu($event, project)">
+          <fa-icon icon="ellipsis-vertical"></fa-icon>
         </button>
+        <div class="card-menu" *ngIf="openProjectMenuId === project.id"
+             [id]="'project-menu-' + project.id" role="menu" aria-label="Project actions"
+             (click)="$event.stopPropagation()">
+          <button type="button" role="menuitem" (click)="exportProject($event, project)">
+            <fa-icon icon="file-export"></fa-icon><span>Export project</span>
+          </button>
+          <button type="button" role="menuitem" class="danger" (click)="deleteProject($event, project)">
+            <fa-icon icon="trash"></fa-icon><span>Delete</span>
+          </button>
+        </div>
       </div>
     </div>
 

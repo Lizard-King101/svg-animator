@@ -1,0 +1,107 @@
+{
+  "kind": "svg-animator/document",
+  "version": 5,
+  "data": {
+    "id": "runtime-showcase-v1",
+    "name": "Runtime Showcase v1",
+    "width": 480,
+    "height": 300,
+    "viewBoxX": -40,
+    "viewBoxY": 20,
+    "elements": [
+      {
+        "type": "group", "id": "stage", "name": "Nested Stage", "visible": true, "locked": false, "opacity": 1,
+        "transform": { "translateX": 8, "translateY": -4, "scaleX": 1, "scaleY": 1, "rotation": 0, "originX": 200, "originY": 150 },
+        "elements": [
+          {
+            "type": "path", "id": "motion-path", "name": "Motion Path", "visible": true, "locked": false, "opacity": 0.2, "drawProgress": 1,
+            "transform": { "translateX": 0, "translateY": 0, "scaleX": 1, "scaleY": 1, "rotation": 0, "originX": 180, "originY": 120 },
+            "settings": { "stroke_width": 1, "fill_enabled": false, "fill": null, "stroke": "#64748b", "line_cap": "round", "line_join": "round", "stroke_alignment": "center", "stroke_dasharray": [6, 4], "stroke_dashoffset": 0, "stroke_miterlimit": 4 },
+            "fillRule": "evenodd",
+            "contours": [{ "id": "motion-contour", "closed": false, "lines": [
+              { "id": "motion-curve", "type": "bezier", "points": [{"id":"mp-a","x":30,"y":190},{"id":"mp-b","x":360,"y":70}], "controlStart": {"id":"mp-c1","x":120,"y":20}, "controlEnd": {"id":"mp-c2","x":270,"y":250} }
+            ]}]
+          },
+          {
+            "type": "path", "id": "compound-path", "name": "Rounded Compound Path", "visible": true, "locked": false, "opacity": 1, "drawProgress": 0.85,
+            "transform": { "translateX": 0, "translateY": 0, "scaleX": 1, "scaleY": 1, "rotation": 0, "originX": 95, "originY": 95 },
+            "settings": {
+              "stroke_width": 8, "fill_enabled": true,
+              "fill": { "type": "linear-gradient", "id": "path-gradient", "units": "userSpaceOnUse", "spreadMethod": "reflect", "transform": [1,0,0,1,0,0], "coordinates": {"x1":20,"y1":40,"x2":170,"y2":140}, "stops": [
+                {"id":"path-stop-a","offset":0,"color":"#ff0066","opacity":0.85}, {"id":"path-stop-b","offset":1,"color":"#00ccffaa","opacity":1}
+              ]},
+              "stroke": "#111827cc", "line_cap": "round", "line_join": "round", "stroke_alignment": "inside", "stroke_dasharray": [12,6], "stroke_dashoffset": 2, "stroke_miterlimit": 6
+            },
+            "fillRule": "evenodd",
+            "contours": [
+              { "id":"outer-contour","closed":true,"lines":[
+                {"id":"outer-a","type":"line","points":[{"id":"oa","x":20,"y":40},{"id":"ob","x":170,"y":40,"cornerRadius":18}]},
+                {"id":"outer-b","type":"line","points":[{"id":"ob","x":170,"y":40,"cornerRadius":18},{"id":"oc","x":170,"y":150,"cornerRadius":12}]},
+                {"id":"outer-c","type":"line","points":[{"id":"oc","x":170,"y":150,"cornerRadius":12},{"id":"od","x":20,"y":150,"cornerRadius":20}]},
+                {"id":"outer-d","type":"line","points":[{"id":"od","x":20,"y":150,"cornerRadius":20},{"id":"oa","x":20,"y":40}]}
+              ]},
+              { "id":"inner-contour","closed":true,"lines":[
+                {"id":"inner-a","type":"bezier","points":[{"id":"ia","x":70,"y":75},{"id":"ib","x":125,"y":115}],"controlStart":{"id":"ic1","x":105,"y":55},"controlEnd":{"id":"ic2","x":145,"y":95}},
+                {"id":"inner-b","type":"line","points":[{"id":"ib","x":125,"y":115},{"id":"ia","x":70,"y":75}]}
+              ]}
+            ]
+          },
+          {
+            "type":"shape","id":"reflecting-rect","name":"Reflecting Rectangle","visible":true,"locked":false,"opacity":0.9,
+            "position":{"id":"rect-position","x":215,"y":42},
+            "transform":{"translateX":0,"translateY":0,"scaleX":1,"scaleY":1,"rotation":-8,"originX":260,"originY":82},
+            "settings":{"width":90,"height":80,"stroke_width":5,"stroke":"#f8fafc","fill":"#7c3aedcc","corner_radius":14,"line_cap":"square","line_join":"bevel","stroke_alignment":"outside","stroke_dasharray":[],"stroke_dashoffset":0,"stroke_miterlimit":4},"shapeType":"rectangle"
+          },
+          {
+            "type":"group","id":"clipped-group","name":"Clipped Gradient Group","visible":true,"locked":false,"opacity":1,"clipElementId":"clip-circle",
+            "transform":{"translateX":0,"translateY":0,"scaleX":1,"scaleY":1,"rotation":0,"originX":350,"originY":165},
+            "elements":[
+              {"type":"shape","id":"clip-circle","name":"Clip Circle","visible":true,"locked":false,"position":{"id":"clip-position","x":310,"y":125},"settings":{"width":90,"height":90,"stroke_width":0,"stroke":null,"fill":"#000000","corner_radius":0,"line_cap":null,"line_join":null,"stroke_alignment":"center","stroke_dasharray":[],"stroke_dashoffset":0,"stroke_miterlimit":4},"shapeType":"ellipse"},
+              {"type":"shape","id":"radial-ellipse","name":"Radial Ellipse","visible":true,"locked":false,"position":{"id":"ellipse-position","x":290,"y":115},"settings":{"width":130,"height":110,"stroke_width":7,"stroke":"#0f172a","fill":{"type":"radial-gradient","id":"radial-gradient","units":"objectBoundingBox","spreadMethod":"pad","coordinates":{"cx":0.5,"cy":0.5,"r":0.5,"fx":0.35,"fy":0.35},"stops":[{"id":"radial-stop-a","offset":0,"color":"#fde047"},{"id":"radial-stop-b","offset":1,"color":"#f97316","opacity":0.7}]},"corner_radius":0,"line_cap":"round","line_join":"round","stroke_alignment":"inside","stroke_dasharray":[],"stroke_dashoffset":0,"stroke_miterlimit":4},"shapeType":"ellipse"}
+            ]
+          },
+          {
+            "type":"shape","id":"motion-dot","name":"Motion Dot","visible":true,"locked":false,"opacity":1,
+            "position":{"id":"dot-position","x":8,"y":8},"motion":{"pathId":"motion-path","progress":0,"offsetX":0,"offsetY":-10,"rotateToPath":true,"offsetAngle":15},
+            "transform":{"translateX":0,"translateY":0,"scaleX":1,"scaleY":1,"rotation":0,"originX":16,"originY":16},
+            "settings":{"width":16,"height":16,"stroke_width":2,"stroke":"#ffffff","fill":"#06b6d4","corner_radius":0,"line_cap":null,"line_join":null,"stroke_alignment":"center","stroke_dasharray":[],"stroke_dashoffset":0,"stroke_miterlimit":4},"shapeType":"rectangle"
+          },
+          {
+            "type":"text","id":"caption","name":"Caption","visible":true,"locked":false,"opacity":1,"position":{"id":"caption-position","x":205,"y":245},
+            "transform":{"translateX":0,"translateY":0,"scaleX":1,"scaleY":1,"rotation":0,"originX":270,"originY":260},
+            "settings":{"content":"Runtime v1\nShowcase","text_align":"start","font_family":"system-ui","font_size":18,"font_weight":"700","color":"#e2e8f0"}
+          }
+        ]
+      }
+    ],
+    "importedSourceNodes": [{"id":"safe-source","parentId":null,"tagName":"circle","markup":"<circle cx=\"440\" cy=\"280\" r=\"6\" fill=\"#94a3b8\"/>"}],
+    "guides": [], "guidesLocked": false,
+    "animation": {
+      "version": 2, "duration": 4, "fpsHint": 60, "loop": true, "workArea": {"start":0.75,"end":3.25},
+      "markers": [{"id":"intro","name":"Intro","time":0.5},{"id":"turn","name":"Turn","time":2},{"id":"outro","name":"Outro","time":3.5}],
+      "variables": [{"name":"theme","value":"night"},{"name":"intensity","value":0.8},{"name":"interactive","value":false}],
+      "tracks": [
+        {"id":"stage-rotation","targetId":"stage","property":"transform.rotation","valueType":"number","keyframes":[{"id":"sr0","time":0,"value":0},{"id":"sr1","time":4,"value":3,"easing":{"type":"ease-in-out"}}]},
+        {"id":"rect-x-overshoot","targetId":"reflecting-rect","property":"transform.translateX","valueType":"number","keyframes":[{"id":"rx-before","time":-1,"value":-30},{"id":"rx0","time":0,"value":0,"temporal":{"linked":false,"out":{"speed":90,"influence":0.4}}},{"id":"rx1","time":2,"value":65,"temporal":{"linked":false,"in":{"speed":-30,"influence":0.35}}},{"id":"rx-after","time":5,"value":0}]},
+        {"id":"rect-reflect","targetId":"reflecting-rect","property":"transform.scaleX","valueType":"number","keyframes":[{"id":"rs0","time":0,"value":1},{"id":"rs1","time":2,"value":-1,"easing":{"type":"ease-in-out"}},{"id":"rs2","time":4,"value":1}]},
+        {"id":"rect-scale-y","targetId":"reflecting-rect","property":"transform.scaleY","valueType":"number","keyframes":[{"id":"rsy0","time":0,"value":1},{"id":"rsy1","time":2,"value":1.25},{"id":"rsy2","time":4,"value":1}]},
+        {"id":"rect-origin-x","targetId":"reflecting-rect","property":"transform.originX","valueType":"number","keyframes":[{"id":"rox0","time":0,"value":260},{"id":"rox1","time":4,"value":275}]},
+        {"id":"rect-opacity","targetId":"reflecting-rect","property":"opacity","valueType":"number","keyframes":[{"id":"ro0","time":0,"value":0.35},{"id":"ro1","time":1,"value":1},{"id":"ro2","time":4,"value":0.35}]},
+        {"id":"rect-visible","targetId":"reflecting-rect","property":"visible","valueType":"boolean","keyframes":[{"id":"rv0","time":0,"value":true,"easing":{"type":"hold"}},{"id":"rv1","time":3.75,"value":false}]},
+        {"id":"rect-width","targetId":"reflecting-rect","property":"geometry.width","valueType":"number","keyframes":[{"id":"rw0","time":0,"value":90},{"id":"rw1","time":2,"value":120},{"id":"rw2","time":4,"value":90}]},
+        {"id":"rect-fill","targetId":"reflecting-rect","property":"settings.fill","valueType":"color","keyframes":[{"id":"rf0","time":0,"value":{"type":"color","space":"rgb","hex":"#7c3aed","rgb":{"r":124,"g":58,"b":237},"hsl":{"h":262,"s":83,"l":58},"alpha":0.8}},{"id":"rf1","time":2,"value":{"type":"color","space":"hsl","hex":"#ec4899","rgb":{"r":236,"g":72,"b":153},"hsl":{"h":330,"s":81,"l":60},"alpha":0.55}},{"id":"rf2","time":4,"value":"#7c3aedcc"}]},
+        {"id":"path-point","targetId":"compound-path","property":"path.points.ob.x","valueType":"number","keyframes":[{"id":"pp0","time":0,"value":170},{"id":"pp1","time":2,"value":195},{"id":"pp2","time":4,"value":170}]},
+        {"id":"path-draw","targetId":"compound-path","property":"path.drawProgress","valueType":"number","keyframes":[{"id":"pd0","time":0,"value":0},{"id":"pd1","time":2,"value":1},{"id":"pd2","time":4,"value":0.35,"easing":{"type":"hold"}}]},
+        {"id":"path-dash","targetId":"compound-path","property":"settings.stroke_dashoffset","valueType":"number","keyframes":[{"id":"pda0","time":0,"value":2},{"id":"pda1","time":4,"value":-34}]},
+        {"id":"gradient-x2","targetId":"compound-path","property":"settings.fill.gradient.x2","valueType":"number","keyframes":[{"id":"gx0","time":0,"value":170},{"id":"gx1","time":4,"value":260}]},
+        {"id":"gradient-stop-color","targetId":"compound-path","property":"settings.fill.gradient.stops.path-stop-a.color","valueType":"color","keyframes":[{"id":"gsc0","time":0,"value":"#ff0066d9"},{"id":"gsc1","time":2,"value":{"type":"color","space":"hsl","hex":"#22c55e","rgb":{"r":34,"g":197,"b":94},"hsl":{"h":142,"s":71,"l":45},"alpha":0.65}},{"id":"gsc2","time":4,"value":"#ff0066d9"}]},
+        {"id":"gradient-stop-offset","targetId":"compound-path","property":"settings.fill.gradient.stops.path-stop-b.offset","valueType":"number","keyframes":[{"id":"gso0","time":0,"value":1},{"id":"gso1","time":2,"value":0.65},{"id":"gso2","time":4,"value":1}]},
+        {"id":"radial-radius","targetId":"radial-ellipse","property":"settings.fill.gradient.r","valueType":"number","keyframes":[{"id":"rr0","time":0,"value":0.3},{"id":"rr1","time":2,"value":0.7},{"id":"rr2","time":4,"value":0.3}]},
+        {"id":"motion-progress","targetId":"motion-dot","property":"motion.progress","valueType":"number","keyframes":[{"id":"mp0","time":0,"value":0},{"id":"mp1","time":4,"value":1,"easing":{"type":"ease-in-out"}}]},
+        {"id":"motion-rotate","targetId":"motion-dot","property":"motion.rotateToPath","valueType":"boolean","keyframes":[{"id":"mr0","time":0,"value":true},{"id":"mr1","time":3,"value":false}]},
+        {"id":"motion-offset","targetId":"motion-dot","property":"motion.offsetAngle","valueType":"number","keyframes":[{"id":"mo0","time":0,"value":15},{"id":"mo1","time":4,"value":375}]},
+        {"id":"caption-color","targetId":"caption","property":"settings.color","valueType":"color","keyframes":[{"id":"cc0","time":0,"value":"#e2e8f0"},{"id":"cc1","time":2,"value":"#67e8f9aa"},{"id":"cc2","time":4,"value":"#e2e8f0"}]}
+      ]
+    }
+  }
+}

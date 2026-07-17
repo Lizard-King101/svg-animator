@@ -1,0 +1,11 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["packages/runtime/src/index.ts"],
+  "out": "docs/api",
+  "readme": "packages/runtime/README.md",
+  "name": "SVG Animator Runtime v1 API",
+  "includeVersion": true,
+  "githubPages": false,
+  "excludePrivate": true,
+  "excludeInternal": true
+}

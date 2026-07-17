@@ -1,0 +1,2320 @@
+{
+  "animation": {
+    "duration": 4,
+    "loop": false,
+    "markers": [],
+    "properties": [
+      "geometry.x",
+      "geometry.y",
+      "opacity",
+      "settings.stroke",
+      "transform.scaleX",
+      "transform.scaleY",
+      "transform.translateX",
+      "transform.translateY",
+      "settings.color.gradient.x1",
+      "settings.color.gradient.x2",
+      "settings.color.gradient.y1",
+      "settings.color.gradient.y2"
+    ],
+    "targets": [
+      "6ajj9fjng",
+      "dsnbt7bxt",
+      "ez1xp5nv5",
+      "k5yv9nojm",
+      "tfcr0zcic"
+    ],
+    "tracks": [
+      {
+        "kind": "number",
+        "property": 0,
+        "segmentModes": [
+          "linear",
+          "linear",
+          "linear"
+        ],
+        "target": 0,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          1.45,
+          2.27,
+          2.55,
+          3.35
+        ],
+        "values": [
+          234.96,
+          234.96,
+          242.76,
+          242.76
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 1,
+        "segmentModes": [
+          "linear",
+          "linear",
+          "linear"
+        ],
+        "target": 0,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          1.45,
+          2.27,
+          2.55,
+          3.35
+        ],
+        "values": [
+          291.07,
+          291.07,
+          160.77,
+          160.77
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 2,
+        "segmentModes": [
+          "linear",
+          "linear",
+          "linear",
+          "linear",
+          "linear"
+        ],
+        "target": 0,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0.7,
+          0.73,
+          2.18,
+          2.22,
+          2.6,
+          2.63
+        ],
+        "values": [
+          0,
+          1,
+          1,
+          0,
+          0,
+          1
+        ]
+      },
+      {
+        "interpolationSpaces": [
+          "rgb",
+          "rgb",
+          "rgb",
+          "rgb",
+          "rgb"
+        ],
+        "kind": "color",
+        "property": 3,
+        "segmentModes": [
+          "linear",
+          "linear",
+          "linear",
+          "linear",
+          "linear"
+        ],
+        "target": 0,
+        "times": [
+          0.7,
+          0.73,
+          2.18,
+          2.22,
+          2.6,
+          2.63
+        ],
+        "values": [
+          3455187200,
+          3455187455,
+          3455187455,
+          3455187200,
+          3455187200,
+          3455187455
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 4,
+        "segmentModes": [
+          "temporal",
+          "temporal",
+          "temporal",
+          "temporal",
+          "temporal"
+        ],
+        "target": 0,
+        "temporalCoefficients": [
+          0.724212734652,
+          0.00571562992,
+          0.020071635428,
+          0.7,
+          -1.695567472273,
+          2.595429736317,
+          0.000137735956,
+          0.1,
+          0.734513066447,
+          -2.215079577667,
+          2.25056651122,
+          1.45,
+          1.905897413112,
+          -2.912388946588,
+          0.106491533476,
+          1,
+          0,
+          0,
+          0.38,
+          2.22,
+          -0.009427900428,
+          0.018855800855,
+          -0.009427900428,
+          0.1,
+          0.463496150178,
+          0.003658003149,
+          0.012845846674,
+          2.6,
+          -4.826342420549,
+          7.226254269537,
+          0.000088151012,
+          0.1,
+          0.470763226267,
+          -0.324672909642,
+          0.513909683375,
+          3.08,
+          0.438311068691,
+          -0.660414385728,
+          -0.009628840421,
+          2.5
+        ],
+        "times": [
+          0.7,
+          1.45,
+          2.22,
+          2.6,
+          3.08,
+          3.74
+        ],
+        "values": [
+          0.1,
+          1,
+          0.1,
+          0.1,
+          2.5,
+          2.268267842542
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 5,
+        "segmentModes": [
+          "temporal",
+          "temporal",
+          "temporal",
+          "temporal",
+          "temporal"
+        ],
+        "target": 0,
+        "temporalCoefficients": [
+          0.724212734652,
+          0.00571562992,
+          0.020071635428,
+          0.7,
+          -1.695567472273,
+          2.595429736317,
+          0.000137735956,
+          0.1,
+          0.734513066447,
+          -2.215079577667,
+          2.25056651122,
+          1.45,
+          1.905897413112,
+          -2.912388946588,
+          0.106491533476,
+          1,
+          0,
+          0,
+          0.38,
+          2.22,
+          -0.009427900428,
+          0.018855800855,
+          -0.009427900428,
+          0.1,
+          0.463496150178,
+          0.003658003149,
+          0.012845846674,
+          2.6,
+          -4.826342420549,
+          7.226254269537,
+          0.000088151012,
+          0.1,
+          0.470763226267,
+          -0.324672909642,
+          0.513909683375,
+          3.08,
+          0.438311068691,
+          -0.660414385728,
+          -0.009628840421,
+          2.5
+        ],
+        "times": [
+          0.7,
+          1.45,
+          2.22,
+          2.6,
+          3.08,
+          3.74
+        ],
+        "values": [
+          0.1,
+          1,
+          0.1,
+          0.1,
+          2.5,
+          2.268267842542
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 6,
+        "segmentModes": [
+          "linear",
+          "temporal",
+          "temporal"
+        ],
+        "target": 0,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.38,
+          2.22,
+          74.523444602097,
+          -74.523444602097,
+          -98.87,
+          69.04,
+          0.878130744485,
+          -0.249368106618,
+          0.491237362132,
+          2.6,
+          -161.378969509124,
+          255.611295833025,
+          -31.473520133355,
+          -29.83
+        ],
+        "times": [
+          0.7,
+          2.22,
+          2.6,
+          3.72
+        ],
+        "values": [
+          -29.83,
+          69.04,
+          -29.83,
+          32.928806190545
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 7,
+        "segmentModes": [
+          "linear",
+          "temporal",
+          "temporal"
+        ],
+        "target": 0,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.38,
+          2.22,
+          126.460143529191,
+          -126.460143529191,
+          -142.17,
+          113.34,
+          0.874626608456,
+          -0.214642693015,
+          0.460016084559,
+          2.6,
+          -205.217611955029,
+          320.034878682706,
+          -19.017859638639,
+          -28.83
+        ],
+        "times": [
+          0.7,
+          2.22,
+          2.6,
+          3.72
+        ],
+        "values": [
+          -28.83,
+          113.34,
+          -28.83,
+          66.969407089038
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 6,
+        "segmentModes": [],
+        "target": 1,
+        "temporalCoefficients": [],
+        "times": [
+          3.9632
+        ],
+        "values": [
+          -54.42
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 0,
+        "segmentModes": [
+          "linear",
+          "linear",
+          "linear"
+        ],
+        "target": 2,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          1.22,
+          2.0674,
+          2.09,
+          2.85
+        ],
+        "values": [
+          247.93,
+          247.93,
+          337.76,
+          337.76
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 1,
+        "segmentModes": [
+          "linear",
+          "linear",
+          "linear"
+        ],
+        "target": 2,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          1.22,
+          2.0674,
+          2.09,
+          2.85
+        ],
+        "values": [
+          176.5,
+          176.5,
+          144.88,
+          144.88
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 2,
+        "segmentModes": [
+          "linear",
+          "linear",
+          "linear",
+          "linear",
+          "linear"
+        ],
+        "target": 2,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0.47,
+          0.5,
+          1.95,
+          1.99,
+          2.1,
+          2.13
+        ],
+        "values": [
+          0,
+          1,
+          1,
+          0,
+          0,
+          1
+        ]
+      },
+      {
+        "interpolationSpaces": [
+          "rgb",
+          "rgb",
+          "rgb",
+          "rgb",
+          "rgb"
+        ],
+        "kind": "color",
+        "property": 3,
+        "segmentModes": [
+          "linear",
+          "linear",
+          "linear",
+          "linear",
+          "linear"
+        ],
+        "target": 2,
+        "times": [
+          0.47,
+          0.5,
+          1.95,
+          1.99,
+          2.1,
+          2.13
+        ],
+        "values": [
+          3455187200,
+          3455187455,
+          3455187455,
+          3455187200,
+          3455187200,
+          3455187455
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 4,
+        "segmentModes": [
+          "temporal",
+          "temporal",
+          "temporal",
+          "temporal",
+          "temporal"
+        ],
+        "target": 2,
+        "temporalCoefficients": [
+          0.724212734652,
+          0.00571562992,
+          0.020071635428,
+          0.47,
+          -1.695567472273,
+          2.595429736317,
+          0.000137735956,
+          0.1,
+          0.734513066447,
+          -2.215079577667,
+          2.25056651122,
+          1.22,
+          1.905897413112,
+          -2.912388946588,
+          0.106491533476,
+          1,
+          0,
+          0,
+          0.11,
+          1.99,
+          -0.002729129071,
+          0.005458258142,
+          -0.002729129071,
+          0.1,
+          0.627651036699,
+          0.004953545931,
+          0.017395417371,
+          2.1,
+          -1.782404203519,
+          2.682284832356,
+          0.000119371162,
+          0.1,
+          0.799915491382,
+          -0.823875841257,
+          1.003960349875,
+          2.75,
+          0.680085272324,
+          -1.025452780144,
+          0.009184968703,
+          1
+        ],
+        "times": [
+          0.47,
+          1.22,
+          1.99,
+          2.1,
+          2.75,
+          3.73
+        ],
+        "values": [
+          0.1,
+          1,
+          0.1,
+          0.1,
+          1,
+          0.663817460882
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 5,
+        "segmentModes": [
+          "temporal",
+          "temporal",
+          "temporal",
+          "temporal",
+          "temporal"
+        ],
+        "target": 2,
+        "temporalCoefficients": [
+          0.724212734652,
+          0.00571562992,
+          0.020071635428,
+          0.47,
+          -1.695567472273,
+          2.595429736317,
+          0.000137735956,
+          0.1,
+          0.734513066447,
+          -2.215079577667,
+          2.25056651122,
+          1.22,
+          1.905897413112,
+          -2.912388946588,
+          0.106491533476,
+          1,
+          0,
+          0,
+          0.11,
+          1.99,
+          -0.002729129071,
+          0.005458258142,
+          -0.002729129071,
+          0.1,
+          0.627651036699,
+          0.004953545931,
+          0.017395417371,
+          2.1,
+          -1.782404203519,
+          2.682284832356,
+          0.000119371162,
+          0.1,
+          0.799915491382,
+          -0.823875841257,
+          1.003960349875,
+          2.75,
+          0.680085272324,
+          -1.025452780144,
+          0.009184968703,
+          1
+        ],
+        "times": [
+          0.47,
+          1.22,
+          1.99,
+          2.1,
+          2.75,
+          3.73
+        ],
+        "values": [
+          0.1,
+          1,
+          0.1,
+          0.1,
+          1,
+          0.663817460882
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 6,
+        "segmentModes": [
+          "linear",
+          "linear",
+          "temporal"
+        ],
+        "target": 2,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1.693043428309,
+          -1.693043428309,
+          1.63,
+          2.1,
+          -96.848805749278,
+          96.848805749278,
+          85.57,
+          -29.83
+        ],
+        "times": [
+          0.47,
+          1.99,
+          2.1,
+          3.73
+        ],
+        "values": [
+          -29.83,
+          55.74,
+          -29.83,
+          55.74
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 7,
+        "segmentModes": [
+          "linear",
+          "linear",
+          "temporal"
+        ],
+        "target": 2,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1.373420266544,
+          -1.373420266544,
+          1.63,
+          2.1,
+          -130.226789496683,
+          130.226789496683,
+          130.62,
+          -28.83
+        ],
+        "times": [
+          0.47,
+          1.99,
+          2.1,
+          3.73
+        ],
+        "values": [
+          -28.83,
+          101.79,
+          -28.83,
+          101.79
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 0,
+        "segmentModes": [
+          "linear"
+        ],
+        "target": 3,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0.87,
+          2.57
+        ],
+        "values": [
+          290.18,
+          290.18
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 1,
+        "segmentModes": [
+          "linear"
+        ],
+        "target": 3,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0.87,
+          2.57
+        ],
+        "values": [
+          217.64,
+          217.64
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 2,
+        "segmentModes": [
+          "linear",
+          "linear",
+          "linear",
+          "linear",
+          "linear"
+        ],
+        "target": 3,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          0.12,
+          0.15,
+          1.6,
+          1.64,
+          1.82,
+          1.85
+        ],
+        "values": [
+          0,
+          1,
+          1,
+          0,
+          0,
+          1
+        ]
+      },
+      {
+        "interpolationSpaces": [
+          "rgb",
+          "rgb",
+          "rgb",
+          "rgb",
+          "rgb"
+        ],
+        "kind": "color",
+        "property": 3,
+        "segmentModes": [
+          "linear",
+          "linear",
+          "linear",
+          "linear",
+          "linear"
+        ],
+        "target": 3,
+        "times": [
+          0.12,
+          0.15,
+          1.6,
+          1.64,
+          1.82,
+          1.85
+        ],
+        "values": [
+          3455187200,
+          3455187455,
+          3455187455,
+          3455187200,
+          3455187200,
+          3455187455
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 4,
+        "segmentModes": [
+          "temporal",
+          "temporal",
+          "temporal",
+          "temporal",
+          "temporal"
+        ],
+        "target": 3,
+        "temporalCoefficients": [
+          0.724212734652,
+          0.00571562992,
+          0.020071635428,
+          0.12,
+          -3.695567472273,
+          5.595429736317,
+          0.000137735956,
+          0.1,
+          0.734513066447,
+          -2.215079577667,
+          2.25056651122,
+          0.87,
+          3.905897413112,
+          -5.912388946588,
+          0.106491533476,
+          2,
+          0,
+          0,
+          0.18,
+          1.64,
+          -0.004465847571,
+          0.008931695142,
+          -0.004465847571,
+          0.1,
+          0.724212734652,
+          0.00571562992,
+          0.020071635428,
+          1.82,
+          -3.638720775,
+          5.538583039044,
+          0.000137735956,
+          0.1,
+          0.762632314771,
+          -0.942745213333,
+          1.140112898562,
+          2.57,
+          1.669351063495,
+          -2.568717330237,
+          0.083351964272,
+          2
+        ],
+        "times": [
+          0.12,
+          0.87,
+          1.64,
+          1.82,
+          2.57,
+          3.53
+        ],
+        "values": [
+          0.1,
+          2,
+          0.1,
+          0.1,
+          2,
+          1.18398569753
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 5,
+        "segmentModes": [
+          "temporal",
+          "temporal",
+          "temporal",
+          "temporal",
+          "temporal"
+        ],
+        "target": 3,
+        "temporalCoefficients": [
+          0.724212734652,
+          0.00571562992,
+          0.020071635428,
+          0.12,
+          -3.695567472273,
+          5.595429736317,
+          0.000137735956,
+          0.1,
+          0.734513066447,
+          -2.215079577667,
+          2.25056651122,
+          0.87,
+          3.905897413112,
+          -5.912388946588,
+          0.106491533476,
+          2,
+          0,
+          0,
+          0.18,
+          1.64,
+          -0.004465847571,
+          0.008931695142,
+          -0.004465847571,
+          0.1,
+          0.724212734652,
+          0.00571562992,
+          0.020071635428,
+          1.82,
+          -3.638720775,
+          5.538583039044,
+          0.000137735956,
+          0.1,
+          0.762632314771,
+          -0.942745213333,
+          1.140112898562,
+          2.57,
+          1.669351063495,
+          -2.568717330237,
+          0.083351964272,
+          2
+        ],
+        "times": [
+          0.12,
+          0.87,
+          1.64,
+          1.82,
+          2.57,
+          3.53
+        ],
+        "values": [
+          0.1,
+          2,
+          0.1,
+          0.1,
+          2,
+          1.18398569753
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 6,
+        "segmentModes": [
+          "temporal",
+          "temporal",
+          "temporal"
+        ],
+        "target": 3,
+        "temporalCoefficients": [
+          0,
+          0,
+          1.52,
+          0.12,
+          -36.6,
+          54.9,
+          85.57,
+          -29.83,
+          0,
+          0,
+          0.18,
+          1.64,
+          36.6,
+          -54.9,
+          -85.57,
+          74.04,
+          0.779670266544,
+          -0.301240808824,
+          1.431570542279,
+          1.82,
+          -188.681651677405,
+          286.168958151165,
+          -11.917306473759,
+          -29.83
+        ],
+        "times": [
+          0.12,
+          1.64,
+          1.82,
+          3.73
+        ],
+        "values": [
+          -29.83,
+          74.04,
+          -29.83,
+          55.74
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 7,
+        "segmentModes": [
+          "temporal",
+          "temporal",
+          "temporal"
+        ],
+        "target": 3,
+        "temporalCoefficients": [
+          0,
+          0,
+          1.52,
+          0.12,
+          -52.26,
+          78.39,
+          130.62,
+          -28.83,
+          0,
+          0,
+          0.18,
+          1.64,
+          52.26,
+          -78.39,
+          -130.62,
+          127.92,
+          1.655732996324,
+          -1.212833180147,
+          1.467100183824,
+          1.82,
+          -246.389222638476,
+          363.27518356449,
+          13.734039073985,
+          -28.83
+        ],
+        "times": [
+          0.12,
+          1.64,
+          1.82,
+          3.73
+        ],
+        "values": [
+          -28.83,
+          127.92,
+          -28.83,
+          101.79
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 1,
+        "segmentModes": [
+          "temporal"
+        ],
+        "target": 4,
+        "temporalCoefficients": [
+          2.182605082233,
+          -2.182605082233,
+          1.137,
+          2.5279,
+          1.42867732385,
+          46.407597374118,
+          -95.676274697967,
+          474.77
+        ],
+        "times": [
+          2.5279,
+          3.6649
+        ],
+        "values": [
+          474.77,
+          426.93
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 8,
+        "segmentModes": [
+          "temporal"
+        ],
+        "target": 4,
+        "temporalCoefficients": [
+          1.016791345741,
+          -0.992662038654,
+          0.755570692912,
+          2.3952,
+          0.992865664216,
+          -0.699379885365,
+          1.084206517498,
+          -0.381007261405
+        ],
+        "times": [
+          2.3952,
+          3.1749
+        ],
+        "values": [
+          -0.381007261405,
+          0.996685034945
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 9,
+        "segmentModes": [
+          "linear"
+        ],
+        "target": 4,
+        "temporalCoefficients": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "times": [
+          2.3952,
+          3.1749
+        ],
+        "values": [
+          0.196826395461,
+          1.430701801259
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 10,
+        "segmentModes": [
+          "temporal"
+        ],
+        "target": 4,
+        "temporalCoefficients": [
+          -0.195088171529,
+          0.120766999273,
+          0.854021172257,
+          2.3952,
+          0.643655666111,
+          -0.964949978553,
+          0.335056938705,
+          -0.027777777778
+        ],
+        "times": [
+          2.3952,
+          3.1749
+        ],
+        "values": [
+          -0.027777777778,
+          -0.014015151515
+        ]
+      },
+      {
+        "kind": "number",
+        "property": 11,
+        "segmentModes": [],
+        "target": 4,
+        "temporalCoefficients": [],
+        "times": [
+          3.1749
+        ],
+        "values": [
+          -0.014015151515
+        ]
+      }
+    ],
+    "variables": []
+  },
+  "artwork": {
+    "height": 499.07,
+    "id": "pgimzvbaz",
+    "signature": "fnv1a32-31df939c",
+    "targets": [
+      {
+        "geometry": {
+          "height": 822.08,
+          "width": 619.57,
+          "x": -11.73,
+          "y": -14.57
+        },
+        "id": "wm551j7kz",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 1,
+        "paints": {
+          "fill": {
+            "color": "#cdf1f9",
+            "kind": "solid",
+            "opacity": 1
+          },
+          "stroke": {
+            "color": "#2dd4bf",
+            "kind": "solid",
+            "opacity": 1
+          }
+        },
+        "parentId": null,
+        "stroke": {
+          "alignment": "center",
+          "dasharray": [],
+          "dashoffset": 0,
+          "width": 3
+        },
+        "transform": {
+          "autoOrigin": false,
+          "originX": 298.055,
+          "originY": 396.47,
+          "rotation": 0,
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 0,
+          "translateY": 0
+        },
+        "type": "rectangle",
+        "visible": true
+      },
+      {
+        "geometry": {
+          "height": 173.5,
+          "width": 134.07,
+          "x": 247.93,
+          "y": 176.5
+        },
+        "id": "dsnbt7bxt",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 1,
+        "paints": {},
+        "parentId": null,
+        "transform": {
+          "autoOrigin": true,
+          "originX": 314.965,
+          "originY": 263.25,
+          "rotation": 0,
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": -42.3,
+          "translateY": -4.7
+        },
+        "type": "group",
+        "visible": true
+      },
+      {
+        "geometry": {
+          "height": 100,
+          "width": 80,
+          "x": 302,
+          "y": 250
+        },
+        "id": "k5yv9nojm",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 1,
+        "paints": {
+          "fill": {
+            "coordinates": {
+              "x1": 0.203,
+              "x2": 0.917437,
+              "y1": 0.2778,
+              "y2": 0.6888
+            },
+            "gradientType": "linear-gradient",
+            "id": "9arfge2um",
+            "kind": "gradient",
+            "spreadMethod": "pad",
+            "stops": [
+              {
+                "color": "#43acd6",
+                "id": "9arfge2um-stop-1",
+                "offset": 0,
+                "opacity": 1
+              },
+              {
+                "color": "#1edca3",
+                "id": "9arfge2um-stop-2",
+                "offset": 1,
+                "opacity": 1
+              }
+            ],
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ],
+            "units": "objectBoundingBox"
+          },
+          "stroke": {
+            "color": "#cdf1f9",
+            "kind": "solid",
+            "opacity": 1
+          }
+        },
+        "parentId": "dsnbt7bxt",
+        "path": {
+          "contours": [
+            {
+              "closed": true,
+              "id": "a2veoa575",
+              "lines": [
+                {
+                  "id": "5ldp7le4w",
+                  "points": [
+                    {
+                      "cornerRadius": 4,
+                      "id": "bbpqostdn",
+                      "x": 342,
+                      "y": 350
+                    },
+                    {
+                      "cornerRadius": 10,
+                      "id": "jnspogo9h",
+                      "x": 332,
+                      "y": 310
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "4jj54cwox",
+                  "points": [
+                    {
+                      "cornerRadius": 10,
+                      "id": "jnspogo9h",
+                      "x": 332,
+                      "y": 310
+                    },
+                    {
+                      "cornerRadius": 4,
+                      "id": "xlr3780pr",
+                      "x": 302,
+                      "y": 300
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "l80k5hcvo",
+                  "points": [
+                    {
+                      "cornerRadius": 4,
+                      "id": "xlr3780pr",
+                      "x": 302,
+                      "y": 300
+                    },
+                    {
+                      "cornerRadius": 10,
+                      "id": "t8569wtnt",
+                      "x": 332,
+                      "y": 290
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "9e7c6mq5r",
+                  "points": [
+                    {
+                      "cornerRadius": 10,
+                      "id": "t8569wtnt",
+                      "x": 332,
+                      "y": 290
+                    },
+                    {
+                      "cornerRadius": 4,
+                      "id": "znqcau6n9",
+                      "x": 342,
+                      "y": 250
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "xwf9inyk5",
+                  "points": [
+                    {
+                      "cornerRadius": 4,
+                      "id": "znqcau6n9",
+                      "x": 342,
+                      "y": 250
+                    },
+                    {
+                      "cornerRadius": 10,
+                      "id": "v0tho1jvv",
+                      "x": 352,
+                      "y": 290
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "aytgrohxy",
+                  "points": [
+                    {
+                      "cornerRadius": 10,
+                      "id": "v0tho1jvv",
+                      "x": 352,
+                      "y": 290
+                    },
+                    {
+                      "cornerRadius": 4,
+                      "id": "i5wv6nggk",
+                      "x": 382,
+                      "y": 300
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "tjq3sh88z",
+                  "points": [
+                    {
+                      "cornerRadius": 4,
+                      "id": "i5wv6nggk",
+                      "x": 382,
+                      "y": 300
+                    },
+                    {
+                      "cornerRadius": 10,
+                      "id": "pm8p24xr9",
+                      "x": 352,
+                      "y": 310
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "d4qb5mae8",
+                  "points": [
+                    {
+                      "cornerRadius": 10,
+                      "id": "pm8p24xr9",
+                      "x": 352,
+                      "y": 310
+                    },
+                    {
+                      "cornerRadius": 4,
+                      "id": "bbpqostdn",
+                      "x": 342,
+                      "y": 350
+                    }
+                  ],
+                  "type": "line"
+                }
+              ]
+            }
+          ],
+          "drawProgress": 1,
+          "fillRule": "evenodd",
+          "rounded": true
+        },
+        "stroke": {
+          "alignment": "outside",
+          "dasharray": [],
+          "dashoffset": 0,
+          "width": 0
+        },
+        "transform": {
+          "autoOrigin": false,
+          "originX": 342,
+          "originY": 300,
+          "rotation": 0,
+          "scaleX": 2,
+          "scaleY": 2,
+          "translateX": 0,
+          "translateY": 0
+        },
+        "type": "path",
+        "visible": true
+      },
+      {
+        "geometry": {
+          "height": 100,
+          "width": 80,
+          "x": 290.18,
+          "y": 217.64
+        },
+        "id": "ez1xp5nv5",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 1,
+        "paints": {
+          "fill": {
+            "coordinates": {
+              "x1": 0.203,
+              "x2": 0.917437,
+              "y1": 0.2778,
+              "y2": 0.6888
+            },
+            "gradientType": "linear-gradient",
+            "id": "06yg0poh6",
+            "kind": "gradient",
+            "spreadMethod": "pad",
+            "stops": [
+              {
+                "color": "#43acd6",
+                "id": "06yg0poh6-stop-1",
+                "offset": 0,
+                "opacity": 1
+              },
+              {
+                "color": "#1edca3",
+                "id": "06yg0poh6-stop-2",
+                "offset": 1,
+                "opacity": 1
+              }
+            ],
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ],
+            "units": "objectBoundingBox"
+          },
+          "stroke": {
+            "color": "#cdf1f9",
+            "kind": "solid",
+            "opacity": 1
+          }
+        },
+        "parentId": "dsnbt7bxt",
+        "path": {
+          "contours": [
+            {
+              "closed": true,
+              "id": "rm3ohl3ta",
+              "lines": [
+                {
+                  "id": "qo962t4n3",
+                  "points": [
+                    {
+                      "cornerRadius": 4,
+                      "id": "yuqpop1r4",
+                      "x": 330.18,
+                      "y": 317.64
+                    },
+                    {
+                      "cornerRadius": 10,
+                      "id": "xw7mtmh8l",
+                      "x": 320.18,
+                      "y": 277.64
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "hndz0wko3",
+                  "points": [
+                    {
+                      "cornerRadius": 10,
+                      "id": "xw7mtmh8l",
+                      "x": 320.18,
+                      "y": 277.64
+                    },
+                    {
+                      "cornerRadius": 4,
+                      "id": "ffxreljdb",
+                      "x": 290.18,
+                      "y": 267.64
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "ytbpw9hzj",
+                  "points": [
+                    {
+                      "cornerRadius": 4,
+                      "id": "ffxreljdb",
+                      "x": 290.18,
+                      "y": 267.64
+                    },
+                    {
+                      "cornerRadius": 10,
+                      "id": "6yw8im5a7",
+                      "x": 320.18,
+                      "y": 257.64
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "b0d1ykjxn",
+                  "points": [
+                    {
+                      "cornerRadius": 10,
+                      "id": "6yw8im5a7",
+                      "x": 320.18,
+                      "y": 257.64
+                    },
+                    {
+                      "cornerRadius": 4,
+                      "id": "66h3qfllz",
+                      "x": 330.18,
+                      "y": 217.64
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "shqvxkfec",
+                  "points": [
+                    {
+                      "cornerRadius": 4,
+                      "id": "66h3qfllz",
+                      "x": 330.18,
+                      "y": 217.64
+                    },
+                    {
+                      "cornerRadius": 10,
+                      "id": "xsx7z3438",
+                      "x": 340.18,
+                      "y": 257.64
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "cxmawiidr",
+                  "points": [
+                    {
+                      "cornerRadius": 10,
+                      "id": "xsx7z3438",
+                      "x": 340.18,
+                      "y": 257.64
+                    },
+                    {
+                      "cornerRadius": 4,
+                      "id": "mb8fubliy",
+                      "x": 370.18,
+                      "y": 267.64
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "jiwbtv8fb",
+                  "points": [
+                    {
+                      "cornerRadius": 4,
+                      "id": "mb8fubliy",
+                      "x": 370.18,
+                      "y": 267.64
+                    },
+                    {
+                      "cornerRadius": 10,
+                      "id": "m82guv3nz",
+                      "x": 340.18,
+                      "y": 277.64
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "9z7ff0by1",
+                  "points": [
+                    {
+                      "cornerRadius": 10,
+                      "id": "m82guv3nz",
+                      "x": 340.18,
+                      "y": 277.64
+                    },
+                    {
+                      "cornerRadius": 4,
+                      "id": "yuqpop1r4",
+                      "x": 330.18,
+                      "y": 317.64
+                    }
+                  ],
+                  "type": "line"
+                }
+              ]
+            }
+          ],
+          "drawProgress": 1,
+          "fillRule": "evenodd",
+          "rounded": true
+        },
+        "stroke": {
+          "alignment": "outside",
+          "dasharray": [],
+          "dashoffset": 0,
+          "width": 0
+        },
+        "transform": {
+          "autoOrigin": false,
+          "originX": 330.18,
+          "originY": 267.64,
+          "rotation": 0,
+          "scaleX": 2.0001,
+          "scaleY": 2.0001,
+          "translateX": 12.5318,
+          "translateY": 35.8341
+        },
+        "type": "path",
+        "visible": true
+      },
+      {
+        "geometry": {
+          "height": 100,
+          "width": 80,
+          "x": 247.93,
+          "y": 176.5
+        },
+        "id": "6ajj9fjng",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 1,
+        "paints": {
+          "fill": {
+            "coordinates": {
+              "x1": 0.203,
+              "x2": 0.917437,
+              "y1": 0.2778,
+              "y2": 0.6888
+            },
+            "gradientType": "linear-gradient",
+            "id": "tq37oix39",
+            "kind": "gradient",
+            "spreadMethod": "pad",
+            "stops": [
+              {
+                "color": "#43acd6",
+                "id": "tq37oix39-stop-1",
+                "offset": 0,
+                "opacity": 1
+              },
+              {
+                "color": "#1edca3",
+                "id": "tq37oix39-stop-2",
+                "offset": 1,
+                "opacity": 1
+              }
+            ],
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ],
+            "units": "objectBoundingBox"
+          },
+          "stroke": {
+            "color": "#cdf1f9",
+            "kind": "solid",
+            "opacity": 1
+          }
+        },
+        "parentId": "dsnbt7bxt",
+        "path": {
+          "contours": [
+            {
+              "closed": true,
+              "id": "upoww95r7",
+              "lines": [
+                {
+                  "id": "jm44ek9h0",
+                  "points": [
+                    {
+                      "cornerRadius": 4,
+                      "id": "d9tfn4lmh",
+                      "x": 287.93,
+                      "y": 276.5
+                    },
+                    {
+                      "cornerRadius": 10,
+                      "id": "2hevsx2r7",
+                      "x": 277.93,
+                      "y": 236.5
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "zzeu17dcg",
+                  "points": [
+                    {
+                      "cornerRadius": 10,
+                      "id": "2hevsx2r7",
+                      "x": 277.93,
+                      "y": 236.5
+                    },
+                    {
+                      "cornerRadius": 4,
+                      "id": "zr2r25is8",
+                      "x": 247.93,
+                      "y": 226.5
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "51fpyk6lq",
+                  "points": [
+                    {
+                      "cornerRadius": 4,
+                      "id": "zr2r25is8",
+                      "x": 247.93,
+                      "y": 226.5
+                    },
+                    {
+                      "cornerRadius": 10,
+                      "id": "dsyyrf1vs",
+                      "x": 277.93,
+                      "y": 216.5
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "sbpi2p5dz",
+                  "points": [
+                    {
+                      "cornerRadius": 10,
+                      "id": "dsyyrf1vs",
+                      "x": 277.93,
+                      "y": 216.5
+                    },
+                    {
+                      "cornerRadius": 4,
+                      "id": "q6j8savnb",
+                      "x": 287.93,
+                      "y": 176.5
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "988g0y3ac",
+                  "points": [
+                    {
+                      "cornerRadius": 4,
+                      "id": "q6j8savnb",
+                      "x": 287.93,
+                      "y": 176.5
+                    },
+                    {
+                      "cornerRadius": 10,
+                      "id": "01oq6dy5b",
+                      "x": 297.93,
+                      "y": 216.5
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "mfpn3k5d7",
+                  "points": [
+                    {
+                      "cornerRadius": 10,
+                      "id": "01oq6dy5b",
+                      "x": 297.93,
+                      "y": 216.5
+                    },
+                    {
+                      "cornerRadius": 4,
+                      "id": "nn4ifi1un",
+                      "x": 327.93,
+                      "y": 226.5
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "h2jf3tvhc",
+                  "points": [
+                    {
+                      "cornerRadius": 4,
+                      "id": "nn4ifi1un",
+                      "x": 327.93,
+                      "y": 226.5
+                    },
+                    {
+                      "cornerRadius": 10,
+                      "id": "1fv0na4mu",
+                      "x": 297.93,
+                      "y": 236.5
+                    }
+                  ],
+                  "type": "line"
+                },
+                {
+                  "id": "7npfufahq",
+                  "points": [
+                    {
+                      "cornerRadius": 10,
+                      "id": "1fv0na4mu",
+                      "x": 297.93,
+                      "y": 236.5
+                    },
+                    {
+                      "cornerRadius": 4,
+                      "id": "d9tfn4lmh",
+                      "x": 287.93,
+                      "y": 276.5
+                    }
+                  ],
+                  "type": "line"
+                }
+              ]
+            }
+          ],
+          "drawProgress": 1,
+          "fillRule": "evenodd",
+          "rounded": true
+        },
+        "stroke": {
+          "alignment": "outside",
+          "dasharray": [],
+          "dashoffset": 0,
+          "width": 0
+        },
+        "transform": {
+          "autoOrigin": false,
+          "originX": 287.93,
+          "originY": 226.5,
+          "rotation": 0,
+          "scaleX": 0.98,
+          "scaleY": 0.98,
+          "translateX": 24.657,
+          "translateY": 54.3428
+        },
+        "type": "path",
+        "visible": true
+      },
+      {
+        "geometry": {
+          "height": 79.2,
+          "width": 0,
+          "x": 83.39,
+          "y": 436.63
+        },
+        "id": "tfcr0zcic",
+        "motion": {
+          "offsetAngle": 0,
+          "offsetX": 0,
+          "offsetY": 0,
+          "pathId": null,
+          "progress": 0,
+          "rotateToPath": false
+        },
+        "opacity": 1,
+        "paints": {
+          "color": {
+            "coordinates": {
+              "x1": 0,
+              "x2": 1,
+              "y1": 0,
+              "y2": -0.000126
+            },
+            "gradientType": "linear-gradient",
+            "id": "np8dn0njm",
+            "kind": "gradient",
+            "spreadMethod": "pad",
+            "stops": [
+              {
+                "color": "#43acd6",
+                "id": "np8dn0njm-stop-1",
+                "offset": 0.164882,
+                "opacity": 1
+              },
+              {
+                "color": "#1edca3",
+                "id": "stop-bc0t8o1w",
+                "offset": 0.347672,
+                "opacity": 1
+              },
+              {
+                "color": "#cdf1f9",
+                "id": "np8dn0njm-stop-2",
+                "offset": 0.51192,
+                "opacity": 1
+              }
+            ],
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ],
+            "units": "objectBoundingBox"
+          }
+        },
+        "parentId": null,
+        "transform": {
+          "autoOrigin": false,
+          "originX": 299.672,
+          "originY": 476.23,
+          "rotation": 0,
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 0,
+          "translateY": 0
+        },
+        "type": "text",
+        "visible": true
+      }
+    ],
+    "viewBox": [
+      0,
+      98.98,
+      600,
+      499.07
+    ],
+    "width": 600
+  },
+  "formatVersion": 1,
+  "generator": {
+    "name": "SVG Animator",
+    "version": "1.0.0"
+  },
+  "kind": "svg-animator/runtime-bundle",
+  "requiredCapabilities": [
+    "render.geometry-v1",
+    "render.gradient-v1",
+    "render.paint-v1",
+    "render.path-v1",
+    "render.transforms-v1",
+    "tracks.color-v1",
+    "tracks.numeric-v1"
+  ]
+}

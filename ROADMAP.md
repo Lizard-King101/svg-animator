@@ -9,8 +9,8 @@ The product direction is a **motion SVG studio**. Milestones are dependency-orde
 3. ✅ Sanitize the render representation and preserve unsupported safe content as opaque source nodes. Scripts, event attributes, and unsafe external resources never execute.
 4. ✅ Ingest line, cubic, quadratic, arc, close, relative, and shorthand path commands.
 5. 🔄 Convert preserved constructs found by the real-world corpus into native editable model coverage. Preservation remains a safety/round-trip fallback and is reported as partial import, not feature support.
-6. ✅ Add the pure, deterministic `CompiledAnimationV1` boundary used to validate authoring/runtime equivalence.
-7. Publish compiled animation as embedded JSON or external JSON and ship the lightweight standalone player.
+6. ✅ Add the pure, deterministic compiled-track boundary used to validate authoring/runtime equivalence.
+7. ✅ Publish `RuntimeBundleV1` through Embedded Animation SVG, self-contained Animated SVG, external assets, and Web Bundle ZIP; ship the lightweight typed standalone player.
 8. Add a Font Awesome project preset and icon export with stroke-to-shape validation, naming, sizing, variants, and metadata.
 
 References: [SVG paths](https://www.w3.org/TR/SVG/paths.html).

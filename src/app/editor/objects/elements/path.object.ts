@@ -7,6 +7,8 @@ import { Point, PointSave } from "../point.object";
 import { defaultTransform, restoreTransform, serializeTransform, TransformSave, TransformState } from "../transform.object";
 import { PaintSave, restorePaint, serializePaint } from "../paint.object";
 import { DEFAULT_STROKE_STYLE, restoreStrokeStyle, StrokeAlignment } from "../stroke-style.object";
+import { RuntimeContourV1, RuntimePointV1 } from "../../../../../packages/runtime/src/contracts";
+import { buildRuntimePathData } from "../../../../../packages/runtime/src/path-data";
 
 export interface PathSave {
     type: 'path';
@@ -359,73 +361,42 @@ interface PathDataOptions {
 }
 
 function buildPathData(path: Path, options: PathDataOptions): string {
-    return path.contours
-        .map((contour) => buildContourPathData(path, contour, options))
-        .filter(Boolean)
-        .join(' ');
+    if(!options.rounded) return buildLegacyUnroundedPathData(path);
+    const point = (value: Point): RuntimePointV1 => ({ id: value.id, x: value.x, y: value.y, ...(value.cornerRadius > 0 ? { cornerRadius: value.cornerRadius } : {}) });
+    const contours: RuntimeContourV1[] = path.contours.map((contour) => ({
+        id: contour.id,
+        closed: contour.closed,
+        lines: contour.lines.filter((line) => line.points.length >= 2).map((line) => ({
+            id: line.id,
+            type: line.type,
+            points: [point(line.points[0]), point(line.points[1])],
+            ...(line.controlStart ? { controlStart: point(line.controlStart) } : {}),
+            ...(line.controlEnd ? { controlEnd: point(line.controlEnd) } : {}),
+        })),
+    }));
+    return buildRuntimePathData(contours, options.rounded);
 }
 
-function buildContourPathData(path: Path, contour: PathContour, options: PathDataOptions): string {
-    const lines = completeLines(contour);
-    if(lines.length === 0) {
-        return "";
-    }
-    const closed = isEffectivelyClosed(contour, lines);
-
-    if(!options.rounded) {
-        let rawPath = "M ";
-        for(let li = 0; li < contour.lines.length; li++) {
-            let l = contour.lines[li];
-            switch(l.type) {
-                case "line":
-                    for(let pi = 0; pi < l.points.length; pi++) {
-                        let p = l.points[pi];
-                        if(li == 0) {
-                            if(pi == 0) {
-                                rawPath += ` ${p.x} ${p.y}`;
-                            } else {
-                                rawPath += ` L ${p.x} ${p.y}`;
-                            }
-                        } else {
-                            if(pi > 0) {
-                                rawPath += ` L ${p.x} ${p.y}`;
-                            }
-                        }
-                    }
-                    break;
-                case "bezier":
-                    if(l.points.length >= 2) {
-                        const start = l.points[0];
-                        const end = l.points[1];
-                        // Fall back to anchor positions for any handle that hasn't been
-                        // placed yet (e.g. during an in-progress alt-drag conversion).
-                        const cs = l.controlStart ?? start;
-                        const ce = l.controlEnd ?? end;
-
-                        if(li == 0) {
-                            rawPath += ` ${start.x} ${start.y}`;
-                        }
-
-                        rawPath += ` C ${cs.x} ${cs.y} ${ce.x} ${ce.y} ${end.x} ${end.y}`;
-                    }
-                    break;
+/** Preserve the established static/unbaked path bytes for compatibility. */
+function buildLegacyUnroundedPathData(path: Path): string {
+    return path.contours.map((contour) => {
+        let data = "M ";
+        contour.lines.forEach((line, lineIndex) => {
+            if(line.points.length < 2) return;
+            const start = line.points[0];
+            const end = line.points[1];
+            if(lineIndex === 0) data += ` ${start.x} ${start.y}`;
+            if(line.type === "bezier") {
+                const controlStart = line.controlStart ?? start;
+                const controlEnd = line.controlEnd ?? end;
+                data += ` C ${controlStart.x} ${controlStart.y} ${controlEnd.x} ${controlEnd.y} ${end.x} ${end.y}`;
+            } else {
+                data += ` L ${end.x} ${end.y}`;
             }
-        }
-        if(closed) rawPath += ' Z';
-        return rawPath;
-    }
-
-    const first = lines[0];
-    const startCorner = roundedCornerForSegmentStart(path, contour, first);
-    const start = startCorner ? startCorner.after : first.points[0];
-    const commands = [`M ${formatPoint(start)}`];
-
-    for(const line of lines) {
-        appendRenderedSegment(commands, path, contour, line);
-    }
-
-    if(closed) commands.push('Z');
-    return commands.join(' ');
+        });
+        if(isEffectivelyClosed(contour)) data += " Z";
+        return data;
+    }).filter((data) => data !== "M ").join(" ");
 }
 
 function buildPathSegmentData(path: Path, line: Line): string {

@@ -29,6 +29,7 @@ import { isEditableEventTarget } from "./editable-event-target";
 import { PlaybackPointerGuardDirective } from "./playback-pointer-guard.directive";
 import { CanvasCropComponent } from "../_components/canvas-crop/canvas-crop.component";
 import { CanvasCropService } from "../_services/canvas-crop.service";
+import { AnimationTrackCleanupService } from "../_services/animation-track-cleanup.service";
 
 @Component({
     standalone: true,
@@ -62,6 +63,7 @@ import { CanvasCropService } from "../_services/canvas-crop.service";
         PaintEditingService,
         CurrentDocumentSVGImportService,
         CanvasCropService,
+        AnimationTrackCleanupService,
     ],
     templateUrl: 'editor.page.html',
     styleUrls: ['editor.page.scss'],

@@ -24,7 +24,9 @@ Architecture is part of feature delivery. Pages and shells compose; components o
 | Timeline | `TimelineEditorService`, `TimelineEditingService`, timeline surfaces | Timeline-lifetime interaction state; row/keyframe domain editing; toolbar, dope-sheet, and graph composition |
 | Animation evaluation | `AnimationEvaluationPlan`, animation property adapters | Compile/invalidate tracks, evaluate values, and coalesce render-domain outputs |
 | Playback rendering | `AnimationPlaybackService`, `ImperativeSvgRenderer` | Retain preview base values, drive playback outside Angular, and batch direct SVG writes |
-| Runtime compilation | `compileRuntimeAnimation()` | Produce the deterministic, versioned payload shared by authoring tests and future export/player work |
+| Runtime compilation | `compileRuntimeAnimation()` | Produce deterministic `RuntimeBundleV1` scene/track data and separate actionable diagnostics |
+| Publishing | `ProjectExportService`, `RuntimeExportService` | Serialize deterministic editable Project JSON from the project gallery; build base-state Static, Embedded Animation, and self-contained Animated SVG plus Runtime Assets/Web Bundle ZIP artifacts asynchronously in the editor |
+| Standalone playback | `packages/runtime` | Framework-free validation, evaluation, scoped SVG mutation, playback/events, reduced motion, and cleanup |
 | Persistence | `ProjectService`, `ProjectRepository` implementations | Async project lifecycle, IndexedDB transactions, legacy migration, save coalescing, and fallback state |
 | UI shell | `EditorPage` | Route-driven project loading, provider lifetime, global shortcut precedence, and surface composition |
 | UI surfaces | Header, tool palette, dialogs, context menu, guides, panels, and timeline components | Own their templates, local form/gesture state, and feature-specific interaction methods |
@@ -53,7 +55,7 @@ Interactive authoring may include temporary drawing elements and editor overlays
 
 Animation playback has a separate retained rendering path. `AnimationEvaluationPlan` flattens targets and compiles sorted track data into typed arrays. Forward playback advances active-segment cursors; seeks and reverse movement use binary search. `ImperativeSvgRenderer` caches stable SVG nodes and batches attributes outside Angular so transform, path, paint, gradient, and progress channels produce consolidated DOM writes. Angular remains authoritative for paused authoring, and preview-mutated values are never serialized.
 
-`compileRuntimeAnimation()` is a pure export-ready boundary, not a persisted cache. It interns target/property strings and emits `CompiledAnimationV1` numeric, packed-color, and discrete tracks with diagnostics. The standalone runtime and animated export UI remain future work.
+`compileRuntimeAnimation()` is a pure export boundary, not a persisted cache. It emits `RuntimeBundleV1` with normalized scene descriptors—including resolved and automatic transform-origin semantics—and compact numeric, packed-color, and discrete tracks; diagnostics remain outside the portable bundle. Runtime-bound markup opts into deterministic IDs/render roles while `buildSVGMarkup()` retains its script-free static output. `packages/runtime` has no Angular/editor-model dependency and is the shared framework-free evaluator/DOM player contract.
 
 ## Verification
 

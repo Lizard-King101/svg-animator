@@ -1,0 +1,8 @@
+[
+  {"kind":"svg-animator/document","version":1,"data":{"id":"fixture-v1","name":"Document v1","width":10,"height":10,"elements":[]}},
+  {"kind":"svg-animator/document","version":2,"data":{"id":"fixture-v2","name":"Document v2","width":10,"height":10,"elements":[],"importedSourceNodes":[]}},
+  {"kind":"svg-animator/document","version":3,"data":{"id":"fixture-v3","name":"Document v3","width":10,"height":10,"elements":[],"importedSourceNodes":[],"animation":{"version":1,"duration":1,"loop":false,"markers":[],"tracks":[]}}},
+  {"kind":"svg-animator/document","version":4,"data":{"id":"fixture-v4","name":"Document v4","width":10,"height":10,"elements":[],"importedSourceNodes":[],"animation":{"version":2,"duration":1,"loop":false,"markers":[],"variables":[],"tracks":[]}}},
+  {"kind":"svg-animator/document","version":5,"data":{"id":"fixture-v5","name":"Document v5","width":10,"height":10,"elements":[],"importedSourceNodes":[],"animation":{"version":2,"duration":1,"loop":false,"markers":[],"variables":[],"tracks":[]}}},
+  {"kind":"svg-animator/document","version":999,"data":{"id":"fixture-future","name":"Future document","width":10,"height":10,"elements":[]}}
+]

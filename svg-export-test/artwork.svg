@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="499.07" viewBox="0 98.98 600 499.07" data-svg-animator-signature="fnv1a32-31df939c">
+  <defs>
+    <style type="text/css"><![CDATA[@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");]]></style>
+    <linearGradient id="9arfge2um" data-render-role="gradient" gradientUnits="objectBoundingBox" spreadMethod="pad" x1="0.20300000000000012" y1="0.2777999999999997" x2="0.9174374999999998" y2="0.6888">
+      <stop id="9arfge2um-stop-1" data-render-role="gradient-stop" offset="0" stop-color="#43acd6"/>
+      <stop id="9arfge2um-stop-2" data-render-role="gradient-stop" offset="1" stop-color="#1edca3"/>
+    </linearGradient>
+    <linearGradient id="06yg0poh6" data-render-role="gradient" gradientUnits="objectBoundingBox" spreadMethod="pad" x1="0.20300000000000012" y1="0.2777999999999997" x2="0.9174374999999998" y2="0.6888">
+      <stop id="06yg0poh6-stop-1" data-render-role="gradient-stop" offset="0" stop-color="#43acd6"/>
+      <stop id="06yg0poh6-stop-2" data-render-role="gradient-stop" offset="1" stop-color="#1edca3"/>
+    </linearGradient>
+    <linearGradient id="tq37oix39" data-render-role="gradient" gradientUnits="objectBoundingBox" spreadMethod="pad" x1="0.20300000000000012" y1="0.2777999999999997" x2="0.9174374999999998" y2="0.6888">
+      <stop id="tq37oix39-stop-1" data-render-role="gradient-stop" offset="0" stop-color="#43acd6"/>
+      <stop id="tq37oix39-stop-2" data-render-role="gradient-stop" offset="1" stop-color="#1edca3"/>
+    </linearGradient>
+    <linearGradient id="np8dn0njm" data-render-role="gradient" gradientUnits="objectBoundingBox" spreadMethod="pad" x1="0" y1="0" x2="1" y2="-0.00012626262626394687">
+      <stop id="np8dn0njm-stop-1" data-render-role="gradient-stop" offset="0.16488233024691357" stop-color="#43acd6"/>
+      <stop id="stop-bc0t8o1w" data-render-role="gradient-stop" offset="0.34767232510288065" stop-color="#1edca3"/>
+      <stop id="np8dn0njm-stop-2" data-render-role="gradient-stop" offset="0.5119196887860082" stop-color="#cdf1f9"/>
+    </linearGradient>
+  </defs>
+  <rect id="wm551j7kz" data-svg-animator-target="" data-render-role="geometry fill stroke" x="-11.73" y="-14.57" width="619.57" height="822.0800000000002" fill="#cdf1f9" stroke="#2dd4bf" stroke-width="3" stroke-miterlimit="4"/>
+  <g id="dsnbt7bxt" data-svg-animator-target="" transform="matrix(1 0 0 1 -42.3 -4.7)">
+    <defs>
+      <mask id="stroke-outside-k5yv9nojm" x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/><path data-render-role="geometry-effect" d="M 338.119 334.478 L 333.331 315.326 C 332.502 312.009 330.036 309.345 326.792 308.264 L 313.384 303.795 C 309.737 302.579 309.737 297.421 313.384 296.205 L 326.792 291.736 C 330.036 290.655 332.502 287.991 333.331 284.674 L 338.119 265.522 C 339.129 261.482 344.871 261.482 345.881 265.522 L 350.669 284.674 C 351.498 287.991 353.964 290.655 357.208 291.736 L 370.616 296.205 C 374.263 297.421 374.263 302.579 370.616 303.795 L 357.208 308.264 C 353.964 309.345 351.498 312.009 350.669 315.326 L 345.881 334.478 C 344.871 338.518 339.129 338.518 338.119 334.478 Z" fill-rule="evenodd" fill="black"/></mask>
+    </defs>
+    <g id="k5yv9nojm" data-svg-animator-target="" transform="matrix(2 0 0 2 -342 -300)">
+      <path data-render-role="geometry fill" d="M 338.119 334.478 L 333.331 315.326 C 332.502 312.009 330.036 309.345 326.792 308.264 L 313.384 303.795 C 309.737 302.579 309.737 297.421 313.384 296.205 L 326.792 291.736 C 330.036 290.655 332.502 287.991 333.331 284.674 L 338.119 265.522 C 339.129 261.482 344.871 261.482 345.881 265.522 L 350.669 284.674 C 351.498 287.991 353.964 290.655 357.208 291.736 L 370.616 296.205 C 374.263 297.421 374.263 302.579 370.616 303.795 L 357.208 308.264 C 353.964 309.345 351.498 312.009 350.669 315.326 L 345.881 334.478 C 344.871 338.518 339.129 338.518 338.119 334.478 Z" fill="url(#9arfge2um)" fill-rule="evenodd"/>
+      <g mask="url(#stroke-outside-k5yv9nojm)">
+        <path data-render-role="geometry stroke" d="M 338.119 334.478 L 333.331 315.326 C 332.502 312.009 330.036 309.345 326.792 308.264 L 313.384 303.795 C 309.737 302.579 309.737 297.421 313.384 296.205 L 326.792 291.736 C 330.036 290.655 332.502 287.991 333.331 284.674 L 338.119 265.522 C 339.129 261.482 344.871 261.482 345.881 265.522 L 350.669 284.674 C 351.498 287.991 353.964 290.655 357.208 291.736 L 370.616 296.205 C 374.263 297.421 374.263 302.579 370.616 303.795 L 357.208 308.264 C 353.964 309.345 351.498 312.009 350.669 315.326 L 345.881 334.478 C 344.871 338.518 339.129 338.518 338.119 334.478 Z" fill="none" stroke="#cdf1f9" stroke-width="0" stroke-linejoin="round" stroke-miterlimit="4"/>
+      </g>
+    </g>
+    <defs>
+      <mask id="stroke-outside-ez1xp5nv5" x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/><path data-render-role="geometry-effect" d="M 326.299 302.118 L 321.511 282.966 C 320.682 279.649 318.216 276.985 314.972 275.904 L 301.564 271.435 C 297.917 270.219 297.917 265.061 301.564 263.845 L 314.972 259.376 C 318.216 258.295 320.682 255.631 321.511 252.314 L 326.299 233.162 C 327.309 229.122 333.051 229.122 334.061 233.162 L 338.849 252.314 C 339.678 255.631 342.144 258.295 345.388 259.376 L 358.796 263.845 C 362.443 265.061 362.443 270.219 358.796 271.435 L 345.388 275.904 C 342.144 276.985 339.678 279.649 338.849 282.966 L 334.061 302.118 C 333.051 306.158 327.309 306.158 326.299 302.118 Z" fill-rule="evenodd" fill="black"/></mask>
+    </defs>
+    <g id="ez1xp5nv5" data-svg-animator-target="" transform="matrix(2.0001 0 0 2.0001 -317.6812 -231.8327)">
+      <path data-render-role="geometry fill" d="M 326.299 302.118 L 321.511 282.966 C 320.682 279.649 318.216 276.985 314.972 275.904 L 301.564 271.435 C 297.917 270.219 297.917 265.061 301.564 263.845 L 314.972 259.376 C 318.216 258.295 320.682 255.631 321.511 252.314 L 326.299 233.162 C 327.309 229.122 333.051 229.122 334.061 233.162 L 338.849 252.314 C 339.678 255.631 342.144 258.295 345.388 259.376 L 358.796 263.845 C 362.443 265.061 362.443 270.219 358.796 271.435 L 345.388 275.904 C 342.144 276.985 339.678 279.649 338.849 282.966 L 334.061 302.118 C 333.051 306.158 327.309 306.158 326.299 302.118 Z" fill="url(#06yg0poh6)" fill-rule="evenodd"/>
+      <g mask="url(#stroke-outside-ez1xp5nv5)">
+        <path data-render-role="geometry stroke" d="M 326.299 302.118 L 321.511 282.966 C 320.682 279.649 318.216 276.985 314.972 275.904 L 301.564 271.435 C 297.917 270.219 297.917 265.061 301.564 263.845 L 314.972 259.376 C 318.216 258.295 320.682 255.631 321.511 252.314 L 326.299 233.162 C 327.309 229.122 333.051 229.122 334.061 233.162 L 338.849 252.314 C 339.678 255.631 342.144 258.295 345.388 259.376 L 358.796 263.845 C 362.443 265.061 362.443 270.219 358.796 271.435 L 345.388 275.904 C 342.144 276.985 339.678 279.649 338.849 282.966 L 334.061 302.118 C 333.051 306.158 327.309 306.158 326.299 302.118 Z" fill="none" stroke="#cdf1f9" stroke-width="0" stroke-linejoin="round" stroke-miterlimit="4"/>
+      </g>
+    </g>
+    <defs>
+      <mask id="stroke-outside-6ajj9fjng" x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/><path data-render-role="geometry-effect" d="M 284.049 260.978 L 279.261 241.826 C 278.432 238.509 275.966 235.845 272.722 234.764 L 259.314 230.295 C 255.667 229.079 255.667 223.921 259.314 222.705 L 272.722 218.236 C 275.966 217.155 278.432 214.491 279.261 211.174 L 284.049 192.022 C 285.059 187.982 290.801 187.982 291.811 192.022 L 296.599 211.174 C 297.428 214.491 299.894 217.155 303.138 218.236 L 316.546 222.705 C 320.193 223.921 320.193 229.079 316.546 230.295 L 303.138 234.764 C 299.894 235.845 297.428 238.509 296.599 241.826 L 291.811 260.978 C 290.801 265.018 285.059 265.018 284.049 260.978 Z" fill-rule="evenodd" fill="black"/></mask>
+    </defs>
+    <g id="6ajj9fjng" data-svg-animator-target="" transform="matrix(0.98 0 0 0.98 30.4156 58.8728)">
+      <path data-render-role="geometry fill" d="M 284.049 260.978 L 279.261 241.826 C 278.432 238.509 275.966 235.845 272.722 234.764 L 259.314 230.295 C 255.667 229.079 255.667 223.921 259.314 222.705 L 272.722 218.236 C 275.966 217.155 278.432 214.491 279.261 211.174 L 284.049 192.022 C 285.059 187.982 290.801 187.982 291.811 192.022 L 296.599 211.174 C 297.428 214.491 299.894 217.155 303.138 218.236 L 316.546 222.705 C 320.193 223.921 320.193 229.079 316.546 230.295 L 303.138 234.764 C 299.894 235.845 297.428 238.509 296.599 241.826 L 291.811 260.978 C 290.801 265.018 285.059 265.018 284.049 260.978 Z" fill="url(#tq37oix39)" fill-rule="evenodd"/>
+      <g mask="url(#stroke-outside-6ajj9fjng)">
+        <path data-render-role="geometry stroke" d="M 284.049 260.978 L 279.261 241.826 C 278.432 238.509 275.966 235.845 272.722 234.764 L 259.314 230.295 C 255.667 229.079 255.667 223.921 259.314 222.705 L 272.722 218.236 C 275.966 217.155 278.432 214.491 279.261 211.174 L 284.049 192.022 C 285.059 187.982 290.801 187.982 291.811 192.022 L 296.599 211.174 C 297.428 214.491 299.894 217.155 303.138 218.236 L 316.546 222.705 C 320.193 223.921 320.193 229.079 316.546 230.295 L 303.138 234.764 C 299.894 235.845 297.428 238.509 296.599 241.826 L 291.811 260.978 C 290.801 265.018 285.059 265.018 284.049 260.978 Z" fill="none" stroke="#cdf1f9" stroke-width="0" stroke-linejoin="round" stroke-miterlimit="4"/>
+      </g>
+    </g>
+  </g>
+  <text id="tfcr0zcic" data-svg-animator-target="" data-render-role="geometry fill" x="83.38999999999999" y="436.6300000000001" font-size="66" font-family="&apos;Plus Jakarta Sans&apos;" font-weight="400" text-anchor="start" fill="url(#np8dn0njm)" dominant-baseline="hanging">
+    <tspan>SVG Animator</tspan>
+  </text>
+</svg>

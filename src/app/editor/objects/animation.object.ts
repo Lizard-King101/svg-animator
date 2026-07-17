@@ -1,4 +1,5 @@
 import { Color, ColorSpace, HSL, RGB } from "./color.object";
+import { solveTemporalCubicPosition } from "../../../../packages/runtime/src/temporal.internal";
 
 export type AnimationValueType = "number" | "color" | "boolean" | "string";
 export type EasingType = "linear" | "hold" | "ease-in" | "ease-out" | "ease-in-out";
@@ -459,7 +460,9 @@ function restoreKeyframe(keyframe: Partial<Keyframe>): Keyframe | undefined {
 
     return {
         id: typeof keyframe.id === "string" ? keyframe.id : makeAnimationId("key"),
-        time: Math.max(0, Number(keyframe.time)),
+        // Keys outside the playable interval still influence values sampled
+        // inside it and must survive save/restore and runtime compilation.
+        time: Number(keyframe.time),
         value: keyframe.value,
         easing: restoreEasing(keyframe.easing),
         temporal: restoreTemporalTangents(keyframe.temporal),
@@ -683,26 +686,10 @@ function cubicCoefficients(
 }
 
 function solveTemporalTime(coefficients: TemporalSegmentCoefficients, time: number): number {
-    const start = coefficients.timeD;
-    const end = cubicValue(coefficients.timeA, coefficients.timeB, coefficients.timeC, coefficients.timeD, 1);
-    let u = end === start ? 1 : clamp01((time - start) / (end - start));
-    for(let iteration = 0; iteration < 5; iteration++) {
-        const error = cubicValue(coefficients.timeA, coefficients.timeB, coefficients.timeC, coefficients.timeD, u) - time;
-        const derivative = cubicDerivative(coefficients.timeA, coefficients.timeB, coefficients.timeC, u);
-        if(Math.abs(error) < 1e-7 || Math.abs(derivative) < 1e-9) break;
-        const next = u - error / derivative;
-        if(next < 0 || next > 1) break;
-        u = next;
-    }
-    let low = 0;
-    let high = 1;
-    for(let iteration = 0; iteration < 14; iteration++) {
-        const value = cubicValue(coefficients.timeA, coefficients.timeB, coefficients.timeC, coefficients.timeD, u);
-        if(Math.abs(value - time) < 1e-7) break;
-        if(value < time) low = u; else high = u;
-        u = (low + high) / 2;
-    }
-    return u;
+    return solveTemporalCubicPosition(
+        time,
+        coefficients.timeA, coefficients.timeB, coefficients.timeC, coefficients.timeD,
+    );
 }
 
 function cubicValue(a: number, b: number, c: number, d: number, u: number): number {
