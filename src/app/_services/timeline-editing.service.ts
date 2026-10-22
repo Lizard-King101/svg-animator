@@ -139,6 +139,32 @@ export function snapTimelineTime(time: number, _duration?: number): number {
     return Math.round(time * 100) / 100;
 }
 
+/**
+ * Resolves one shared drag delta so selected keyframes retain their exact spacing.
+ * Any dragged keyframe may become the playhead snap candidate.
+ */
+export function snapKeyframeTimeDelta(
+    startTimes: readonly number[],
+    anchorStartTime: number,
+    requestedDelta: number,
+    playheadTime: number,
+    playheadThreshold: number,
+): number {
+    const gridDelta = snapTimelineTime(anchorStartTime + requestedDelta) - anchorStartTime;
+    if(!Number.isFinite(playheadTime) || !Number.isFinite(playheadThreshold) || playheadThreshold < 0) return gridDelta;
+
+    let closestStart: number | undefined;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    startTimes.forEach((startTime) => {
+        const distance = Math.abs(startTime + requestedDelta - playheadTime);
+        if(distance <= playheadThreshold && distance < closestDistance) {
+            closestStart = startTime;
+            closestDistance = distance;
+        }
+    });
+    return closestStart == null ? gridDelta : playheadTime - closestStart;
+}
+
 export function timelineRulerInterval(pixelsPerSecond: number): number {
     if(pixelsPerSecond >= 1200) return 0.05;
     if(pixelsPerSecond >= 600) return 0.1;

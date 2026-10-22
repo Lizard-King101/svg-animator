@@ -1,9 +1,9 @@
-<div class="home">
+<main class="home">
 
-  <div class="home-header">
+  <header class="home-header">
     <div class="logo">
       <fa-icon icon="pen-fancy"></fa-icon>
-      <span>SVG Editor</span>
+      <span>SVG Animator</span>
     </div>
     <div class="header-actions">
       <input #svgFileInput class="file-input" type="file" accept=".svg,image/svg+xml" (change)="importSVG($event)" />
@@ -16,9 +16,14 @@
         New Project
       </button>
     </div>
-  </div>
+  </header>
 
-  <div class="gallery-section">
+  <section class="gallery-section" aria-labelledby="projects-heading">
+
+    <div class="gallery-heading">
+      <h1 id="projects-heading">Create and animate SVG artwork</h1>
+      <p>Draw, edit, animate, and export production-ready SVGs directly in your browser.</p>
+    </div>
 
     <div class="import-notice error" *ngIf="projectService.savingWarning">
       <fa-icon icon="triangle-exclamation"></fa-icon><span>{{ projectService.savingWarning }}</span>
@@ -73,6 +78,6 @@
       </div>
     </div>
 
-  </div>
+  </section>
 
-</div>
+</main>

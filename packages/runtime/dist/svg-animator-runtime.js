@@ -292,6 +292,7 @@ var SVGAnimatorRuntime = (() => {
   }
 
   // src/scene.ts
+  var MIN_VISIBLE_DRAW_PROGRESS = 2e-4;
   var RuntimeScene = class {
     constructor(root, sourceTargets) {
       this.root = root;
@@ -487,7 +488,7 @@ var SVGAnimatorRuntime = (() => {
         if (reveal.length) reveal.forEach((item) => setAttribute(item, "stroke-dashoffset", round2(1 - progress)));
         else this.roleNodes(node, "stroke").forEach((item) => {
           setAttribute(item, "pathLength", progress < 1 ? 1 : null);
-          setAttribute(item, "stroke-dasharray", progress < 1 ? 1 : target.stroke?.dasharray.join(" ") || null);
+          setAttribute(item, "stroke-dasharray", progress < 1 ? "1 2" : target.stroke?.dasharray.join(" ") || null);
           setAttribute(item, "stroke-dashoffset", progress < 1 ? round2(1 - progress) : target.stroke?.dasharray.length ? target.stroke.dashoffset : null);
         });
         return;
@@ -528,6 +529,12 @@ var SVGAnimatorRuntime = (() => {
           }
         });
         pathRevealNodes(this.root, node, target.id).forEach((item) => setAttribute(item, "stroke-width", target.stroke.width * 4));
+      }
+      if (target.path) {
+        const progress = clamp01(target.path.drawProgress);
+        const reveal = pathRevealNodes(this.root, node, target.id);
+        if (reveal.length) reveal.forEach((item) => setAttribute(item, "stroke-opacity", progress > MIN_VISIBLE_DRAW_PROGRESS ? null : 0));
+        else if (progress <= MIN_VISIBLE_DRAW_PROGRESS) this.roleNodes(node, "stroke").forEach((item) => setAttribute(item, "stroke-opacity", 0));
       }
     }
     renderGradients(target) {

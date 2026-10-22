@@ -1,6 +1,7 @@
 import { NgClass, NgFor, NgIf } from "@angular/common";
 import { Component } from "@angular/core";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
+import { RouterLink } from "@angular/router";
 import { AnimationPlaybackService } from "../../_services/animation-playback.service";
 import { DocumentMutationService } from "../../_services/document-mutation.service";
 import { EditorService } from "../../_services/editor.service";
@@ -11,10 +12,12 @@ import { MAX_SVG_IMPORT_BYTES } from "../../editor/import/svg-importer.service";
 @Component({
     selector: "app-editor-header",
     standalone: true,
-    imports: [NgClass, NgFor, NgIf, FaIconComponent],
+    imports: [NgClass, NgFor, NgIf, FaIconComponent, RouterLink],
     template: `
       <div class="header">
         <div class="function-bar">
+          <a class="btn-icon" routerLink="/home" title="Home" aria-label="Home"><fa-icon icon="house"></fa-icon></a>
+          <div class="function-bar-sep"></div>
           <button class="btn-new" (click)="ui.openDialog('new-project')"><fa-icon icon="plus"></fa-icon><span>New</span></button>
           <input #importFileInput class="file-input" type="file" accept=".svg,image/svg+xml" (change)="importSVG($event)" />
           <button class="btn-import" (click)="importFileInput.click()" [disabled]="!editor.selectedSVG || importing" title="Import SVG into the current project">

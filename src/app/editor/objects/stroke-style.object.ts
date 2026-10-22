@@ -1,5 +1,12 @@
 export type StrokeAlignment = "center" | "inside" | "outside";
 
+/** Suppresses line-cap artifacts while a normalized draw is still sub-pixel in typical scenes. */
+export const MIN_VISIBLE_DRAW_PROGRESS = 0.0002;
+
+export function drawProgressVisible(value: number): boolean {
+    return Number.isFinite(value) && value > MIN_VISIBLE_DRAW_PROGRESS;
+}
+
 export interface StrokeStyleSave {
     stroke_alignment: StrokeAlignment;
     stroke_dasharray: number[];

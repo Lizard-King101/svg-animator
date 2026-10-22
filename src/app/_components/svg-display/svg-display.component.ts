@@ -10,7 +10,7 @@ import { AnyElement, ImportedSourceNode } from "src/app/editor/objects/svg.objec
 import { matrixToSvg } from "src/app/editor/objects/transform.object";
 import { ImportedSVGSourceDirective } from "./imported-svg-source.directive";
 import { GradientPaint, gradientPaints, gradientTransformValue, Paint, paintOpacity, paintSVGValue } from "src/app/editor/objects/paint.object";
-import { effectiveStrokeAlignment, StrokeAlignment, strokeDasharrayAttr } from "src/app/editor/objects/stroke-style.object";
+import { drawProgressVisible, effectiveStrokeAlignment, StrokeAlignment, strokeDasharrayAttr } from "src/app/editor/objects/stroke-style.object";
 
 @Component({
     standalone: true,
@@ -85,8 +85,8 @@ export class SVGDisplay implements AfterViewInit {
         return this.drawOffsetAttr(path) > 0 ? 1 : null;
     }
 
-    drawDasharrayAttr(path: Path): number | null {
-        return this.drawOffsetAttr(path) > 0 ? 1 : null;
+    drawDasharrayAttr(path: Path): string | null {
+        return this.drawOffsetAttr(path) > 0 ? "1 2" : null;
     }
 
     drawDashoffsetAttr(path: Path): number | null {
@@ -110,6 +110,16 @@ export class SVGDisplay implements AfterViewInit {
     }
     strokePathLength(path: Path): number | null {
         return path.settings.stroke_dasharray.length ? null : this.drawPathLengthAttr(path);
+    }
+
+    pathStrokeOpacity(path: Path): number | null {
+        return path.settings.stroke_dasharray.length === 0 && !drawProgressVisible(path.drawProgress)
+            ? 0
+            : paintOpacity(path.settings.stroke);
+    }
+
+    drawRevealOpacity(path: Path): number | null {
+        return drawProgressVisible(path.drawProgress) ? null : 0;
     }
 
     textTspans(text: TextElement): Array<{ text: string; dy: number }> {

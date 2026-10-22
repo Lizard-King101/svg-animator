@@ -22,6 +22,7 @@ import {
     clampTimelineScale,
     KeyframeEntry,
     PropertyTimelineRow,
+    snapKeyframeTimeDelta,
     snapTimelineTime,
     TimelineEditingService,
     timelineRulerInterval,
@@ -51,6 +52,7 @@ const UNIFORM_SCALE_PROPERTY: AnimatablePropertyDefinition = {
 const TIMELINE_ROW_HEIGHT = 30;
 const TIMELINE_VIRTUALIZATION_THRESHOLD = 120;
 const TIMELINE_VIRTUAL_OVERSCAN = 8;
+const KEYFRAME_PLAYHEAD_SNAP_PX = 8;
 
 @Injectable()
 export class TimelineEditorService implements OnDestroy {
@@ -1057,11 +1059,13 @@ export class TimelineEditorService implements OnDestroy {
             moved: false,
             preview,
             capture: capture ?? undefined,
+            anchorStartTime: entries.find((entry) => ids.includes(entry.keyframe.id))?.keyframe.time ?? entries[0].keyframe.time,
             entries: entries.map((entry) => ({
                 ...entry,
                 startTime: entry.keyframe.time,
             })),
         };
+        this.changeDetector.markForCheck();
         try { this.keyframeDrag.capture?.setPointerCapture(event.pointerId); } catch {}
         this.installGlobalPointerTracking(
             event.pointerId,
@@ -1112,6 +1116,7 @@ export class TimelineEditorService implements OnDestroy {
         this.keyframeDrag = undefined;
         try { drag.capture?.releasePointerCapture(event.pointerId); } catch {}
         this.clearGlobalPointerTracking();
+        this.changeDetector.markForCheck();
 
         if(moved) {
             this.animation.invalidate(new Set(drag.entries.map((entry) => entry.track.id)));
@@ -1806,9 +1811,18 @@ export class TimelineEditorService implements OnDestroy {
         const drag = this.keyframeDrag;
         if(!drag?.moved) return;
         const requestedDelta = (drag.latestX - drag.startX) / this.pixelsPerSecond;
-        const deltaTime = clampKeyframeTimeDelta(drag.entries.map((entry) => entry.startTime), requestedDelta, this.animation.duration);
-        drag.entries.forEach((entry) => entry.keyframe.time = this.snapTime(entry.startTime + deltaTime));
+        const startTimes = drag.entries.map((entry) => entry.startTime);
+        const snappedDelta = snapKeyframeTimeDelta(
+            startTimes,
+            drag.anchorStartTime,
+            requestedDelta,
+            this.animation.currentTime,
+            KEYFRAME_PLAYHEAD_SNAP_PX / this.pixelsPerSecond,
+        );
+        const deltaTime = clampKeyframeTimeDelta(startTimes, snappedDelta, this.animation.duration);
+        drag.entries.forEach((entry) => entry.keyframe.time = entry.startTime + deltaTime);
         this.sortDraggedTracks();
+        this.changeDetector.markForCheck();
         if(drag.preview) {
             this.animation.invalidate(new Set(drag.entries.map((entry) => entry.track.id)));
             this.animation.previewAt(this.animation.currentTime);
@@ -1825,6 +1839,7 @@ export class TimelineEditorService implements OnDestroy {
         try { drag.capture?.releasePointerCapture(drag.pointerId); } catch {}
         this.keyframeDrag = undefined;
         this.clearGlobalPointerTracking();
+        this.changeDetector.markForCheck();
         this.animation.invalidate(new Set(drag.entries.map((entry) => entry.track.id)));
         this.animation.previewAt(this.animation.currentTime);
     }
@@ -2485,6 +2500,7 @@ interface KeyframeDrag {
     moved: boolean;
     preview: boolean;
     capture?: HTMLElement;
+    anchorStartTime: number;
     entries: KeyframeDragEntry[];
 }
 

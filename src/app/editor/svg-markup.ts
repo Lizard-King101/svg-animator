@@ -6,7 +6,7 @@ import { motionAdjustedMatrix } from "./objects/motion-path.object";
 import { AnyElement, ImportedSourceNode, SVG } from "./objects/svg.object";
 import { matrixToSvg } from "./objects/transform.object";
 import { GradientPaint, gradientPaints, gradientTransformValue, paintOpacity, paintSVGValue } from "./objects/paint.object";
-import { effectiveStrokeAlignment, strokeDasharrayAttr } from "./objects/stroke-style.object";
+import { drawProgressVisible, effectiveStrokeAlignment, strokeDasharrayAttr } from "./objects/stroke-style.object";
 
 export function escapeXmlText(value: unknown): string {
     return String(value)
@@ -33,13 +33,19 @@ function drawOffsetAttr(path: Path): number {
     return 1 - Math.max(0, Math.min(1, path.drawProgress));
 }
 
-function drawAttr(path: Path, value: number): number | null {
+function drawAttr<T>(path: Path, value: T): T | null {
     return drawOffsetAttr(path) > 0 ? value : null;
 }
 
 function drawDashoffsetAttr(path: Path): number | null {
     const offset = drawOffsetAttr(path);
     return offset > 0 ? offset : null;
+}
+
+function pathStrokeOpacity(path: Path): number | null {
+    return path.settings.stroke_dasharray.length === 0 && !drawProgressVisible(path.drawProgress)
+        ? 0
+        : paintOpacity(path.settings.stroke);
 }
 
 export interface SVGMarkupOptions {
@@ -105,13 +111,13 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                     attr('fill-opacity', s.fill_enabled ? paintOpacity(s.fill) : null) +
                     attr('fill-rule', element.fillRule) +
                     attr('stroke', paintSVGValue(s.stroke)) +
-                    attr('stroke-opacity', paintOpacity(s.stroke)) +
+                    attr('stroke-opacity', pathStrokeOpacity(element)) +
                     attr('stroke-width', s.stroke_width ?? null) +
                     attr('stroke-linecap', s.line_cap ?? null) +
                     attr('stroke-linejoin', s.line_join ?? null) +
                     attr('stroke-miterlimit', s.stroke_miterlimit) +
                     attr('pathLength', authoredDash ? null : drawAttr(element, 1)) +
-                    attr('stroke-dasharray', authoredDash ?? drawAttr(element, 1)) +
+                    attr('stroke-dasharray', authoredDash ?? drawAttr(element, "1 2")) +
                     attr('stroke-dashoffset', authoredDash ? s.stroke_dashoffset : drawDashoffsetAttr(element)) +
                     `/>`
                 );
@@ -234,13 +240,13 @@ function appendAlignedPath(path: Path, d: string, transform: string | null, line
         lines.push(`${child}<mask${attr('id', effectId)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/><path${runtimeRoleAttr(runtime, "geometry-effect")}${attr('d', d)}${attr('fill-rule', path.fillRule)} fill="black"/></mask>`);
     }
     if(settings.stroke_dasharray.length) {
-        lines.push(`${child}<mask${attr('id', drawId)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><path${runtimeRoleAttr(runtime, "geometry reveal")}${attr('d', d)} fill="none" stroke="white"${attr('stroke-width', settings.stroke_width * 4)}${attr('stroke-linecap', settings.line_cap)} pathLength="1" stroke-dasharray="1"${attr('stroke-dashoffset', drawOffsetAttr(path))}/></mask>`);
+        lines.push(`${child}<mask${attr('id', drawId)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><path${runtimeRoleAttr(runtime, "geometry reveal")}${attr('d', d)} fill="none" stroke="white"${attr('stroke-opacity', drawProgressVisible(path.drawProgress) ? null : 0)}${attr('stroke-width', settings.stroke_width * 4)}${attr('stroke-linecap', settings.line_cap)} pathLength="1" stroke-dasharray="1 2"${attr('stroke-dashoffset', drawOffsetAttr(path))}/></mask>`);
     }
     lines.push(`${indent}</defs>`);
     lines.push(`${indent}<g${attr('id', path.id)}${runtimeTargetAttr(runtime)}${attr('transform', transform)}${attr('opacity', opacityAttr(path.opacity))}>`);
     lines.push(`${child}<path${runtimeRoleAttr(runtime, "geometry fill")}${attr('d', d)}${attr('fill', settings.fill_enabled ? paintSVGValue(settings.fill) ?? 'none' : 'none')}${attr('fill-opacity', settings.fill_enabled ? paintOpacity(settings.fill) : null)}${attr('fill-rule', path.fillRule)}/>`);
     if(alignment === "outside") lines.push(`${child}<g${attr('mask', `url(#${effectId})`)}>`);
-    lines.push(`${alignment === 'outside' ? child + '  ' : child}<path${runtimeRoleAttr(runtime, "geometry stroke")}${attr('d', d)} fill="none"${strokePaintAttrs(settings, alignment === 'center' ? 1 : 2)}${attr('pathLength', settings.stroke_dasharray.length ? null : drawAttr(path, 1))}${attr('stroke-dasharray', settings.stroke_dasharray.length ? strokeDasharrayAttr(settings.stroke_dasharray) : drawAttr(path, 1))}${attr('stroke-dashoffset', settings.stroke_dasharray.length ? settings.stroke_dashoffset : drawDashoffsetAttr(path))}${attr('clip-path', alignment === 'inside' ? `url(#${effectId})` : null)}${attr('mask', settings.stroke_dasharray.length ? `url(#${drawId})` : null)}/>`);
+    lines.push(`${alignment === 'outside' ? child + '  ' : child}<path${runtimeRoleAttr(runtime, "geometry stroke")}${attr('d', d)} fill="none"${strokePaintAttrs(settings, alignment === 'center' ? 1 : 2, pathStrokeOpacity(path))}${attr('pathLength', settings.stroke_dasharray.length ? null : drawAttr(path, 1))}${attr('stroke-dasharray', settings.stroke_dasharray.length ? strokeDasharrayAttr(settings.stroke_dasharray) : drawAttr(path, "1 2"))}${attr('stroke-dashoffset', settings.stroke_dasharray.length ? settings.stroke_dashoffset : drawDashoffsetAttr(path))}${attr('clip-path', alignment === 'inside' ? `url(#${effectId})` : null)}${attr('mask', settings.stroke_dasharray.length ? `url(#${drawId})` : null)}/>`);
     if(alignment === "outside") lines.push(`${child}</g>`);
     lines.push(`${indent}</g>`);
 }
@@ -265,9 +271,9 @@ function appendAlignedShape(shape: Shape, transform: string | null, lines: strin
     lines.push(`${indent}</g>`);
 }
 
-function strokePaintAttrs(settings: Path["settings"] | Shape["settings"], widthMultiplier: number): string {
+function strokePaintAttrs(settings: Path["settings"] | Shape["settings"], widthMultiplier: number, opacity = paintOpacity(settings.stroke)): string {
     return attr('stroke', paintSVGValue(settings.stroke))
-        + attr('stroke-opacity', paintOpacity(settings.stroke))
+        + attr('stroke-opacity', opacity)
         + attr('stroke-width', settings.stroke_width * widthMultiplier)
         + attr('stroke-linecap', settings.line_cap)
         + attr('stroke-linejoin', settings.line_join)

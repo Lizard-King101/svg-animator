@@ -5,7 +5,7 @@ import { Path } from "../editor/objects/elements/path.object";
 import { Line } from "../editor/objects/line.object";
 import { Point } from "../editor/objects/point.object";
 import { Group } from "../editor/objects/elements/group.object";
-import { clampKeyframeTimeDelta, clampTimelineScale, semanticPartnerProperty, TimelineEditingService, timelineRulerInterval, timelineTimeToX, timelineXToTime } from "./timeline-editing.service";
+import { clampKeyframeTimeDelta, clampTimelineScale, semanticPartnerProperty, snapKeyframeTimeDelta, TimelineEditingService, timelineRulerInterval, timelineTimeToX, timelineXToTime } from "./timeline-editing.service";
 
 describe("speed graph semantic pairing", () => {
     it("pairs transform and motion channels", () => {
@@ -90,5 +90,24 @@ describe("keyframe retiming", () => {
         expect(timelineTimeToX(-2, 20, 100, -2)).toBe(20);
         expect(timelineTimeToX(0, 20, 100, -2)).toBe(220);
         expect(timelineXToTime(20, 20, 100, -2)).toBe(-2);
+    });
+
+    it("snaps any dragged keyframe to the playhead with one spacing-preserving delta", () => {
+        const starts = [1.125, 2.25, 3.875];
+        const playhead = 1;
+        const threshold = 0.08;
+
+        const firstDelta = snapKeyframeTimeDelta(starts, starts[0], -0.1, playhead, threshold);
+        const middleDelta = snapKeyframeTimeDelta(starts, starts[0], -1.22, playhead, threshold);
+        const lastDelta = snapKeyframeTimeDelta(starts, starts[0], -2.82, playhead, threshold);
+
+        expect(firstDelta).toBe(playhead - starts[0]);
+        expect(middleDelta).toBe(playhead - starts[1]);
+        expect(lastDelta).toBe(playhead - starts[2]);
+        expect(starts.map((time) => time + middleDelta)).toEqual([-0.125, 1, 2.625]);
+    });
+
+    it("uses the dragged anchor's time grid when no keyframe is near the playhead", () => {
+        expect(snapKeyframeTimeDelta([0.123, 0.777], 0.123, 0.201, 2, 0.05)).toBeCloseTo(0.197, 10);
     });
 });

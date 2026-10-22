@@ -8,10 +8,12 @@ export const routes: Routes = [
     },
     {
         path: 'home',
+        title: 'SVG Animator — Create and Export Animated SVGs',
         loadComponent: () => import('./home/home.page').then(m => m.HomePage)
     },
     {
         path: 'editor',
+        title: 'Editor — SVG Animator',
         loadComponent: () => import('./editor/editor.page').then(m => m.EditorPage)
     },
     {

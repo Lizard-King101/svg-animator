@@ -1,4 +1,5 @@
 import { ChangeDetectorRef, ElementRef, EventEmitter, NgZone } from "@angular/core";
+import { fakeAsync, tick } from "@angular/core/testing";
 import { AnimationPlaybackService } from "./animation-playback.service";
 import { DocumentMutationService } from "./document-mutation.service";
 import { EditorPreferencesService } from "./editor-preferences.service";
@@ -13,6 +14,30 @@ import { Point } from "../editor/objects/point.object";
 import { SVG } from "../editor/objects/svg.object";
 
 describe("TimelineEditorService scale and viewport policy", () => {
+    it("redraws selected keyframes during drag and snaps any one of them to the playhead", fakeAsync(() => {
+        const { timeline, markForCheck, shape } = setup();
+        const track: AnimationTrack = {
+            id: "position", targetId: shape.id, property: "transform.translateX", valueType: "number",
+            keyframes: [
+                { id: "first", time: 1.125, value: 0 },
+                { id: "middle", time: 2.25, value: 10 },
+                { id: "last", time: 3.875, value: 20 },
+            ],
+        };
+        timeline.editor.selectedSVG!.animation.tracks = [track];
+        timeline.selectedKeyframeIds = new Set(track.keyframes.map((keyframe) => keyframe.id));
+        (timeline.animation as { currentTime: number }).currentTime = 1;
+        const capture = document.createElement("div");
+
+        timeline.beginKeyframeDrag(track.keyframes[0], pointerEvent(0, capture));
+        timeline.updateKeyframeDrag(pointerEvent(-12, capture));
+        tick(20);
+
+        expect(track.keyframes.map((keyframe) => keyframe.time)).toEqual([1, 2.125, 3.75]);
+        expect(markForCheck).toHaveBeenCalled();
+        timeline.endKeyframeDrag(pointerEvent(-12, capture, "pointerup"));
+    }));
+
     it("summarizes descendant keyframes on a minified group row", () => {
         const { timeline, shape } = setup();
         const group = new Group(timeline.editor);
@@ -195,7 +220,7 @@ function setupShapes(editor: EditorService, count: number): Shape[] {
     }));
 }
 
-function setup(): { timeline: TimelineEditorService; writes: string[]; shape: Shape } {
+function setup(): { timeline: TimelineEditorService; writes: string[]; shape: Shape; markForCheck: jasmine.Spy } {
     const editor = { get ID() { return Math.random().toString(36); } } as EditorService;
     const shape = new Shape(editor, { type: "rectangle", position: new Point(0, 0) });
     const svg = new SVG(editor, { width: 100, height: 100, pos: new Point(0, 0) });
@@ -218,6 +243,7 @@ function setup(): { timeline: TimelineEditorService; writes: string[]; shape: Sh
     } as unknown as AnimationPlaybackService;
     const mutations = { historyRestored: new EventEmitter<void>() } as unknown as DocumentMutationService;
     const zone = { runOutsideAngular: (callback: () => unknown) => callback(), run: (callback: () => unknown) => callback() } as NgZone;
+    const markForCheck = jasmine.createSpy("markForCheck");
     const timeline = new TimelineEditorService(
         editor,
         animation,
@@ -226,10 +252,23 @@ function setup(): { timeline: TimelineEditorService; writes: string[]; shape: Sh
         new TimelineEditingService(),
         zone,
         mutations,
-        { markForCheck: () => undefined } as unknown as ChangeDetectorRef,
+        { markForCheck } as unknown as ChangeDetectorRef,
         {} as PaintEditingService,
     );
-    return { timeline, writes, shape };
+    return { timeline, writes, shape, markForCheck };
+}
+
+function pointerEvent(clientX: number, currentTarget: HTMLElement, type = "pointermove"): PointerEvent {
+    return {
+        button: 0,
+        clientX,
+        currentTarget,
+        pointerId: 7,
+        shiftKey: false,
+        type,
+        preventDefault: () => undefined,
+        stopPropagation: () => undefined,
+    } as unknown as PointerEvent;
 }
 
 function scaleRow(shape: Shape, property: "transform.scaleX" | "transform.scaleY"): PropertyTimelineRow {

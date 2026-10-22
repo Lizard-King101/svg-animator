@@ -7,7 +7,7 @@ import { motionAdjustedMatrix } from "../objects/motion-path.object";
 import { gradientPaints, gradientStopOpacity, gradientTransformValue, paintOpacity, paintSVGValue } from "../objects/paint.object";
 import { AnyElement, SVG } from "../objects/svg.object";
 import { matrixToSvg } from "../objects/transform.object";
-import { effectiveStrokeAlignment } from "../objects/stroke-style.object";
+import { drawProgressVisible, effectiveStrokeAlignment } from "../objects/stroke-style.object";
 import { CompiledAnimationTrack } from "./animation-evaluation-plan";
 import { pathRevealNodes } from "../../../../packages/runtime/src/render-roles.internal";
 
@@ -80,7 +80,10 @@ export class ImperativeSvgRenderer {
         if("stroke_width" in settings && target instanceof Path) {
             pathRevealNodes(this.root, node, target.id).forEach((item) => setAttribute(item, "stroke-width", Number(settings["stroke_width"]) * 4));
         }
-        if("stroke_dashoffset" in settings) strokeNodes.forEach((item) => setAttribute(item, "stroke-dashoffset", settings["stroke_dashoffset"] as number));
+        if("stroke_dashoffset" in settings && (!(target instanceof Path) || target.settings.stroke_dasharray.length > 0)) {
+            strokeNodes.forEach((item) => setAttribute(item, "stroke-dashoffset", settings["stroke_dashoffset"] as number));
+        }
+        if(target instanceof Path) this.writePathDrawVisibility(node, target);
     }
 
     private writeGeometry(node: SVGElement, target: AnyElement): void {
@@ -93,10 +96,11 @@ export class ImperativeSvgRenderer {
                 const strokeNodes = node.tagName.toLowerCase() === "g" ? [...node.querySelectorAll<SVGElement>('[data-render-role~="stroke"]')] : [node];
                 strokeNodes.forEach((stroke) => {
                     setAttribute(stroke, "pathLength", progress < 1 ? 1 : null);
-                    setAttribute(stroke, "stroke-dasharray", progress < 1 ? 1 : null);
+                    setAttribute(stroke, "stroke-dasharray", progress < 1 ? "1 2" : null);
                     setAttribute(stroke, "stroke-dashoffset", progress < 1 ? 1 - progress : null);
                 });
             }
+            this.writePathDrawVisibility(node, target);
             return;
         }
         if(target instanceof Shape) {
@@ -138,6 +142,19 @@ export class ImperativeSvgRenderer {
                 setAttribute(node, "stop-opacity", gradientStopOpacity(stop));
             });
         });
+    }
+
+    private writePathDrawVisibility(node: SVGElement, target: Path): void {
+        const progress = Math.max(0, Math.min(1, target.drawProgress));
+        const reveal = pathRevealNodes(this.root, node, target.id);
+        if(reveal.length > 0) {
+            reveal.forEach((item) => setAttribute(item, "stroke-opacity", drawProgressVisible(progress) ? null : 0));
+            return;
+        }
+        const strokeNodes = node.tagName.toLowerCase() === "g"
+            ? [...node.querySelectorAll<SVGElement>('[data-render-role~="stroke"]')]
+            : [node];
+        strokeNodes.forEach((item) => setAttribute(item, "stroke-opacity", drawProgressVisible(progress) ? paintOpacity(target.settings.stroke) : 0));
     }
 
     private node(id: string): SVGElement | null {

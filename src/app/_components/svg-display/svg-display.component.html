@@ -44,7 +44,7 @@
         [attr.fill-opacity]="path.settings.fill_enabled ? paintOpacity(path.settings.fill) : null"
         [attr.fill-rule]="path.fillRule"
         [attr.stroke]="paintValue(path.settings.stroke)"
-        [attr.stroke-opacity]="paintOpacity(path.settings.stroke)"
+        [attr.stroke-opacity]="pathStrokeOpacity(path)"
         [attr.stroke-width]="path.settings.stroke_width"
         [attr.stroke-linecap]="path.settings.line_cap"
         [attr.stroke-linejoin]="path.settings.line_join"
@@ -68,9 +68,10 @@
                 <svg:mask *ngIf="path.settings.stroke_dasharray.length" [id]="drawMaskId(path)"
                           x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox">
                     <svg:path data-render-role="reveal geometry" [attr.d]="path.raw" fill="none" stroke="white"
+                              [attr.stroke-opacity]="drawRevealOpacity(path)"
                               [attr.stroke-width]="path.settings.stroke_width * 4"
                               [attr.stroke-linecap]="path.settings.line_cap"
-                              pathLength="1" stroke-dasharray="1" [attr.stroke-dashoffset]="drawOffsetAttr(path)" />
+                              pathLength="1" stroke-dasharray="1 2" [attr.stroke-dashoffset]="drawOffsetAttr(path)" />
                 </svg:mask>
             </svg:defs>
             <svg:path data-render-role="fill geometry" [attr.d]="path.raw"
@@ -80,7 +81,7 @@
             <svg:g [attr.mask]="strokeAlignment(path) === 'outside' ? strokeEffectUrl(path) : null">
             <svg:path data-render-role="stroke geometry" [attr.d]="path.raw" fill="none"
                       [attr.stroke]="paintValue(path.settings.stroke)"
-                      [attr.stroke-opacity]="paintOpacity(path.settings.stroke)"
+                      [attr.stroke-opacity]="pathStrokeOpacity(path)"
                       [attr.stroke-width]="path.settings.stroke_width * (strokeAlignment(path) === 'center' ? 1 : 2)"
                       [attr.stroke-linecap]="path.settings.line_cap"
                       [attr.stroke-linejoin]="path.settings.line_join"
