@@ -21,6 +21,7 @@ import { DocumentMutationService } from "../_services/document-mutation.service"
 import { ElementFactory } from "../_services/element-factory.service";
 import { LayerOperationsService } from "../_services/layer-operations.service";
 import { LayerCommandService } from "../_services/layer-command.service";
+import { SelectTool } from "../_services/tools/select.tool";
 import { SVGDisplay } from "../_components/svg-display/svg-display.component";
 import { AnimationTimelineComponent } from "../_components/animation-timeline/animation-timeline.component";
 import { CanvasWorkspaceComponent } from "../_components/canvas-workspace/canvas-workspace.component";
@@ -207,6 +208,12 @@ export class EditorPage implements OnInit, AfterViewInit {
 
     ngOnInit(): void {
         if(!this.route.snapshot.queryParamMap.get('id')) this.ui.openDialog('new-project');
+        // Canvas right-clicks in Edit mode share the layer menu (and its clipboard actions).
+        const select = this.editor.tools.find((tool): tool is SelectTool => tool instanceof SelectTool);
+        if(select) select.objectMenu = (event, element) => {
+            if(this.animation.mode === 'edit') this.layers.openCanvasContextMenu(event, element);
+            else this.editor.closeContextMenu();
+        };
     }
 
     async ngAfterViewInit() {

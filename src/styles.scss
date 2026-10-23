@@ -25,6 +25,52 @@
   --radius-md:      6px;
 }
 
+// ── Bootstrap buttons ───────────────────────────────────────────────────────
+// Map Bootstrap's primary/secondary buttons onto the editor's dialog button style
+// (accent outline for primary actions, quiet bordered secondary actions).
+.btn {
+  --bs-btn-font-family: inherit;
+  --bs-btn-focus-box-shadow: 0 0 0 2px var(--accent-glow);
+  --bs-btn-disabled-opacity: 0.4;
+}
+
+.btn-primary {
+  --bs-btn-color: var(--accent);
+  --bs-btn-bg: var(--accent-dim);
+  --bs-btn-border-color: var(--accent);
+  --bs-btn-hover-color: var(--accent);
+  --bs-btn-hover-bg: rgba(45, 212, 191, 0.2);
+  --bs-btn-hover-border-color: var(--accent);
+  --bs-btn-active-color: var(--accent);
+  --bs-btn-active-bg: rgba(45, 212, 191, 0.26);
+  --bs-btn-active-border-color: var(--accent);
+  --bs-btn-disabled-color: var(--accent);
+  --bs-btn-disabled-bg: var(--accent-dim);
+  --bs-btn-disabled-border-color: var(--accent);
+  font-weight: 600;
+}
+
+.btn-secondary {
+  --bs-btn-color: var(--text-primary);
+  --bs-btn-bg: var(--bg-elevated);
+  --bs-btn-border-color: var(--border-bright);
+  --bs-btn-hover-color: var(--text-primary);
+  --bs-btn-hover-bg: var(--border-bright);
+  --bs-btn-hover-border-color: var(--border-bright);
+  --bs-btn-active-color: var(--accent);
+  --bs-btn-active-bg: var(--accent-dim);
+  --bs-btn-active-border-color: var(--accent);
+  --bs-btn-disabled-color: var(--text-secondary);
+  --bs-btn-disabled-bg: var(--bg-elevated);
+  --bs-btn-disabled-border-color: var(--border);
+
+  &[aria-pressed='true'] {
+    color: var(--accent);
+    background: var(--accent-dim);
+    border-color: var(--accent);
+  }
+}
+
 // ── Reset ───────────────────────────────────────────────────────────────────
 *, *::before, *::after { box-sizing: border-box; }
 

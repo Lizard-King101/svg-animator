@@ -14,6 +14,14 @@ import { AnyElement } from "../../editor/objects/svg.object";
         :host { display: contents; }
         .layer-row:focus { outline: none; }
         .layer-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+        /* Row controls appear on hover, focus, or selection; eye/lock also stay visible while hidden/locked. */
+        .layer-drag-handle, .layer-toggle { opacity: 0; transition: opacity 0.12s, background 0.12s, color 0.12s; }
+        .layer-row:hover :is(.layer-drag-handle, .layer-toggle),
+        .layer-row:focus-within :is(.layer-drag-handle, .layer-toggle),
+        .layer-row.selected :is(.layer-drag-handle, .layer-toggle),
+        .layer-row.dragging .layer-drag-handle,
+        .layer-toggle.layer-toggle-on,
+        .layer-drag-handle:focus-visible, .layer-toggle:focus-visible { opacity: 1; }
     `],
 })
 export class LayersPanelComponent implements DoCheck {

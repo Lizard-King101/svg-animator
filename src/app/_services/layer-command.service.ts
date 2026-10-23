@@ -1,7 +1,8 @@
-import { Injectable } from "@angular/core";
+import { Injectable, Optional } from "@angular/core";
 import { DocumentMutationService } from "./document-mutation.service";
 import { EditorContextMenuItem, EditorService } from "./editor.service";
 import { LayerContext, LayerOperationsService } from "./layer-operations.service";
+import { ObjectClipboardCommandService } from "./object-clipboard-command.service";
 import { Group } from "../editor/objects/elements/group.object";
 import { Path } from "../editor/objects/elements/path.object";
 import { Shape } from "../editor/objects/elements/shape.object";
@@ -24,7 +25,8 @@ export class LayerCommandService {
     private lastSelectedLayer?: AnyElement;
     private collapsedGroupIds = new Set<string>();
 
-    constructor(public editor: EditorService, private layerOperations: LayerOperationsService, private mutations: DocumentMutationService) {}
+    constructor(public editor: EditorService, private layerOperations: LayerOperationsService, private mutations: DocumentMutationService,
+        @Optional() private clipboard: ObjectClipboardCommandService | null = null) {}
 
     private snapshotAndSave(): void { this.mutations.commit(); }
 
@@ -321,6 +323,29 @@ export class LayerCommandService {
         if(this.layerOperations.detachMotionPath(element)) this.snapshotAndSave();
     }
 
+    /** Canvas right-click: the layer menu for an object, or clipboard actions over empty canvas. */
+    openCanvasContextMenu(event: MouseEvent, element?: AnyElement): void {
+        if(element) {
+            this.openLayerContextMenu(event, element);
+            return;
+        }
+        const items = this.clipboardItems();
+        if(items.length) this.editor.openContextMenu(event.clientX, event.clientY, items);
+        else this.editor.closeContextMenu();
+    }
+
+    private clipboardItems(): EditorContextMenuItem[] {
+        const clipboard = this.clipboard;
+        if(!clipboard) return [];
+        return [
+            ...(clipboard.canCopy ? [{ label: 'Copy', shortcut: 'Ctrl+C', action: () => { clipboard.copy(); } }] : []),
+            ...(clipboard.canPaste ? [
+                { label: 'Paste', shortcut: 'Ctrl+V', action: () => { clipboard.paste(); } },
+                { label: 'Paste In Place', shortcut: 'Ctrl+Shift+V', action: () => { clipboard.paste(true); } },
+            ] : []),
+        ];
+    }
+
     openLayerContextMenu(event: MouseEvent, element: AnyElement) {
         event.preventDefault();
         event.stopPropagation();
@@ -331,6 +356,7 @@ export class LayerCommandService {
         const menuPosition = new Point(event.clientX, event.clientY);
         const motionPaths = this.availableMotionPaths(element);
         const items: EditorContextMenuItem[] = [
+            ...this.clipboardItems(),
             {
                 label: 'Rename Layer',
                 shortcut: 'Enter',

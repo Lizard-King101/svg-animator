@@ -2,6 +2,7 @@ import { ElementFactory } from "./element-factory.service";
 import { LayerCommandService } from "./layer-command.service";
 import { LayerOperationsService } from "./layer-operations.service";
 import { DocumentMutationService } from "./document-mutation.service";
+import { ObjectClipboardCommandService } from "./object-clipboard-command.service";
 import { EditorService } from "./editor.service";
 import { Group } from "../editor/objects/elements/group.object";
 import { Shape } from "../editor/objects/elements/shape.object";
@@ -62,6 +63,39 @@ describe("LayerCommandService", () => {
         expect(commands.selectedLayers).toEqual([label]);
         expect(commands.navigateLayers("ArrowUp", label)).toBe(label);
         expect(commands.navigateLayers("Enter", label)).toBeUndefined();
+    });
+
+    it("adds clipboard actions to the layer menu and offers paste over empty canvas", () => {
+        const editor = editorDouble() as EditorService & { contextMenu?: { items: { label: string; action?: () => void }[] } };
+        editor.openContextMenu = (x: number, y: number, items) => { editor.contextMenu = { x, y, items } as never; };
+        editor.closeContextMenu = jasmine.createSpy("closeContextMenu");
+        const svg = new SVG(editor, { width: 100, height: 100, pos: new Point(0, 0) });
+        const shape = new Shape(editor, { type: "rectangle", position: new Point(0, 0) });
+        svg.elements = [shape];
+        editor.selectedSVG = svg;
+        editor.selectedElements = [shape];
+        const clipboard = { canCopy: true, canPaste: false, copy: jasmine.createSpy("copy"), paste: jasmine.createSpy("paste") };
+        const commands = new LayerCommandService(editor, new LayerOperationsService(editor, new ElementFactory(editor)),
+            {} as DocumentMutationService, clipboard as unknown as ObjectClipboardCommandService);
+        const labels = () => editor.contextMenu!.items.map((item) => item.label);
+        const event = () => new MouseEvent("contextmenu", { clientX: 4, clientY: 4 });
+
+        commands.openCanvasContextMenu(event(), shape);
+        expect(labels().slice(0, 2)).toEqual(["Copy", "Rename Layer"]);
+        editor.contextMenu!.items[0].action!();
+        expect(clipboard.copy).toHaveBeenCalledTimes(1);
+
+        clipboard.canCopy = false;
+        editor.contextMenu = undefined;
+        commands.openCanvasContextMenu(event());
+        expect(editor.contextMenu).toBeUndefined();
+        expect(editor.closeContextMenu).toHaveBeenCalled();
+
+        clipboard.canPaste = true;
+        commands.openCanvasContextMenu(event());
+        expect(labels()).toEqual(["Paste", "Paste In Place"]);
+        editor.contextMenu!.items[1].action!();
+        expect(clipboard.paste).toHaveBeenCalledOnceWith(true);
     });
 });
 

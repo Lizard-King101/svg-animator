@@ -498,10 +498,13 @@ export class SelectTool extends Tool {
         this.canDeselect = false;
     }
 
+    /** Opens the object menu for a canvas object, or the canvas menu when `element` is undefined; bound by the editor page. */
+    objectMenu?: (event: MouseEvent, element?: AnyElement) => void;
+
     override contextMenu(event: MouseEvent): void {
         const target = <HTMLElement>event.target;
         if(!(this._editor.selectedElement instanceof Path) || this._editor.selectedElement.locked || !this._editor.selectedElement.visible) {
-            this._editor.closeContextMenu();
+            this.openObjectMenu(event);
             return;
         }
 
@@ -560,7 +563,24 @@ export class SelectTool extends Tool {
             return;
         }
 
-        this._editor.closeContextMenu();
+        this.openObjectMenu(event);
+    }
+
+    /** Right-clicking an object selects it as a left click would (keeping a selected ancestor or selection). */
+    private openObjectMenu(event: MouseEvent): void {
+        if(!this.objectMenu) {
+            this._editor.closeContextMenu();
+            return;
+        }
+        const found = this.elementAt(event, true);
+        if(!found) {
+            this.objectMenu(event);
+            return;
+        }
+        const selected = this._editor.selectedElements;
+        const target = findElementChain(this.rootElements(), found)?.find((element) => selected.includes(element)) ?? found;
+        if(!selected.includes(target)) this._editor.selectedElement = target;
+        this.objectMenu(event, target);
     }
 
     override keyPressed(key: string): void {
