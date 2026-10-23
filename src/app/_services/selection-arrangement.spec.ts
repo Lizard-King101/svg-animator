@@ -1,5 +1,7 @@
 import { NgZone } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { FaIconLibrary } from '@fortawesome/angular-fontawesome';
+import { faCircleInfo } from '@fortawesome/free-solid-svg-icons';
 import { SelectionActionsComponent } from '../_components/selection-actions/selection-actions.component';
 import { EditorService } from './editor.service';
 import { EditorPreferencesService } from './editor-preferences.service';
@@ -287,22 +289,26 @@ describe('object clipboard', () => {
 });
 
 describe('selection actions controls', () => {
-    it('offers clipboard, reference alignment and distribution through focusable buttons', async () => {
+    it('offers reference alignment and distribution through labelled icon buttons', async () => {
         const state = setup();
         await TestBed.configureTestingModule({ imports: [SelectionActionsComponent], providers: [
-            { provide: EditorService, useValue: state.editor }, { provide: AnimationPlaybackService, useValue: state.animation },
-            { provide: ObjectClipboardCommandService, useValue: state.commands }, { provide: SelectionArrangementService, useValue: state.arrangement },
+            { provide: SelectionArrangementService, useValue: state.arrangement },
         ] }).compileComponents();
+        TestBed.inject(FaIconLibrary).addIcons(faCircleInfo);
         const fixture = TestBed.createComponent(SelectionActionsComponent); fixture.detectChanges();
-        const buttons = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')];
-        const copy = buttons.find((button) => button.textContent === 'Copy')!;
-        const paste = buttons.find((button) => button.textContent === 'Paste')!;
-        expect(paste.disabled).toBeTrue(); copy.click(); fixture.detectChanges(); expect(paste.disabled).toBeFalse();
-        expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain('3 objects');
-        buttons.find((button) => button.textContent === 'Left')!.click();
+        const root = fixture.nativeElement as HTMLElement;
+        const button = (label: string) => root.querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement;
+        expect([...root.querySelectorAll('button')].map((item) => item.getAttribute('aria-label'))).toEqual([
+            'Align left edges', 'Align horizontal centers', 'Align right edges', 'Align top edges', 'Align vertical centers', 'Align bottom edges',
+            'Equal horizontal gaps', 'Equal vertical gaps',
+        ]);
+        expect(button('Equal horizontal gaps').disabled).toBeFalse();
+        button('Align left edges').click();
         expect(bounds(state.svg, state.second).x).toBe(10);
-        state.editor.selectedElements = [state.first]; fixture.detectChanges();
-        expect(buttons.find((button) => button.textContent === 'Space X')!.disabled).toBeTrue();
+        state.editor.selectedElements = [state.first]; fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        expect(button('Equal horizontal gaps').disabled).toBeTrue();
+        expect((root.querySelector('select') as HTMLSelectElement).disabled).toBeTrue();
+        expect(root.querySelector('fa-icon.hint')).toBeNull();
         fixture.destroy();
     });
 });

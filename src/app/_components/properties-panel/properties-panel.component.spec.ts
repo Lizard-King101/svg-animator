@@ -8,8 +8,6 @@ import { Line } from "../../editor/objects/line.object";
 import { createDefaultGradient } from "../../editor/objects/paint.object";
 import { Point } from "../../editor/objects/point.object";
 import { PropertiesPanelComponent } from "./properties-panel.component";
-import { ObjectClipboardCommandService } from "../../_services/object-clipboard-command.service";
-import { SelectionArrangementService } from "../../_services/selection-arrangement.service";
 import { EditorPreferencesService } from "../../_services/editor-preferences.service";
 import { SelectTool } from "../../_services/tools/select.tool";
 import { SVG } from "../../editor/objects/svg.object";
@@ -40,8 +38,6 @@ describe("PropertiesPanelComponent", () => {
                 { provide: AnimationPlaybackService, useValue: { mode: 'edit' } },
                 { provide: DocumentMutationService, useValue: { schedule } },
                 { provide: PaintEditingService, useValue: { apply: () => true } },
-                { provide: ObjectClipboardCommandService, useValue: { canCopy: true, canPaste: false } },
-                { provide: SelectionArrangementService, useValue: { count: 1, available: true, effectiveReference: 'canvas' } },
             ],
         }).compileComponents();
         const fixture = TestBed.createComponent(PropertiesPanelComponent);
@@ -89,8 +85,6 @@ describe("PropertiesPanelComponent", () => {
                 { provide: AnimationPlaybackService, useValue: { mode: "edit" } },
                 { provide: DocumentMutationService, useValue: { schedule: () => undefined } },
                 { provide: PaintEditingService, useValue: { apply: () => true } },
-                { provide: ObjectClipboardCommandService, useValue: { canCopy: true, canPaste: false } },
-                { provide: SelectionArrangementService, useValue: { count: 1, available: true, effectiveReference: 'canvas' } },
             ],
         }).compileComponents();
         const fixture = TestBed.createComponent(PropertiesPanelComponent);

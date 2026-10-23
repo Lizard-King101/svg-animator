@@ -1,4 +1,4 @@
-import { NgClass, NgFor, NgIf } from "@angular/common";
+import { NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase } from "@angular/common";
 import { Component } from "@angular/core";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { RouterLink } from "@angular/router";
@@ -10,11 +10,13 @@ import { CurrentDocumentSVGImportService } from "../../_services/current-documen
 import { MAX_SVG_IMPORT_BYTES } from "../../editor/import/svg-importer.service";
 import { ObjectSnapToggleComponent } from '../object-snap-toggle/object-snap-toggle.component';
 import { DrawingColorsComponent } from '../drawing-colors/drawing-colors.component';
+import { ReferencePanelComponent } from '../reference-image/reference-panel.component';
+import { SelectionActionsComponent } from '../selection-actions/selection-actions.component';
 
 @Component({
     selector: "app-editor-header",
     standalone: true,
-    imports: [NgClass, NgFor, NgIf, FaIconComponent, RouterLink, ObjectSnapToggleComponent, DrawingColorsComponent],
+    imports: [NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase, FaIconComponent, RouterLink, ObjectSnapToggleComponent, DrawingColorsComponent, ReferencePanelComponent, SelectionActionsComponent],
     template: `
       <div class="header">
         <div class="function-bar">
@@ -29,9 +31,11 @@ import { DrawingColorsComponent } from '../drawing-colors/drawing-colors.compone
           <button class="btn-icon" (click)="mutations.undo()" [disabled]="!editor.selectedSVG?.canUndo" title="Undo (Ctrl+Z)"><fa-icon icon="rotate-left"></fa-icon></button>
           <button class="btn-icon" (click)="mutations.redo()" [disabled]="!editor.selectedSVG?.canRedo" title="Redo (Ctrl+Y)"><fa-icon icon="rotate-right"></fa-icon></button>
           <app-object-snap-toggle *ngIf="editor.selectedSVG" />
-          <ng-container *ngIf="editor.selectedSVG && editor.activeTool?.usesDrawingPaint">
-            <div class="function-bar-sep"></div>
-            <app-drawing-colors />
+          <app-reference-panel *ngIf="editor.selectedSVG && animation.mode == 'edit'" />
+          <ng-container [ngSwitch]="contextControls">
+            <div class="function-bar-sep" *ngIf="contextControls"></div>
+            <app-drawing-colors *ngSwitchCase="'drawing'" />
+            <app-selection-actions *ngSwitchCase="'arrange'" />
           </ng-container>
           <div class="function-bar-spacer"></div>
           <div class="mode-toggle" role="group" aria-label="Editor mode" *ngIf="editor.selectedSVG">
@@ -102,6 +106,13 @@ export class EditorHeaderComponent {
         } finally {
             this.importing = false;
         }
+    }
+
+    /** The contextual header group: new-artwork defaults while drawing, otherwise arrangement for an edit-mode selection. */
+    get contextControls(): "drawing" | "arrange" | null {
+        if(!this.editor.selectedSVG) return null;
+        if(this.editor.activeTool?.usesDrawingPaint) return "drawing";
+        return this.animation.mode === "edit" && this.editor.selectedElements.length ? "arrange" : null;
     }
 
     clearImportNotice(): void {

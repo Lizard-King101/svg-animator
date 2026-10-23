@@ -1,13 +1,15 @@
 import { TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
 import { FaIconLibrary } from "@fortawesome/angular-fontawesome";
-import { faDownload, faFileImport, faHouse, faMagnet, faPlus, faRotateLeft, faRotateRight, faTimes, faRightLeft } from "@fortawesome/free-solid-svg-icons";
+import { faDownload, faFileImport, faHouse, faMagnet, faPlus, faRotateLeft, faRotateRight, faTimes, faRightLeft, faImage } from "@fortawesome/free-solid-svg-icons";
 import { AnimationPlaybackService } from "../../_services/animation-playback.service";
 import { CurrentDocumentSVGImportService } from "../../_services/current-document-svg-import.service";
 import { DocumentMutationService } from "../../_services/document-mutation.service";
 import { EditorPreferencesService } from "../../_services/editor-preferences.service";
 import { EditorService } from "../../_services/editor.service";
 import { EditorUiStateService } from "../../_services/editor-ui-state.service";
+import { ReferenceImageService } from "../../_services/reference-image.service";
+import { SelectionArrangementService } from "../../_services/selection-arrangement.service";
 import { EditorHeaderComponent } from "./editor-header.component";
 
 describe("EditorHeaderComponent SVG import", () => {
@@ -68,10 +70,11 @@ describe("EditorHeaderComponent tabs", () => {
             svgs,
             selectedSVG: svgs[0],
             activeTool: undefined as { usesDrawingPaint: boolean } | undefined,
+            selectedElements: [] as unknown[],
             selectSVG: jasmine.createSpy("selectSVG").and.callFake((id: string) => editor.selectedSVG = svgs.find((svg) => svg.id === id)!),
             closeSVG: jasmine.createSpy("closeSVG"),
         };
-        const animation = { mode: "edit", pause: () => {}, restorePreview: () => {}, seek: () => {}, setMode: () => {} };
+        const animation = { mode: "edit" as "edit" | "animate", pause: () => {}, restorePreview: () => {}, seek: () => {}, setMode: () => {} };
         await TestBed.configureTestingModule({
             imports: [EditorHeaderComponent],
             providers: [
@@ -81,18 +84,20 @@ describe("EditorHeaderComponent tabs", () => {
                 { provide: DocumentMutationService, useValue: { resetBaseline: () => {}, undo: () => {}, redo: () => {} } },
                 { provide: EditorUiStateService, useValue: { openDialog: () => {} } },
                 { provide: CurrentDocumentSVGImportService, useValue: {} },
+                { provide: ReferenceImageService, useValue: { panelOpen: false } },
+                { provide: SelectionArrangementService, useValue: { count: 2, available: true, effectiveReference: "selection" } },
                 { provide: EditorPreferencesService, useValue: {
                     objectSnapping: true, setObjectSnapping: () => {},
                     drawingPaint: { fill: "#2dd4bf", stroke: "#2dd4bf", strokeWidth: 2 }, setDrawingPaint: () => {},
                 } },
             ],
         }).compileComponents();
-        TestBed.inject(FaIconLibrary).addIcons(faHouse, faPlus, faFileImport, faRotateLeft, faRotateRight, faMagnet, faDownload, faTimes, faRightLeft);
+        TestBed.inject(FaIconLibrary).addIcons(faHouse, faPlus, faFileImport, faRotateLeft, faRotateRight, faMagnet, faDownload, faTimes, faRightLeft, faImage);
         const fixture = TestBed.createComponent(EditorHeaderComponent);
         fixture.autoDetectChanges();
         document.body.appendChild(fixture.nativeElement);
         const tabs = (): HTMLElement[] => Array.from(fixture.nativeElement.querySelectorAll("[role=tab]"));
-        return { fixture, editor, tabs };
+        return { fixture, editor, animation, tabs };
     }
 
     function press(target: HTMLElement, key: string): KeyboardEvent {
@@ -141,6 +146,23 @@ describe("EditorHeaderComponent tabs", () => {
         expect(defaults()).toBeNull();
         editor.activeTool = { usesDrawingPaint: true }; fixture.detectChanges();
         expect(defaults()?.querySelector('[aria-label="New artwork stroke width"]')).toBeTruthy();
+        fixture.nativeElement.remove();
+    });
+
+    it("switches the contextual group between drawing defaults and arrangement", async () => {
+        const { fixture, editor, animation } = await setup();
+        const present = (selector: string) => !!fixture.nativeElement.querySelector(selector);
+        expect(present("app-reference-panel")).toBeTrue();
+        expect(present("app-selection-actions")).toBeFalse();
+        editor.selectedElements = [{}]; fixture.detectChanges();
+        expect(present("app-selection-actions")).toBeTrue();
+        expect(present("app-drawing-colors")).toBeFalse();
+        editor.activeTool = { usesDrawingPaint: true }; fixture.detectChanges();
+        expect(present("app-drawing-colors")).toBeTrue();
+        expect(present("app-selection-actions")).toBeFalse();
+        editor.activeTool = undefined; animation.mode = "animate"; fixture.detectChanges();
+        expect(present("app-selection-actions")).toBeFalse();
+        expect(present("app-reference-panel")).toBeFalse();
         fixture.nativeElement.remove();
     });
 });

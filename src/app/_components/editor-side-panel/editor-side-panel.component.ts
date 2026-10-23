@@ -1,4 +1,3 @@
-import { ReferencePanelComponent } from '../reference-image/reference-panel.component';
 import { Component, ElementRef, HostBinding } from "@angular/core";
 import { EditorPreferencesService } from "../../_services/editor-preferences.service";
 import { LayersPanelComponent } from "../layers-panel/layers-panel.component";
@@ -14,7 +13,7 @@ const MIN_EDITOR_REMAINDER = 288;
 @Component({
     selector: "app-editor-side-panel",
     standalone: true,
-    imports: [PropertiesPanelComponent, LayersPanelComponent, ReferencePanelComponent],
+    imports: [PropertiesPanelComponent, LayersPanelComponent],
     templateUrl: "editor-side-panel.component.html",
     styleUrls: ["editor-side-panel.component.scss"],
 })

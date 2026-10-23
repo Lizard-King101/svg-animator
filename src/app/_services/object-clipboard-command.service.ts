@@ -9,7 +9,6 @@ import { ObjectClipboardService } from './object-clipboard.service';
 
 @Injectable()
 export class ObjectClipboardCommandService {
-    message = '';
     constructor(private editor: EditorService, private animation: AnimationPlaybackService,
         private mutations: DocumentMutationService, private layers: LayerOperationsService, private clipboard: ObjectClipboardService) {}
 
@@ -28,7 +27,6 @@ export class ObjectClipboardCommandService {
         // The editable fragment remains app-local; this marker carries no document data.
         if(data) data.setData('text/plain', 'SVG Animator objects');
         else if(typeof navigator !== 'undefined') void navigator.clipboard?.writeText('SVG Animator objects').catch(() => {});
-        this.message = `Copied ${fragment.count} ${fragment.count === 1 ? 'object' : 'objects'}. Available across projects until reload.`;
         return true;
     }
 
@@ -40,7 +38,6 @@ export class ObjectClipboardCommandService {
             this.editor.selectedElements = this.layers.insertFragment(fragment.document, fragment.rootIds);
         }));
         if(!inPlace) this.clipboard.pasteCount++;
-        this.message = inPlace ? 'Pasted in place.' : `Pasted with a ${offset}-unit offset.`;
         return true;
     }
 

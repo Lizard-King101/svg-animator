@@ -1,5 +1,7 @@
 import { NgZone } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { FaIconLibrary } from '@fortawesome/angular-fontawesome';
+import { faImage, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { EditorService } from './editor.service';
 import { EditorPreferencesService } from './editor-preferences.service';
 import { AnimationPlaybackService } from './animation-playback.service';
@@ -186,8 +188,18 @@ describe('reference controls', () => {
         move.dispatchEvent(new PointerEvent('pointermove', { pointerId: 2, clientX: 50, clientY: 50, bubbles: true }));
         move.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 2, bubbles: true }));
         expect(reference.display?.x).toBe(100);
+        TestBed.inject(FaIconLibrary).addIcons(faImage, faTimes);
         const panel = TestBed.createComponent(ReferencePanelComponent); panel.detectChanges();
-        expect(panel.nativeElement.textContent).toContain('Tracing reference');
+        const toggle: HTMLButtonElement = panel.nativeElement.querySelector('button[aria-haspopup]');
+        expect(toggle.getAttribute('aria-label')).toContain('Tracing reference');
+        expect(panel.nativeElement.querySelector('[role=dialog]')).toBeNull();
+        toggle.click(); panel.detectChanges();
+        const dialog: HTMLElement = panel.nativeElement.querySelector('[role=dialog]');
+        expect(dialog.textContent).toContain('Fit to canvas'); expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); panel.detectChanges();
+        expect(reference.panelOpen).toBeFalse(); expect(panel.nativeElement.querySelector('[role=dialog]')).toBeNull();
+        reference.panelOpen = true; panel.detectChanges();
+        expect(panel.nativeElement.querySelector('[role=dialog]')?.getAttribute('style')).toContain('left');
         reference.update({ locked: true }); overlay.detectChanges();
         expect(overlay.nativeElement.querySelector('.move')).toBeNull();
     });

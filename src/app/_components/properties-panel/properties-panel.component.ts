@@ -1,5 +1,4 @@
 import { selectionFrame } from "../../editor/selection";
-import { SelectionActionsComponent } from "../selection-actions/selection-actions.component";
 import { NgFor, NgIf } from "@angular/common";
 import { Component } from "@angular/core";
 import { FormsModule } from "@angular/forms";
@@ -33,7 +32,7 @@ import { formatDashArray, parseDashArray, StrokeAlignment } from "../../editor/o
 @Component({
     selector: "app-properties-panel",
     standalone: true,
-    imports: [FormsModule, NgFor, NgIf, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute, PaintEditorComponent, SelectionActionsComponent, NumberFieldDirective],
+    imports: [FormsModule, NgFor, NgIf, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute, PaintEditorComponent, NumberFieldDirective],
     templateUrl: "properties-panel.component.html",
     styleUrl: "properties-panel.component.scss",
 })
