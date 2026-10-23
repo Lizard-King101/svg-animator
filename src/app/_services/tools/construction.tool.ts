@@ -8,6 +8,7 @@ export type ConstructionKind = 'line' | 'arc';
 /** Palette adapter; the scoped drawing service owns all gesture state. */
 export class ConstructionTool extends Tool {
     override readonly preferenceKey: string;
+    override readonly usesDrawingPaint = true;
     override icon: IconName;
     drawing?: ConstructionDrawingService;
     get pointSnapFeedback() { return this.drawing?.pointSnapFeedback; }

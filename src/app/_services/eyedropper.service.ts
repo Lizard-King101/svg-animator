@@ -110,6 +110,6 @@ export class EyedropperService {
             if(generation === this.generation) { this.busy.set(false); this.error.set('Could not prepare the color sample. Try Reference mode or cancel and retry.'); }
         }
     }
-    private get tool() { return this.editor.selectedTool?.selectedChild ?? this.editor.selectedTool; }
+    private get tool() { return this.editor.activeTool; }
     private get selection(): string { return this.editor.selectedElements.map(item => item.id).join(','); }
 }

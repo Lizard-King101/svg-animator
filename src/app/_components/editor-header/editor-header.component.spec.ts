@@ -1,7 +1,7 @@
 import { TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
 import { FaIconLibrary } from "@fortawesome/angular-fontawesome";
-import { faDownload, faFileImport, faHouse, faMagnet, faPlus, faRotateLeft, faRotateRight, faTimes } from "@fortawesome/free-solid-svg-icons";
+import { faDownload, faFileImport, faHouse, faMagnet, faPlus, faRotateLeft, faRotateRight, faTimes, faRightLeft } from "@fortawesome/free-solid-svg-icons";
 import { AnimationPlaybackService } from "../../_services/animation-playback.service";
 import { CurrentDocumentSVGImportService } from "../../_services/current-document-svg-import.service";
 import { DocumentMutationService } from "../../_services/document-mutation.service";
@@ -67,6 +67,7 @@ describe("EditorHeaderComponent tabs", () => {
         const editor = {
             svgs,
             selectedSVG: svgs[0],
+            activeTool: undefined as { usesDrawingPaint: boolean } | undefined,
             selectSVG: jasmine.createSpy("selectSVG").and.callFake((id: string) => editor.selectedSVG = svgs.find((svg) => svg.id === id)!),
             closeSVG: jasmine.createSpy("closeSVG"),
         };
@@ -80,10 +81,13 @@ describe("EditorHeaderComponent tabs", () => {
                 { provide: DocumentMutationService, useValue: { resetBaseline: () => {}, undo: () => {}, redo: () => {} } },
                 { provide: EditorUiStateService, useValue: { openDialog: () => {} } },
                 { provide: CurrentDocumentSVGImportService, useValue: {} },
-                { provide: EditorPreferencesService, useValue: { objectSnapping: true, setObjectSnapping: () => {} } },
+                { provide: EditorPreferencesService, useValue: {
+                    objectSnapping: true, setObjectSnapping: () => {},
+                    drawingPaint: { fill: "#2dd4bf", stroke: "#2dd4bf", strokeWidth: 2 }, setDrawingPaint: () => {},
+                } },
             ],
         }).compileComponents();
-        TestBed.inject(FaIconLibrary).addIcons(faHouse, faPlus, faFileImport, faRotateLeft, faRotateRight, faMagnet, faDownload, faTimes);
+        TestBed.inject(FaIconLibrary).addIcons(faHouse, faPlus, faFileImport, faRotateLeft, faRotateRight, faMagnet, faDownload, faTimes, faRightLeft);
         const fixture = TestBed.createComponent(EditorHeaderComponent);
         fixture.autoDetectChanges();
         document.body.appendChild(fixture.nativeElement);
@@ -126,6 +130,17 @@ describe("EditorHeaderComponent tabs", () => {
 
         expect(press(tabs()[0], "Delete").defaultPrevented).toBeFalse();
         expect(editor.closeSVG).not.toHaveBeenCalled();
+        fixture.nativeElement.remove();
+    });
+
+    it("shows new-artwork defaults only while a drawing tool is active", async () => {
+        const { fixture, editor } = await setup();
+        const defaults = () => fixture.nativeElement.querySelector("app-drawing-colors");
+        expect(defaults()).toBeNull();
+        editor.activeTool = { usesDrawingPaint: false }; fixture.detectChanges();
+        expect(defaults()).toBeNull();
+        editor.activeTool = { usesDrawingPaint: true }; fixture.detectChanges();
+        expect(defaults()?.querySelector('[aria-label="New artwork stroke width"]')).toBeTruthy();
         fixture.nativeElement.remove();
     });
 });

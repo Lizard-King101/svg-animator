@@ -1,4 +1,6 @@
 import { TestBed } from '@angular/core/testing';
+import { FaIconLibrary } from '@fortawesome/angular-fontawesome';
+import { faRightLeft } from '@fortawesome/free-solid-svg-icons';
 import { ProjectColorsComponent } from './project-colors.component';
 import { ProjectColorsService } from '../../_services/project-colors.service';
 import { PaintEditorComponent } from '../paint-editor/paint-editor.component';
@@ -14,6 +16,7 @@ describe('Shared project palette controls', () => {
         palette.rename.calls.reset(); palette.pin.calls.reset(); palette.remember.calls.reset();
         await TestBed.configureTestingModule({ imports: [ProjectColorsComponent, PaintEditorComponent, DrawingColorsComponent],
             providers: [EditorService, { provide: ProjectColorsService, useValue: palette }] }).compileComponents();
+        TestBed.inject(FaIconLibrary).addIcons(faRightLeft);
     });
     afterEach(() => localStorage.removeItem('svg-animator.editor-preferences.v1'));
     it('applies the same palette value to solid paint and the selected gradient stop', () => {
@@ -35,8 +38,10 @@ describe('Shared project palette controls', () => {
         fixture.nativeElement.querySelector('[aria-label="New artwork fill"]').click(); fixture.detectChanges();
         fixture.nativeElement.querySelector('app-project-colors button.swatch').click(); fixture.detectChanges();
         expect(component.draft.serialized).toBe('#12345680'); expect(component.paint).toEqual(before);
-        component.cancel(); expect(palette.remember).not.toHaveBeenCalled();
-        component.chooseColor('#12345680');
+        component.cancel(); fixture.detectChanges();
+        expect(component.paint).toEqual(before); expect(palette.remember).not.toHaveBeenCalled();
+        fixture.nativeElement.querySelector('[aria-label="New artwork fill"]').click(); fixture.detectChanges();
+        fixture.nativeElement.querySelector('app-project-colors button.swatch').click(); component.apply();
         expect(component.paint.fill).toBe('#12345680'); expect(palette.remember).toHaveBeenCalledOnceWith('#12345680');
     });
     it('exposes alpha and pin state, commits names on blur and cancels name drafts with Escape', () => {

@@ -19,6 +19,8 @@ import { EditorSelection } from "../editor/selection";
 export class EditorService {
     tools: Tool[] = [];
     selectedTool?: Tool;
+    /** The leaf tool receiving input: a group's chosen child, or the selected tool itself. */
+    get activeTool(): Tool | undefined { return this.selectedTool?.selectedChild ?? this.selectedTool; }
 
     svgs: SVG[] = [];
     selectedSVG?: SVG;

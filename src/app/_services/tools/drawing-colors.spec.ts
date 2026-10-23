@@ -13,7 +13,7 @@ describe('Drawing colors across creation tools', () => {
     beforeEach(() => localStorage.removeItem(key));
     afterEach(() => localStorage.removeItem(key));
     function setup() {
-        const preferences = new EditorPreferencesService(); preferences.setDrawingPaint({ fill: '#12345680', stroke: '#abcdef' });
+        const preferences = new EditorPreferencesService(); preferences.setDrawingPaint({ fill: '#12345680', stroke: '#abcdef', strokeWidth: 5 });
         const editor = new EditorService(preferences), svg = new SVG(editor, { width: 800, height: 600, pos: new Point(0, 0) });
         editor.selectedSVG = svg;
         spyOn(editor, 'toCanvasPoint').and.callFake((x: number | Point, y?: number) => typeof x === 'number' ? new Point(x, y!) : x);
@@ -21,18 +21,19 @@ describe('Drawing colors across creation tools', () => {
     }
     const mouse = (x: number, y: number) => new MouseEvent('click', { clientX: x, clientY: y, altKey: true });
 
-    for(const kind of ['rectangle', 'ellipse']) it(`uses independent colors for ${kind}, preserving widths and existing artwork`, () => {
+    for(const kind of ['rectangle', 'ellipse']) it(`uses independent colors and the default width for ${kind}, preserving existing artwork`, () => {
         const { editor, preferences, svg } = setup();
         const tool = editor.tools.flatMap(tool => tool.children).find(tool => tool.preferenceKey === kind)!;
         tool.down(mouse(10, 10)); tool.drag(mouse(100, 100)); tool.up(mouse(100, 100));
         const shape = svg.elements[0] as Shape;
         expect((shape.settings.fill as Color).serialized).toBe('#12345680');
-        expect((shape.settings.stroke as Color).hex).toBe('#abcdef'); expect(shape.settings.stroke_width).toBe(3);
+        expect((shape.settings.stroke as Color).hex).toBe('#abcdef'); expect(shape.settings.stroke_width).toBe(5);
         const saved = shape.save();
-        preferences.setDrawingPaint({ fill: null, stroke: '#111111' });
+        preferences.setDrawingPaint({ fill: null, stroke: '#111111', strokeWidth: 1 });
         expect(shape.save()).toEqual(saved);
         tool.down(mouse(200, 200)); tool.drag(mouse(250, 250)); tool.up(mouse(250, 250));
         expect((svg.elements[1] as Shape).settings.fill).toBeNull();
+        expect((svg.elements[1] as Shape).settings.stroke_width).toBe(1);
         expect(SVG.fromSave(svg.save(), editor).elements[0].save()).toEqual(saved);
     });
 
@@ -47,7 +48,7 @@ describe('Drawing colors across creation tools', () => {
         expect(path.closed).toBeTrue(); expect(path.settings.fill_enabled).toBeTrue();
         expect((path.settings.fill as Color).serialized).toBe('#12345680');
         expect((path.settings.stroke as Color).hex).toBe('#abcdef');
-        expect(path.settings.stroke_width).toBe(2);
+        expect(path.settings.stroke_width).toBe(5);
     });
 
     it('does not share mutable Color objects or change restore/model defaults', () => {

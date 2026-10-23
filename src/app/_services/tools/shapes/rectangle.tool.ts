@@ -7,6 +7,7 @@ import { applyDrawingPaint } from '../../../editor/objects/drawing-paint';
 
 export class Rectangle extends Tool {
     override readonly preferenceKey = 'rectangle';
+    override readonly usesDrawingPaint = true;
     override icon: IconName = 'square';
     private startPoint?: Point;
 

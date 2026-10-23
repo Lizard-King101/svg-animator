@@ -9,11 +9,12 @@ import { EditorUiStateService } from "../../_services/editor-ui-state.service";
 import { CurrentDocumentSVGImportService } from "../../_services/current-document-svg-import.service";
 import { MAX_SVG_IMPORT_BYTES } from "../../editor/import/svg-importer.service";
 import { ObjectSnapToggleComponent } from '../object-snap-toggle/object-snap-toggle.component';
+import { DrawingColorsComponent } from '../drawing-colors/drawing-colors.component';
 
 @Component({
     selector: "app-editor-header",
     standalone: true,
-    imports: [NgClass, NgFor, NgIf, FaIconComponent, RouterLink, ObjectSnapToggleComponent],
+    imports: [NgClass, NgFor, NgIf, FaIconComponent, RouterLink, ObjectSnapToggleComponent, DrawingColorsComponent],
     template: `
       <div class="header">
         <div class="function-bar">
@@ -28,6 +29,10 @@ import { ObjectSnapToggleComponent } from '../object-snap-toggle/object-snap-tog
           <button class="btn-icon" (click)="mutations.undo()" [disabled]="!editor.selectedSVG?.canUndo" title="Undo (Ctrl+Z)"><fa-icon icon="rotate-left"></fa-icon></button>
           <button class="btn-icon" (click)="mutations.redo()" [disabled]="!editor.selectedSVG?.canRedo" title="Redo (Ctrl+Y)"><fa-icon icon="rotate-right"></fa-icon></button>
           <app-object-snap-toggle *ngIf="editor.selectedSVG" />
+          <ng-container *ngIf="editor.selectedSVG && editor.activeTool?.usesDrawingPaint">
+            <div class="function-bar-sep"></div>
+            <app-drawing-colors />
+          </ng-container>
           <div class="function-bar-spacer"></div>
           <div class="mode-toggle" role="group" aria-label="Editor mode" *ngIf="editor.selectedSVG">
             <button type="button" [ngClass]="{'active': animation.mode == 'edit'}" [attr.aria-pressed]="animation.mode == 'edit'" (click)="animation.setMode('edit')">Edit</button>
