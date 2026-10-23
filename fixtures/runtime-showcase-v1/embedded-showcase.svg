@@ -11,7 +11,7 @@
   </defs>
   <g id="stage" data-svg-animator-target="" transform="matrix(1 0 0 1 8 -4)">
     <defs>
-      <mask id="stroke-draw-motion-path" x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><path data-render-role="geometry reveal" d="M 30 190 C 120 20 270 250 360 70" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="0"/></mask>
+      <mask id="stroke-draw-motion-path" x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><path data-render-role="geometry reveal" d="M 30 190 C 120 20 270 250 360 70" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" pathLength="1" stroke-dasharray="1 2" stroke-dashoffset="0"/></mask>
     </defs>
     <g id="motion-path" data-svg-animator-target="" opacity="0.2">
       <path data-render-role="geometry fill" d="M 30 190 C 120 20 270 250 360 70" fill="none" fill-rule="evenodd"/>
@@ -19,7 +19,7 @@
     </g>
     <defs>
       <clipPath id="stroke-inside-compound-path"><path data-render-role="geometry-effect" d="M 20 40 L 152 40 C 161.941 40 170 48.059 170 58 L 170 138 C 170 144.627 164.627 150 158 150 L 40 150 C 28.954 150 20 141.046 20 130 L 20 40 Z M 70 75 C 105 55 145 95 125 115 L 70 75 Z" fill-rule="evenodd"/></clipPath>
-      <mask id="stroke-draw-compound-path" x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><path data-render-role="geometry reveal" d="M 20 40 L 152 40 C 161.941 40 170 48.059 170 58 L 170 138 C 170 144.627 164.627 150 158 150 L 40 150 C 28.954 150 20 141.046 20 130 L 20 40 Z M 70 75 C 105 55 145 95 125 115 L 70 75 Z" fill="none" stroke="white" stroke-width="32" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="0.15000000000000002"/></mask>
+      <mask id="stroke-draw-compound-path" x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><path data-render-role="geometry reveal" d="M 20 40 L 152 40 C 161.941 40 170 48.059 170 58 L 170 138 C 170 144.627 164.627 150 158 150 L 40 150 C 28.954 150 20 141.046 20 130 L 20 40 Z M 70 75 C 105 55 145 95 125 115 L 70 75 Z" fill="none" stroke="white" stroke-width="32" stroke-linecap="round" pathLength="1" stroke-dasharray="1 2" stroke-dashoffset="0.15000000000000002"/></mask>
     </defs>
     <g id="compound-path" data-svg-animator-target="">
       <path data-render-role="geometry fill" d="M 20 40 L 152 40 C 161.941 40 170 48.059 170 58 L 170 138 C 170 144.627 164.627 150 158 150 L 40 150 C 28.954 150 20 141.046 20 130 L 20 40 Z M 70 75 C 105 55 145 95 125 115 L 70 75 Z" fill="url(#path-gradient)" fill-rule="evenodd"/>
