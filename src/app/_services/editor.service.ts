@@ -13,6 +13,7 @@ import { EditorPreferencesService } from "./editor-preferences.service";
 import { PaintSettingKey } from "../editor/objects/paint.object";
 import { canvasToWorkspaceProjection } from "../editor/canvas-workspace-projection";
 import { applyMatrix } from "../editor/objects/transform.object";
+import { EditorSelection } from "../editor/selection";
 
 @Injectable()
 export class EditorService {
@@ -22,7 +23,22 @@ export class EditorService {
     svgs: SVG[] = [];
     selectedSVG?: SVG;
 
-    selectedElement?: AnyElement;
+    private readonly selection = new EditorSelection();
+    get objectSnapping(): boolean { return this.preferences.objectSnapping; }
+    get drawingPaint() { return this.preferences.drawingPaint; }
+    get selectedElements(): AnyElement[] { return this.selection.elements; }
+    set selectedElements(elements: AnyElement[]) {
+        this.selection.replace(elements);
+        this.selectedPathAnchor = undefined;
+        this.selectedPathLine = undefined;
+        this.selectedPathLines = [];
+        this.selectedGradientPaintKey = undefined;
+    }
+    get selectedElement(): AnyElement | undefined {
+        const elements = this.selectedElements;
+        return elements.length === 1 ? elements[0] : undefined;
+    }
+    set selectedElement(element: AnyElement | undefined) { this.selectedElements = element ? [element] : []; }
     selectedGradientPaintKey?: PaintSettingKey;
     activeElement?: AnyElement;
     selectedPathAnchor?: Point;
@@ -44,7 +60,7 @@ export class EditorService {
             this.tools.push(t);
         })
 
-        const preferredTool = this.findTool(this.preferences.tool);
+        const preferredTool = this.findTool(this.preferences.tool === 'circle' ? 'ellipse' : this.preferences.tool);
         if(!preferredTool?.restoreSelection()) {
             this.tools[0]?.restoreSelection();
         }

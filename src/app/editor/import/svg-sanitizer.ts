@@ -25,6 +25,11 @@ export interface SanitizedSVG {
 
 export class SVGParseError extends Error {}
 
+/** Preserve XML namespaces when handling a stored fragment rather than a file. */
+export function sanitizeSVGFragment(markup: string): SanitizedSVG {
+    return sanitizeSVGText(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">${markup}</svg>`);
+}
+
 /** Parses into an inert XML document and strips active/external content. */
 export function sanitizeSVGText(source: string): SanitizedSVG {
     const parsed = new DOMParser().parseFromString(source, "image/svg+xml");

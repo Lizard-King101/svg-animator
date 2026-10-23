@@ -12,6 +12,7 @@ import { Point } from "../../editor/objects/point.object";
 export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
     private readonly listeners = new AbortController();
     private movingView = false;
+    private activeButton?: number;
     private moveStart = new Point(0, 0);
 
     get element(): HTMLElement { return this.host.nativeElement; }
@@ -30,6 +31,8 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
 
         viewport.addEventListener("mousedown", (event) => this.zone.run(() => {
             this.editor.closeContextMenu();
+            if(event.button !== 0 && event.button !== 1) return;
+            this.activeButton = event.button;
             const start = this.editor.toViewportPoint(event.x, event.y);
             if(event.button === 0 && this.editor.selectedTool) {
                 this.editor.selectedTool.down(event);
@@ -37,15 +40,18 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
             } else if(event.button === 1) {
                 this.movingView = true;
                 this.moveStart = start;
-            } else if(event.button === 2) {
-                event.preventDefault();
             }
         }), { signal });
 
-        viewport.addEventListener("mouseup", (event) => this.zone.run(() => {
+        document.addEventListener("mouseup", (event) => this.zone.run(() => {
+            if(event.button !== this.activeButton) return;
+            this.activeButton = undefined;
             const wasMovingView = this.movingView;
-            this.editor.selectedTool?.up(event);
-            this.animationGestures.end();
+            if(!wasMovingView) {
+                this.editor.selectedTool?.up(event);
+                this.animationGestures.end();
+                if(!viewport.contains(event.target as Node)) this.editor.selectedTool?.leave();
+            }
             this.movingView = false;
             if(wasMovingView && this.editor.selectedSVG) this.editor.rememberCanvasView(this.editor.selectedSVG);
             if(event.button !== 2) this.mutations.commit();
@@ -76,15 +82,18 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
             this.mutations.commit();
         }), { signal });
 
-        viewport.addEventListener("mousemove", (event) => this.zone.run(() => {
-            if(this.movingView && this.editor.selectedSVG) {
-                const position = this.editor.toViewportPoint(event.x, event.y);
-                const delta = position.subtract(this.moveStart);
-                this.moveStart.addTo(delta.x, delta.y);
-                this.editor.selectedSVG.pos.addTo(delta);
-            }
-            this.editor.selectedTool?.drag(event);
-        }), { signal });
+        this.zone.runOutsideAngular(() => document.addEventListener("mousemove", (event) => {
+            if(this.activeButton == null && !viewport.contains(event.target as Node)) return;
+            this.zone.run(() => {
+                if(this.movingView && this.editor.selectedSVG) {
+                    const position = this.editor.toViewportPoint(event.x, event.y);
+                    const delta = position.subtract(this.moveStart);
+                    this.moveStart.addTo(delta.x, delta.y);
+                    this.editor.selectedSVG.pos.addTo(delta);
+                }
+                this.editor.selectedTool?.drag(event);
+            });
+        }, { signal }));
 
         viewport.addEventListener("click", (event) => this.zone.run(() => {
             this.editor.closeContextMenu();
@@ -102,15 +111,50 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
             }
         }), { signal });
 
-        viewport.addEventListener("mouseleave", () => {
-            if(this.movingView && this.editor.selectedSVG) this.editor.rememberCanvasView(this.editor.selectedSVG);
-            this.movingView = false;
+        viewport.addEventListener('mouseleave', () => {
+            if(this.activeButton == null) this.zone.run(() => this.editor.selectedTool?.leave());
         }, { signal });
+        window.addEventListener('blur', () => this.zone.run(() => {
+            this.cancelGesture();
+            this.editor.selectedTool?.leave();
+        }), { signal });
+        document.addEventListener('keydown', (event) => {
+            if(this.activeButton == null) return;
+            if(event.key === 'Alt' && this.activeButton === 0) {
+                // A modifier may refresh the live move, but only mouseup commits it.
+                this.zone.run(() => this.editor.keyPressed(event.key));
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                return;
+            }
+            if(event.key === 'Escape' || ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase()))) {
+                this.zone.run(() => this.cancelGesture());
+                if(event.key === 'Escape') {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                }
+            }
+        }, { signal, capture: true });
+        document.addEventListener('keyup', (event) => {
+            if(this.activeButton !== 0 || event.key !== 'Alt') return;
+            this.zone.run(() => this.editor.keyReleased(event.key));
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        }, { signal, capture: true });
 
         this.editor.setViewPort(viewport);
     }
 
+    private cancelGesture(): void {
+        if(this.activeButton == null) return;
+        this.editor.selectedTool?.reset();
+        this.animationGestures.cancel();
+        this.activeButton = undefined;
+        this.movingView = false;
+    }
+
     ngOnDestroy(): void {
+        this.cancelGesture();
         this.listeners.abort();
     }
 }

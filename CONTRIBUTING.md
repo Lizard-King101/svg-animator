@@ -33,7 +33,13 @@ We treat maintainability and UX quality as part of the feature, not cleanup defe
 
 For export or playback differences, capture an editable Project JSON and follow [`docs/RUNTIME_TESTING.md`](docs/RUNTIME_TESTING.md) to add an immutable editor/runtime parity fixture.
 
-Run before handing off a change:
+During feature work, run focused tests for the changed behavior and adjacent surfaces. For example:
+
+```bash
+npm test -- --watch=false --include='src/app/_services/selection-arrangement.spec.ts' --include='src/app/_services/tools/selection.interaction.spec.ts'
+```
+
+Run the production build and whitespace check at feature handoff. Reserve the full test suite for the final overhaul/release check, rather than repeating it for every small feature. Report which checks were run. Final verification:
 
 ```bash
 npm test -- --watch=false

@@ -1,6 +1,6 @@
 # SVG Animator Runtime v1
 
-The standalone runtime is a private-named, dependency-free package at version 1.0.0. Its public TypeScript names, `RuntimeBundleV1`, and browser global `SVGAnimatorRuntime` are stable. The editor app and runtime use independent SemVer; persisted documents remain envelope v5 with animation schema v2.
+The standalone runtime is a private-named, dependency-free package at version 1.0.0. Its public TypeScript names, `RuntimeBundleV1`, and browser global `SVGAnimatorRuntime` are stable. The editor app and runtime use independent SemVer; persisted documents use envelope v7 with animation schema v2. Project color palettes are editor metadata and do not change the runtime format.
 
 ## Install and mount
 

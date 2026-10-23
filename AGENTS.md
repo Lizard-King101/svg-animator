@@ -32,6 +32,7 @@ Every change should leave the repository easier to understand, extend, test, and
 - Extracted components preserve layout, focus, overlay, and event behavior.
 - Persistent mutations commit once through the correct domain boundary.
 - Relevant characterization or interaction tests cover the change.
-- `npm test -- --watch=false`, `npm run build`, and `git diff --check` pass.
+- During feature work, run focused tests for the changed behavior and adjacent surfaces. Reserve `npm test -- --watch=false` for the final overhaul/release check rather than every small feature.
+- `npm run build` and `git diff --check` pass at feature handoff; report the test scope actually run.
 
 See `CONTRIBUTING.md` for the human-facing guide and `ARCHITECTURE.md` for current ownership contracts.

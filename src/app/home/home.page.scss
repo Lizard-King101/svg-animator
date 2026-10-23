@@ -136,7 +136,9 @@
     > fa-icon { color: var(--danger); }
   }
 
-  span { flex: 1; }
+  > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+  small { display: block; margin-top: 4px; color: var(--text-muted); }
 
   button {
     width: 24px;
@@ -147,6 +149,17 @@
     color: var(--text-muted);
     cursor: pointer;
     &:hover { color: var(--text-primary); }
+  }
+
+  > .notice-action {
+    flex-shrink: 0;
+    width: auto;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    &:hover { background: var(--bg-hover); }
   }
 }
 

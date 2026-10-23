@@ -1,0 +1,10 @@
+:host { display: block; flex: 0 0 auto; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+strong { font-size: 12px; }
+.swatches, .actions { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+.swatches button { display: inline-flex; align-items: center; gap: 6px; }
+.swatches button[aria-expanded='true'] { outline: 2px solid var(--accent); outline-offset: 1px; }
+.swatch { display: inline-block; width: 18px; height: 18px; border: 1px solid var(--border); border-radius: 3px; }
+.swatch.none { background: linear-gradient(135deg, transparent 45%, var(--text-primary) 46%, var(--text-primary) 54%, transparent 55%); }
+p { font-size: 11px; color: var(--text-secondary); margin: 8px 0 0; }
+.color-editor { margin-top: 10px; }
+.no-paint { display: flex; gap: 6px; align-items: center; font-size: 12px; margin-top: 8px; }

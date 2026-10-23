@@ -3,9 +3,11 @@ import { EditorService } from "../../editor.service";
 import { Point } from "src/app/editor/objects/point.object";
 import { Shape } from "src/app/editor/objects/elements/shape.object";
 import { Tool } from "../tool";
+import { applyDrawingPaint } from '../../../editor/objects/drawing-paint';
 
 export class Ellipse extends Tool {
     override readonly preferenceKey = 'ellipse';
+    override readonly label = 'Ellipse / Circle';
     override icon: IconName = 'circle';
     private startPoint?: Point;
 
@@ -30,20 +32,12 @@ export class Ellipse extends Tool {
                 height: 1,
             });
 
+            applyDrawingPaint(shape.settings, this.editor.drawingPaint);
             this.startPoint = point;
             this.editor.activeElement = shape;
             this.editor.selectedElement = undefined;
             this.editor.selectedSVG.tempElements.push(shape);
         }
-    }
-
-    override onselect() {
-        if(this.parentTool) {
-            this.parentTool.showChildren = false;
-            this.parentTool.selectedChild = this;
-            this.parentTool.deselectOtherChildren(this);
-        }
-        return true;
     }
 
     override drag(event: MouseEvent) {

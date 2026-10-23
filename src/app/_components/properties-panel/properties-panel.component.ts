@@ -1,3 +1,5 @@
+import { selectionFrame } from "../../editor/selection";
+import { SelectionActionsComponent } from "../selection-actions/selection-actions.component";
 import { NgFor, NgIf } from "@angular/common";
 import { Component } from "@angular/core";
 import { FormsModule } from "@angular/forms";
@@ -30,11 +32,20 @@ import { formatDashArray, parseDashArray, StrokeAlignment } from "../../editor/o
 @Component({
     selector: "app-properties-panel",
     standalone: true,
-    imports: [FormsModule, NgFor, NgIf, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute, PaintEditorComponent],
+    imports: [FormsModule, NgFor, NgIf, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute, PaintEditorComponent, SelectionActionsComponent],
     templateUrl: "properties-panel.component.html",
-    styles: [":host { display: contents; }"],
+    styleUrl: "properties-panel.component.scss",
 })
 export class PropertiesPanelComponent {
+    get selectionHint(): string {
+        const svg = this.editor.selectedSVG;
+        const frame = svg && selectionFrame(svg, this.editor.selectedElements);
+        if(!frame) return 'Unlock or show selected layers to transform them.';
+        if(!frame.canTransform) return 'Detach motion paths to transform this selection together.';
+        if(!frame.canRotate) return 'Move or scale together. Rotation is unavailable across differently scaled parent groups.';
+        return 'Drag to move together. Corner handles scale proportionally. Shift-click to add or remove.';
+    }
+
     readonly ANIMATABLE_PROPERTIES = ANIMATABLE_PROPERTIES;
 
     constructor(

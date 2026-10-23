@@ -1,3 +1,4 @@
+<app-selection-actions />
 <ng-container *ngIf="editor.inspectedElement">
   <div class="panel-header">Properties</div>
   <div class="transform-section" *ngIf="asFrameElement(editor.inspectedElement) as frameElement">
@@ -176,7 +177,8 @@
     </div>
   </div>
 </ng-container>
-<div class="panel-empty" *ngIf="!editor.inspectedElement">
+<div class="panel-empty" [class.selection-summary]="editor.selectedElements.length > 1" *ngIf="!editor.inspectedElement">
   <fa-icon icon="mouse-pointer"></fa-icon>
-  <span>Select an element</span>
+  <span>{{ editor.selectedElements.length > 1 ? editor.selectedElements.length + ' layers selected' : 'Select an element' }}</span>
+  <span *ngIf="editor.selectedElements.length > 1">{{ selectionHint }}</span>
 </div>

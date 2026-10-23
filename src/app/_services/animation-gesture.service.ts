@@ -8,71 +8,39 @@ import { AnyElement } from "../editor/objects/svg.object";
 /** Converts direct canvas edits into animation keyframes at gesture boundaries. */
 @Injectable()
 export class AnimationGestureService {
-    private transformStart?: AnimationTransformDragStart;
-    private geometryStart?: AnimationGeometryDragStart;
+    private starts: AnimationGestureStart[] = [];
 
     constructor(private editor: EditorService, private animation: AnimationPlaybackService) {}
 
     begin(): void {
-        this.captureAnimationTransformDragStart();
-        this.captureAnimationGeometryDragStart();
+        const selected = this.editor.selectedElements ?? (this.editor.selectedElement ? [this.editor.selectedElement] : []);
+        this.starts = this.animation.mode === 'animate' ? selected.map((element) => ({
+            element, transform: this.transformAnimationValues(element), geometry: geometryAnimationValues(element),
+        })) : [];
     }
+
+    cancel(): void { this.starts = []; }
 
     end(): void {
-        const element = this.editor.selectedElement;
-        const transformValues = element ? this.transformAnimationValues(element) : undefined;
-        const geometryValues = element ? geometryAnimationValues(element) : undefined;
-        this.commitAnimationTransformDrag(transformValues);
-        this.commitAnimationGeometryDrag(geometryValues);
-    }
-
-    private captureAnimationTransformDragStart() {
-        if(this.animation.mode !== 'animate' || !this.editor.selectedElement) {
-            this.transformStart = undefined;
-            return;
-        }
-
-        this.transformStart = {
-            element: this.editor.selectedElement,
-            values: this.transformAnimationValues(this.editor.selectedElement),
-        };
-    }
-
-    private commitAnimationTransformDrag(capturedValues?: Record<string, number>) {
-        const start = this.transformStart;
-        this.transformStart = undefined;
-        if(this.animation.mode !== 'animate' || !start || this.editor.selectedElement !== start.element) {
-            return;
-        }
-
-        const currentValues = capturedValues ?? this.transformAnimationValues(start.element);
-        ANIMATABLE_PROPERTIES
-            .filter((definition) => definition.property.startsWith('transform.'))
-            .forEach((definition) => {
-                const startValue = start.values[definition.property];
-                const currentValue = currentValues[definition.property];
-                if(startValue == null || currentValue == null || Math.abs(currentValue - startValue) < 0.0005) {
-                    return;
-                }
-
-                this.animation.upsertKeyframe(start.element, definition.property, definition.valueType, currentValue, startValue);
+        const starts = this.starts;
+        this.starts = [];
+        if(this.animation.mode !== 'animate') return;
+        const selected = this.editor.selectedElements ?? (this.editor.selectedElement ? [this.editor.selectedElement] : []);
+        // Each keyframe upsert restores/reapplies the preview. Capture every
+        // target first so writing one track cannot erase another target's edit.
+        const captures = starts.filter((start) => selected.includes(start.element)).map((start) => ({
+            ...start, currentTransform: this.transformAnimationValues(start.element), currentGeometry: geometryAnimationValues(start.element),
+        }));
+        captures.forEach((start) => {
+            ANIMATABLE_PROPERTIES.filter((definition) => definition.property.startsWith('transform.')).forEach((definition) => {
+                const baseline = start.transform[definition.property];
+                const value = start.currentTransform[definition.property];
+                if(baseline == null || value == null || Math.abs(value - baseline) < 0.0005) return;
+                this.animation.upsertKeyframe(start.element, definition.property, definition.valueType, value, baseline);
             });
-    }
-
-    private captureAnimationGeometryDragStart(): void {
-        const element = this.editor.selectedElement;
-        this.geometryStart = this.animation.mode === "animate" && element
-            ? { element, values: geometryAnimationValues(element) }
-            : undefined;
-    }
-
-    private commitAnimationGeometryDrag(capturedValues?: Record<string, number>): void {
-        const start = this.geometryStart;
-        this.geometryStart = undefined;
-        if(this.animation.mode !== "animate" || !start || this.editor.selectedElement !== start.element) return;
-        const current = capturedValues ?? geometryAnimationValues(start.element);
-        geometryAnimationChanges(start.element, start.values, current).forEach(({ property, value, baseline }) => {
-            this.animation.upsertKeyframe(start.element, property, "number", value, baseline);
+            geometryAnimationChanges(start.element, start.geometry, start.currentGeometry).forEach(({ property, value, baseline }) => {
+                this.animation.upsertKeyframe(start.element, property, 'number', value, baseline);
+            });
         });
     }
 
@@ -93,5 +61,8 @@ export class AnimationGestureService {
 
 }
 
-interface AnimationTransformDragStart { element: AnyElement; values: Record<string, number> }
-interface AnimationGeometryDragStart { element: AnyElement; values: Record<string, number> }
+interface AnimationGestureStart {
+    element: AnyElement;
+    transform: Record<string, number>;
+    geometry: Record<string, number>;
+}

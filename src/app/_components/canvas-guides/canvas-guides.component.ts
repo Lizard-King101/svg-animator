@@ -1,5 +1,5 @@
 import { NgClass, NgFor, NgIf, NgStyle } from "@angular/common";
-import { Component, Input } from "@angular/core";
+import { Component, DoCheck, Input } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { DocumentMutationService } from "../../_services/document-mutation.service";
@@ -17,15 +17,29 @@ import { CanvasWorkspaceComponent } from "../canvas-workspace/canvas-workspace.c
     templateUrl: "canvas-guides.component.html",
     styles: [":host { display: contents; }"],
 })
-export class CanvasGuidesComponent {
+export class CanvasGuidesComponent implements DoCheck {
     @Input({ required: true }) canvas?: SVGElement;
     @Input({ required: true }) workspace?: CanvasWorkspaceComponent;
+    private show = true;
+    @Input() set enabled(value: boolean) {
+        this.show = value;
+        if(!value) { this.drag = undefined; this.input = undefined; this.lastCreated = undefined; }
+    }
+    get enabled(): boolean { return this.show; }
     drag?: GuideDragState;
     input?: GuideInputState;
     private lastCreated?: CanvasGuide;
+    private viewportSize = { x: 0, y: 0 };
     readonly rulerSize = 24;
 
     constructor(public editor: EditorService, private mutations: DocumentMutationService) {}
+
+    ngDoCheck(): void {
+        // Sibling panels can resize later in this render. Keep ruler culling stable
+        // for the whole check; CSS clips overflow until the next layout update.
+        const viewport = this.workspace?.element;
+        this.viewportSize = { x: viewport?.clientWidth ?? 0, y: viewport?.clientHeight ?? 0 };
+    }
 
     screenPosition(guide: CanvasGuide): number { return guide.axis === "x" ? this.toViewportX(guide.value) : this.toViewportY(guide.value); }
     activeScreenPosition(): number { return !this.drag ? 0 : this.drag.axis === "x" ? this.toViewportX(this.drag.value) : this.toViewportY(this.drag.value); }
@@ -44,7 +58,7 @@ export class CanvasGuidesComponent {
         const bounds = svg.canvasBounds ?? { x: 0, y: 0, width: svg.width, height: svg.height };
         const start = axis === "x" ? bounds.x : bounds.y;
         const length = axis === "x" ? bounds.width : bounds.height;
-        const viewportLength = axis === "x" ? viewport.clientWidth : viewport.clientHeight;
+        const viewportLength = this.viewportSize[axis];
         const step = this.rulerStep(svg.zoom);
         const marks: RulerMark[] = [];
         const first = Math.ceil(start / step) * step;

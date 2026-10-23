@@ -1,0 +1,37 @@
+.selection-move,
+.segment-hit,
+.point-handle,
+.gradient-handle {
+  cursor: move;
+}
+
+.rotation-handle {
+  cursor: grab;
+
+  &:active { cursor: grabbing; }
+}
+
+.origin-handle { cursor: crosshair; }
+
+// The highlight never receives input: selection must not shrink the hit stroke.
+.segment-highlight {
+  opacity: 0;
+}
+
+.path-segment:hover > .segment-highlight { opacity: 0.65; }
+.path-segment.selected > .segment-highlight { opacity: 1; }
+
+// Keep controls distinguishable on light artwork and the dark workspace.
+.editor-handle {
+  filter: drop-shadow(0 0 1px var(--bg-base));
+
+  &:hover {
+    stroke-width: 2.5px;
+    filter: drop-shadow(0 0 2px var(--text-primary));
+  }
+}
+
+.anchor-handle.selected {
+  fill: var(--accent);
+  stroke: var(--bg-base);
+}

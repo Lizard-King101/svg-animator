@@ -8,7 +8,7 @@ Runtime parity tests answer a specific question: given the same editable project
 2. Return to the Projects view, open that project's three-dot menu, and choose **Export project**.
 3. Keep the resulting `*.svg-animator.json` alongside the Web Bundle ZIP from the same editor build.
 
-Project JSON is the editable document envelope, currently document v5 with animation v2. It is available even when animation tracks are orphaned, invalid, or unsupported, because those broken references are often necessary to reproduce a bug. Export runs from animation base state, so temporary preview mutations are not captured. Runtime ZIPs contain compiled playback data only and cannot substitute for Project JSON when investigating editor/export differences. Project JSON import is not yet exposed in the gallery, so treat this as a source capture for tests rather than a complete UI backup/restore workflow.
+Project JSON is the editable document envelope, currently document v6 with animation v2. It is available even when animation tracks are orphaned, invalid, or unsupported, because those broken references are often necessary to reproduce a bug. Export runs from animation base state, so temporary preview mutations are not captured. Runtime ZIPs contain compiled playback data only and cannot substitute for Project JSON when investigating editor/export differences. Project JSON can be imported from the gallery, including embedded editor-only tracing references. SVG/runtime exports omit references.
 
 The export is deterministic: unchanged project state produces identical JSON bytes. It contains no compiled runtime cache or timestamp.
 

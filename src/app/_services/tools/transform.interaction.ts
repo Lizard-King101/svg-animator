@@ -1,4 +1,4 @@
-import { combinedMatrixFor, localBounds, ownMatrix, parentMatrixFor, pinAncestorTransformOrigins, resolvedOrigin } from "../../editor/objects/element-bounds";
+import { combinedMatrixFor, findElementChain, localBounds, ownMatrix, parentMatrixFor, pinAncestorTransformOrigins, resolvedOrigin } from "../../editor/objects/element-bounds";
 import {
     captureGeometrySnapshot,
     ElementGeometrySnapshot,
@@ -13,12 +13,26 @@ import { Point } from "../../editor/objects/point.object";
 import { AnyElement } from "../../editor/objects/svg.object";
 import { Bounds, Matrix, TransformState, applyMatrix, invertMatrix, transformMatrix } from "../../editor/objects/transform.object";
 import { EditorService } from "../editor.service";
+import { SelectionTransformInteraction } from "./selection-transform.interaction";
+import { MoveSnappingInteraction } from './move-snapping.interaction';
+import { EdgeRotationSnapSession, edgeRotationSession } from '../../editor/objects/edge-rotation-snapping';
 
 /** Coordinates a complete move/resize/rotate/origin pointer interaction. */
 export class TransformInteraction {
     private drag?: TransformDrag;
+    private pointerStart?: { x: number; y: number };
+    private pointerCurrent?: { x: number; y: number };
+    private selection: SelectionTransformInteraction;
+    private snapping: MoveSnappingInteraction;
+    private rotationSnapping?: EdgeRotationSnapSession;
+    get rotationSnapFeedback() { return this.rotationSnapping?.feedback ?? this.selection.rotationSnapFeedback; }
+    private snapPointer?: Pick<MouseEvent, 'clientX' | 'clientY' | 'shiftKey' | 'altKey'>;
+    get snapFeedback() { return this.snapping.feedback; }
 
-    constructor(private editor: EditorService) {}
+    constructor(private editor: EditorService) {
+        this.selection = new SelectionTransformInteraction(editor);
+        this.snapping = new MoveSnappingInteraction(editor);
+    }
 
     handle(target: HTMLElement): string | undefined {
         let current: HTMLElement | null = target;
@@ -30,17 +44,34 @@ export class TransformInteraction {
     }
 
     begin(handle: string, event: MouseEvent): boolean {
+        this.snapping.clear();
+        this.rotationSnapping = undefined;
+        this.snapPointer = undefined;
+        if(this.editor.selectedElements?.length > 1) {
+            const started = this.selection.begin(handle, event);
+            if(started && handle === 'move') {
+                this.snapping.begin(this.editor.toCanvasPoint(event.clientX, event.clientY));
+                this.snapPointer = event;
+            }
+            if(started && handle === 'rotate') this.snapPointer = event;
+            return started;
+        }
         const element = this.editor.selectedElement;
         if(!element || element.locked || !element.visible) return false;
+        if(findElementChain(this.roots(), element)?.some((ancestor) => ancestor.locked || !ancestor.visible)) return false;
+        this.pointerStart = this.pointerCurrent = { x: event.clientX, y: event.clientY };
         const canvasPoint = this.editor.toCanvasPoint(event.clientX, event.clientY);
         const snapshot = captureGeometrySnapshot(element);
         const transformSnapshot = cloneTransform(element.transform);
         if(handle === "move") {
+            this.snapping.begin(canvasPoint);
+            this.snapPointer = event;
             this.drag = {
                 handle,
                 element,
                 nativeGeometry: movesNativeGeometry(element),
                 start: this.canvasToParentLocal(element, canvasPoint),
+                initialStart: this.canvasToParentLocal(element, canvasPoint),
                 snapshot,
                 transformSnapshot,
                 ancestorSnapshots: this.ancestorSnapshots(element),
@@ -57,10 +88,14 @@ export class TransformInteraction {
         }
         element.transform = cloneTransform(initial);
         const own = transformMatrix(initial, origin);
-        const pivotLocal = handle === "origin" || event.altKey ? new Point(origin.x, origin.y) : oppositeHandlePoint(bounds, handle);
+        const pivotLocal = handle === "origin" || handle === "rotate" || event.altKey ? new Point(origin.x, origin.y) : oppositeHandlePoint(bounds, handle);
         const pivot = applyMatrix(own, pivotLocal.x, pivotLocal.y);
         const pivotParent = new Point(pivot.x, pivot.y);
         const parentPoint = this.canvasToParentLocal(element, canvasPoint);
+        if(handle === 'rotate') {
+            this.snapPointer = event;
+            if(this.editor.selectedSVG) this.rotationSnapping = edgeRotationSession(this.editor.selectedSVG, [element], parentMatrixFor(this.roots(), element), pivotParent);
+        }
         this.drag = {
             handle,
             element,
@@ -80,15 +115,19 @@ export class TransformInteraction {
         return true;
     }
 
-    update(event: MouseEvent): boolean {
+    update(event: Pick<MouseEvent, 'clientX' | 'clientY' | 'shiftKey' | 'altKey'>): boolean {
+        if(this.snapPointer) this.snapPointer = event;
+        const canvasPoint = this.snapping.update(this.editor.toCanvasPoint(event.clientX, event.clientY), event.altKey);
+        if(this.selection.update(event, canvasPoint)) return true;
         const drag = this.drag;
         if(!drag) return false;
+        this.pointerCurrent = { x: event.clientX, y: event.clientY };
         drag.updated = true;
         if(!drag.ancestorsPinned) {
             pinAncestorTransformOrigins(this.roots(), drag.element);
             drag.ancestorsPinned = true;
         }
-        const point = this.canvasToParentLocal(drag.element, this.editor.toCanvasPoint(event.clientX, event.clientY));
+        const point = this.canvasToParentLocal(drag.element, canvasPoint);
         if(drag.handle === "move") {
             const delta = point.subtract(drag.start!);
             drag.start = point;
@@ -109,7 +148,9 @@ export class TransformInteraction {
         }
         if(drag.handle === "rotate") {
             const angle = Math.atan2(point.y - drag.pivotParent!.y, point.x - drag.pivotParent!.x) * 180 / Math.PI;
-            next.rotation = drag.initial!.rotation + angle - drag.startAngle!;
+            const raw = angle - drag.startAngle!;
+            drag.rotationDelta = this.rotationSnapping?.update(raw, event.altKey || !this.editor.objectSnapping) ?? raw;
+            next.rotation = drag.initial!.rotation + drag.rotationDelta;
             drag.element.transform = next;
             return true;
         }
@@ -148,16 +189,32 @@ export class TransformInteraction {
     }
 
     end(): void {
-        if(this.drag && !this.drag.updated) this.restore(this.drag);
+        this.snapping.clear();
+        this.rotationSnapping = undefined;
+        this.snapPointer = undefined;
+        this.selection.end();
+        const drag = this.drag;
+        const unmoved = drag?.initialStart && drag.start && Math.hypot(drag.start.x - drag.initialStart.x, drag.start.y - drag.initialStart.y) < 0.000001;
+        if(drag && (!drag.updated || unmoved || drag.handle === 'rotate' && Math.abs(drag.rotationDelta ?? 0) < 1e-8 || (this.pointerCurrent?.x === this.pointerStart?.x && this.pointerCurrent?.y === this.pointerStart?.y))) this.restore(drag);
         this.drag = undefined;
     }
 
     cancel(): boolean {
+        this.snapping.clear();
+        this.rotationSnapping = undefined;
+        this.snapPointer = undefined;
+        if(this.selection.cancel()) return true;
         if(!this.drag) return false;
         const drag = this.drag;
         this.restore(drag);
         this.drag = undefined;
         return true;
+    }
+
+    /** Alt changes take effect even while the pointer is stationary. */
+    setSnapBypass(altKey: boolean): void {
+        const pointer = this.snapPointer;
+        if(pointer) this.update({ clientX: pointer.clientX, clientY: pointer.clientY, shiftKey: pointer.shiftKey, altKey });
     }
 
     private roots(): AnyElement[] { return this.editor.selectedSVG?.elements ?? []; }
@@ -185,6 +242,7 @@ interface TransformDrag {
     handle: string;
     element: AnyElement;
     start?: Point;
+    initialStart?: Point;
     bounds?: Bounds;
     origin?: { x: number; y: number };
     initial?: TransformState;
@@ -199,6 +257,7 @@ interface TransformDrag {
     ancestorSnapshots: Array<{ element: AnyElement; transform: TransformState }>;
     ancestorsPinned?: boolean;
     updated?: boolean;
+    rotationDelta?: number;
 }
 
 function cloneTransform(transform: TransformState): TransformState { return { ...transform }; }
@@ -227,18 +286,6 @@ function handlePoint(bounds: Bounds, handle: string): Point {
 
 function nonZeroScale(value: number): number {
     return Math.abs(value) < 0.01 ? (value < 0 ? -0.01 : 0.01) : value;
-}
-
-function findElementChain(elements: AnyElement[], target: AnyElement, chain: AnyElement[] = []): AnyElement[] | undefined {
-    for(const element of elements) {
-        const next = [...chain, element];
-        if(element === target) return next;
-        if("elements" in element) {
-            const found = findElementChain(element.elements, target, next);
-            if(found) return found;
-        }
-    }
-    return undefined;
 }
 
 function resizedBounds(initial: Bounds, handle: string, handlePoint: Point, pivot: Point, point: { x: number; y: number }, constrained: boolean, minimum: number): Bounds {

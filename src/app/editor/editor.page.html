@@ -1,4 +1,4 @@
-<div class="editor-root" suppressPointerMovesDuringPlayback (click)="editor.closeContextMenu()">
+<div editorClipboard class="editor-root" suppressPointerMovesDuringPlayback (click)="editor.closeContextMenu()">
   <div class="storage-warning" *ngIf="projectService.savingWarning">{{ projectService.savingWarning }}</div>
 
   <app-editor-header />
@@ -10,10 +10,16 @@
 
     <!-- Canvas viewport -->
     <app-canvas-workspace #workspace class="view-port">
-      <svg #canvas="svgDisplay" display *ngIf="editor.selectedSVG"></svg>
-      <svg editorOverlay *ngIf="editor.selectedSVG" [artwork]="canvas?.nativeElement" [workspace]="workspace"></svg>
-      <app-canvas-crop *ngIf="editor.selectedSVG && animation.mode == 'edit'" [artwork]="canvas?.nativeElement" [workspace]="workspace" />
-      <app-canvas-guides *ngIf="editor.selectedSVG && animation.mode == 'edit'" [canvas]="canvas?.nativeElement" [workspace]="workspace" />
+      <ng-container *ngIf="editor.selectedSVG">
+        <svg #artwork="svgDisplay" display eyedropperSurface [referenceImage]="reference.display"></svg>
+        <svg editorOverlay [artwork]="artwork.nativeElement" [workspace]="workspace"></svg>
+        <app-canvas-crop *ngIf="animation.mode == 'edit'" [artwork]="artwork.nativeElement" [workspace]="workspace" />
+        <app-reference-overlay *ngIf="animation.mode == 'edit'" [artwork]="artwork.nativeElement" [workspace]="workspace" />
+        <app-shape-building-controls [artwork]="artwork.nativeElement" [workspace]="workspace" />
+        <app-construction-controls [artwork]="artwork.nativeElement" [workspace]="workspace" />
+        <!-- Keep measured rulers in the artwork view; nested embedded views run before SVG host bindings. -->
+        <app-canvas-guides [enabled]="animation.mode == 'edit'" [canvas]="artwork.nativeElement" [workspace]="workspace" />
+      </ng-container>
       <div class="canvas-empty" *ngIf="!editor.selectedSVG">
         <div class="empty-hint">
           <fa-icon icon="plus"></fa-icon>
@@ -34,5 +40,6 @@
   <app-new-project-dialog />
   <app-export-dialog />
   <app-editor-context-menu />
+  <app-eyedropper />
 
 </div>

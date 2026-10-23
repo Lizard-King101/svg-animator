@@ -8,11 +8,12 @@ import { EditorService } from "../../_services/editor.service";
 import { EditorUiStateService } from "../../_services/editor-ui-state.service";
 import { CurrentDocumentSVGImportService } from "../../_services/current-document-svg-import.service";
 import { MAX_SVG_IMPORT_BYTES } from "../../editor/import/svg-importer.service";
+import { ObjectSnapToggleComponent } from '../object-snap-toggle/object-snap-toggle.component';
 
 @Component({
     selector: "app-editor-header",
     standalone: true,
-    imports: [NgClass, NgFor, NgIf, FaIconComponent, RouterLink],
+    imports: [NgClass, NgFor, NgIf, FaIconComponent, RouterLink, ObjectSnapToggleComponent],
     template: `
       <div class="header">
         <div class="function-bar">
@@ -26,6 +27,7 @@ import { MAX_SVG_IMPORT_BYTES } from "../../editor/import/svg-importer.service";
           <div class="function-bar-sep"></div>
           <button class="btn-icon" (click)="mutations.undo()" [disabled]="!editor.selectedSVG?.canUndo" title="Undo (Ctrl+Z)"><fa-icon icon="rotate-left"></fa-icon></button>
           <button class="btn-icon" (click)="mutations.redo()" [disabled]="!editor.selectedSVG?.canRedo" title="Redo (Ctrl+Y)"><fa-icon icon="rotate-right"></fa-icon></button>
+          <app-object-snap-toggle *ngIf="editor.selectedSVG" />
           <div class="function-bar-spacer"></div>
           <div class="mode-toggle" *ngIf="editor.selectedSVG">
             <button [ngClass]="{'active': animation.mode == 'edit'}" (click)="animation.setMode('edit')">Edit</button>

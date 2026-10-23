@@ -1632,7 +1632,7 @@ export class TimelineEditorService implements OnDestroy {
             this.consumeShortcut(event);
             return;
         }
-        if(this.shouldIgnoreShortcut(event)) {
+        if(event.defaultPrevented || this.animation.mode !== 'animate' || this.shouldIgnoreShortcut(event)) {
             return;
         }
 

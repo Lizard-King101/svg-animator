@@ -128,7 +128,7 @@ function groupLocalBounds(group: Group): Bounds {
     return unionBounds(bounds);
 }
 
-function findElementChain(elements: AnyElement[], element: AnyElement, chain: AnyElement[] = []): AnyElement[] | undefined {
+export function findElementChain(elements: AnyElement[], element: AnyElement, chain: AnyElement[] = []): AnyElement[] | undefined {
     for(const candidate of elements) {
         const nextChain = [...chain, candidate];
         if(candidate === element) {

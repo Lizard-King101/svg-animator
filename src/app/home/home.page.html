@@ -6,10 +6,10 @@
       <span>SVG Animator</span>
     </div>
     <div class="header-actions">
-      <input #svgFileInput class="file-input" type="file" accept=".svg,image/svg+xml" (change)="importSVG($event)" />
-      <button class="btn-import" (click)="svgFileInput.click()" [disabled]="importing">
+      <input #projectFileInput class="file-input" type="file" accept=".svg,.json,image/svg+xml,application/json" aria-label="Import SVG or Project JSON" (change)="importFile($event)" />
+      <button class="btn-import" (click)="projectFileInput.click()" [disabled]="importing || loading" title="Import SVG artwork or an exported Project JSON file">
         <fa-icon [icon]="importing ? 'spinner' : 'file-import'" [animation]="importing ? 'spin' : undefined"></fa-icon>
-        {{ importing ? 'Importing…' : 'Import SVG' }}
+        {{ importing ? 'Importing…' : 'Import SVG / Project' }}
       </button>
       <button class="btn-new" (click)="newProject()">
         <fa-icon icon="plus"></fa-icon>
@@ -33,15 +33,24 @@
       <fa-icon icon="spinner" animation="spin"></fa-icon><p>Loading projects…</p>
     </div>
 
-    <div class="import-notice success" *ngIf="importMessage">
+    <div class="import-notice success" role="status" *ngIf="importMessage">
       <fa-icon icon="circle-check"></fa-icon>
       <span>{{ importMessage }}</span>
       <button (click)="importMessage = undefined" title="Dismiss"><fa-icon icon="times"></fa-icon></button>
     </div>
-    <div class="import-notice error" *ngIf="importError">
+    <div class="import-notice error" role="alert" *ngIf="importError">
       <fa-icon icon="triangle-exclamation"></fa-icon>
       <span>{{ importError }}</span>
       <button (click)="importError = undefined" title="Dismiss"><fa-icon icon="times"></fa-icon></button>
+    </div>
+
+    <div class="import-notice deletion-notice" role="status" *ngIf="projectService.lastDeletedProject as deleted">
+      <fa-icon icon="trash"></fa-icon>
+      <span>Deleted “{{ deleted.name }}”.<small>Undo is available until you reload or close this tab.</small></span>
+      <button #undoDeleteButton class="notice-action" type="button" (click)="undoDelete()"
+              [attr.aria-label]="'Undo deletion of ' + deleted.name">
+        Undo{{ projectService.deletedCount > 1 ? ' (' + projectService.deletedCount + ')' : '' }}
+      </button>
     </div>
 
     <div class="gallery-empty" *ngIf="!loading && projects.length === 0">
@@ -59,7 +68,7 @@
           <span class="card-name">{{ project.name }}</span>
           <span class="card-date">{{ project.updatedAt | date: 'MMM d, y' }}</span>
         </div>
-        <button class="card-menu-trigger" type="button" title="Project actions" [attr.aria-label]="'Actions for ' + project.name"
+        <button #projectAction [id]="'project-actions-' + project.id" class="card-menu-trigger" type="button" title="Project actions" [attr.aria-label]="'Actions for ' + project.name"
                 aria-haspopup="menu" [attr.aria-expanded]="openProjectMenuId === project.id"
                 [attr.aria-controls]="'project-menu-' + project.id"
                 (click)="toggleProjectMenu($event, project)">

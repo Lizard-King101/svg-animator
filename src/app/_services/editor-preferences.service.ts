@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { DEFAULT_DRAWING_PAINT, DrawingPaint, normalizeDrawingPaint } from '../editor/objects/drawing-paint';
 
 export type PersistedEditorMode = 'edit' | 'animate';
 
@@ -11,6 +12,8 @@ interface EditorPreferences {
     timelineHeight: number;
     sidePanelWidth: number;
     propertiesPanelRatio: number;
+    objectSnapping: boolean;
+    drawingPaint: DrawingPaint;
 }
 
 export interface CanvasPosition {
@@ -27,11 +30,24 @@ const DEFAULT_PREFERENCES: EditorPreferences = {
     timelineHeight: 310,
     sidePanelWidth: 272,
     propertiesPanelRatio: 0.5,
+    objectSnapping: true,
+    drawingPaint: { ...DEFAULT_DRAWING_PAINT },
 };
 
 @Injectable({ providedIn: 'root' })
 export class EditorPreferencesService {
     private preferences = this.load();
+
+    get drawingPaint(): DrawingPaint { return { ...this.preferences.drawingPaint }; }
+    setDrawingPaint(value: DrawingPaint): void {
+        const drawingPaint = normalizeDrawingPaint(value);
+        if(drawingPaint.fill !== this.preferences.drawingPaint.fill || drawingPaint.stroke !== this.preferences.drawingPaint.stroke) {
+            this.update({ drawingPaint });
+        }
+    }
+
+    get objectSnapping(): boolean { return this.preferences.objectSnapping; }
+    setObjectSnapping(enabled: boolean): void { this.update({ objectSnapping: enabled }); }
 
     get tool(): string {
         return this.preferences.tool;
@@ -128,6 +144,8 @@ export class EditorPreferencesService {
                 : undefined;
             return {
                 version: 1,
+                drawingPaint: normalizeDrawingPaint(saved.drawingPaint),
+                objectSnapping: typeof saved.objectSnapping === 'boolean' ? saved.objectSnapping : true,
                 tool: typeof saved.tool === 'string' && saved.tool ? saved.tool : DEFAULT_PREFERENCES.tool,
                 zoom: typeof saved.zoom === 'number' && Number.isFinite(saved.zoom)
                     ? Math.max(0.05, saved.zoom)

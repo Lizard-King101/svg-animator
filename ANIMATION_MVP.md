@@ -24,7 +24,7 @@ An editor document has two connected layers:
 1. The artwork model owns shapes, paths, text, groups, clipping, gradients, base geometry/styles, and base transform channels.
 2. The animation model targets stable element IDs and property paths without destructively rewriting the artwork.
 
-The persisted document envelope is version 5. Its animation document is version 2:
+The persisted document envelope is version 6. Its animation document is version 2:
 
 ```ts
 interface AnimationDocument {

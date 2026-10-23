@@ -3,6 +3,7 @@ import { EditorService } from "../editor.service";
 
 export class Tool {
     readonly preferenceKey: string = "tool";
+    readonly label?: string;
     icon: IconName = "question-circle";
     get getIcon() {
         if(this.children.length && this.selectedChild) {
@@ -24,11 +25,10 @@ export class Tool {
     select(event: MouseEvent) : void | boolean {
         if(event.button == 2) {
             event.preventDefault();
-            
+
             if(this.children.length) {
                 this.showChildren = true;
             }
-            this.onselect();
             return false;
         }
         if(this.onselect()) {
@@ -56,13 +56,18 @@ export class Tool {
     }
 
     onselect() : boolean {
+        if(this.parentTool) {
+            this.parentTool.deselectOtherChildren(this);
+            this.parentTool.selectedChild = this;
+            this.parentTool.showChildren = false;
+        }
         return true;
     }
 
     deselectOtherChildren(tool: Tool) {
         this.children.forEach((t: Tool) => {
-            if(t != tool) {
-                t.selected = false;
+            if(t != tool && t.selected) {
+                t.deselect();
             }
         })
     }
@@ -84,6 +89,8 @@ export class Tool {
     contextMenu(event: MouseEvent) {}
 
     reset(): void {}
+
+    leave(): void {}
 
     keyPressed(key: string): void {}
 

@@ -1,3 +1,4 @@
+<ng-container *ngIf="enabled">
 <button class="ruler-corner" type="button" [ngClass]="{'locked': editor.selectedSVG?.guidesLocked}"
         (mousedown)="$event.stopPropagation()" (click)="toggleLock($event)"
         [title]="editor.selectedSVG?.guidesLocked ? 'Unlock guides' : 'Lock guides'">
@@ -35,3 +36,4 @@
   <button (click)="cancelInput()" title="Cancel"><fa-icon icon="times"></fa-icon></button>
   <div class="guide-input-error" *ngIf="input.error">{{ input.error }}</div>
 </div>
+</ng-container>

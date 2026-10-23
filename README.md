@@ -14,10 +14,10 @@ A browser-based motion SVG studio for drawing, editing, and keyframe animation.
 - Multi-tab SVG documents with pan + zoom
 - Pen tool — straight segments, bezier curves, open/closed paths
 - Shape tools — rectangle and ellipse with Shift/Alt modifiers
-- Select tool — move elements, drag anchors and bezier handles, convert straight ↔ curve, insert/delete points
+- Select tool — shared multi-selection with Layers, marquee, move/scale/rotate selections, keyboard nudging, anchor and bezier editing, straight ↔ curve conversion, and point insertion/deletion
 - Layers panel — nested groups, clipping, visibility, lock, rename, duplicate, drag-reorder, and delete
-- Properties panel — per-element attributes (stroke, fill, width/height, caps/joins)
-- Project gallery — asynchronous IndexedDB autosave, thumbnail previews, project name + dimensions picker, and resilient localStorage/in-memory fallbacks
+- Properties panel — per-element attributes (stroke, fill, width/height, caps/joins), app-session object copy/paste, alignment to selection/canvas/last selected, and equal-gap spacing
+- Project gallery — asynchronous IndexedDB autosave, thumbnail previews, editable Project JSON import, session Undo for deletion, project name + dimensions picker, and resilient localStorage/in-memory fallbacks
 - SVG import — safe native conversion with full path-command, clipping, and editable gradient support plus opaque preservation
 - Animation workspace — virtualized timeline, speed graph, per-axis keyframe retiming, velocity/influence handles, easing presets, playback, selection, clipboard, and motion paths
 - Publishing — editable Project JSON from project-card actions plus a focused editor export flow for clean Static SVG, Embedded Animation SVG, self-contained Animated SVG, Runtime Assets ZIP, and ready-to-run Web Bundle ZIP
@@ -30,7 +30,7 @@ See [`FEATURES.md`](FEATURES.md) for shipped behavior, [`ANIMATION_GUIDE.md`](AN
 
 ## Product roadmap
 
-Work is ordered around three milestones: SVG import/publishing, deeper native SVG drawing/editing, then expressions/physics/rigging. See [`ROADMAP.md`](ROADMAP.md) and the standards-oriented [`SVG_COMPATIBILITY.md`](SVG_COMPATIBILITY.md).
+The overhaul is grouped around selection/snapping, path editing, motion refinement, animation tools, reusable assets, appearance, project safety, and publishing. Start with handle usability and comfortable scene creation, then precision drawing and animation. See [`ROADMAP.md`](ROADMAP.md) for scope and delivery order and [`SVG_COMPATIBILITY.md`](SVG_COMPATIBILITY.md) for standards coverage.
 
 ---
 

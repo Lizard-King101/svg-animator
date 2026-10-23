@@ -17,7 +17,8 @@ export class LayerCommandService {
     dragTargetLayer?: AnyElement;
     dragTargetPosition?: "before" | "after" | "inside";
     renamingLayer?: AnyElement;
-    selectedLayers: AnyElement[] = [];
+    get selectedLayers(): AnyElement[] { return this.editor.selectedElements; }
+    set selectedLayers(elements: AnyElement[]) { this.editor.selectedElements = elements; }
     private pendingLayerDrag?: { element: AnyElement; pointerId: number; startX: number; startY: number; row: HTMLElement };
     private suppressLayerClick = false;
     private lastSelectedLayer?: AnyElement;
@@ -110,7 +111,6 @@ export class LayerCommandService {
             this.lastSelectedLayer = element;
         }
 
-        this.editor.selectedElement = this.selectedLayers.length == 1 ? this.selectedLayers[0] : undefined;
         this.editor.selectedPathAnchor = undefined;
         this.editor.selectedPathLine = undefined;
         this.editor.selectedPathLines = [];

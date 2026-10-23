@@ -9,6 +9,9 @@
     </select>
   </div>
 
+  <button *ngIf="eyedropper" type="button" class="btn btn-sm btn-secondary eyedropper-button" [disabled]="!eyedropper.available"
+    aria-label="Pick color from artwork or reference" title="Eyedropper · sample artwork or the original reference image" (click)="pickColor($event)">Eyedropper</button>
+
   <div class="rgb" *ngIf="editType == 'rgbs'">
     <input class="range slider" type="range" [(ngModel)]="rgb.r" [min]="0" [max]="255" (input)="updateRGB()">
     <input class="range slider" type="range" [(ngModel)]="rgb.g" [min]="0" [max]="255" (input)="updateRGB()">

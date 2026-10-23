@@ -1,4 +1,10 @@
 import { EditorPage } from "./editor.page";
+import { TestBed } from "@angular/core/testing";
+import { ActivatedRoute, convertToParamMap, provideRouter } from "@angular/router";
+import { ProjectService } from "../_services/project.service";
+import { FaIconLibrary } from "@fortawesome/angular-fontawesome";
+import { fas } from "@fortawesome/free-solid-svg-icons";
+import { far } from "@fortawesome/free-regular-svg-icons";
 
 describe("editor page keyboard shortcuts", () => {
     function setup() {
@@ -22,6 +28,7 @@ describe("editor page keyboard shortcuts", () => {
             deleteSelectedLayers: jasmine.createSpy("deleteSelectedLayers"),
         };
         const page = new EditorPage(
+            {} as any,
             editor as any,
             { mode: "edit" } as any,
             {} as any,
@@ -30,6 +37,7 @@ describe("editor page keyboard shortcuts", () => {
             { activeDialog: undefined } as any,
             {} as any,
             {} as any,
+            { handleKey: () => false } as any,
         );
         return { editor, layers, page, selectedElement };
     }
@@ -77,5 +85,45 @@ describe("editor page keyboard shortcuts", () => {
 
         expect(event.preventDefault).toHaveBeenCalled();
         expect(layers.deleteLayer).toHaveBeenCalledOnceWith(selectedElement);
+    });
+
+    it('leaves Enter and Space with focused action buttons', () => {
+        const { page, editor, layers } = setup();
+        const button = document.createElement('button');
+        const enter = keyEvent('Enter', button);
+        page.handleKeyDown(enter);
+        page.handleKeyDown(keyEvent(' ', button));
+        expect(enter.preventDefault).not.toHaveBeenCalled();
+        expect(layers.renamingLayer).toBeUndefined();
+        expect(editor.keyPressed).not.toHaveBeenCalled();
+    });
+});
+
+describe('new project canvas lifecycle', () => {
+    it('opens the initial dialog and creates sibling artwork/overlays without late binding changes', async () => {
+        await TestBed.configureTestingModule({ imports: [EditorPage], providers: [
+            provideRouter([]),
+            { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({}) } } },
+            { provide: ProjectService, useValue: { get: () => undefined, upsert: () => undefined } },
+        ] }).compileComponents();
+        TestBed.inject(FaIconLibrary).addIconPacks(fas, far);
+        const fixture = TestBed.createComponent(EditorPage);
+        fixture.detectChanges();
+        expect(() => fixture.checkNoChanges()).not.toThrow();
+        const root = fixture.nativeElement as HTMLElement;
+        expect(root.querySelector('.dialog-overlay')).not.toBeNull();
+        (root.querySelector('.btn-create') as HTMLButtonElement).click();
+        fixture.detectChanges();
+        expect(() => fixture.checkNoChanges()).not.toThrow();
+        const artwork = root.querySelector('svg[display]')!;
+        expect(artwork).not.toBeNull();
+        expect(root.querySelector('svg[editorOverlay]')?.parentElement).toBe(artwork.parentElement);
+        expect(root.querySelector('.dialog-overlay')).toBeNull();
+        fixture.componentInstance.animation.setMode('animate'); fixture.detectChanges();
+        expect(root.querySelector('.canvas-ruler')).toBeNull();
+        fixture.componentInstance.animation.setMode('edit'); fixture.detectChanges();
+        expect(root.querySelector('.canvas-ruler')).not.toBeNull();
+        expect(() => fixture.checkNoChanges()).not.toThrow();
+        fixture.destroy();
     });
 });

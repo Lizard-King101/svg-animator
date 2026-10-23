@@ -8,6 +8,7 @@
   </header>
 
   <color *ngIf="!gradient" [ngModel]="solid" (ngModelChange)="setSolidColor($event)"></color>
+  <app-project-colors *ngIf="!gradient" [value]="solid.serialized" (colorSelected)="useProjectColor($event)" />
 
   <ng-container *ngIf="gradient as currentGradient">
     <div class="paint-ramp-wrap">
@@ -51,6 +52,7 @@
                (ngModelChange)="setStopNumber('offset', $event)" />
       </label>
       <color [ngModel]="stop.color" (ngModelChange)="setStopColor($event)"></color>
+      <app-project-colors [value]="stop.color.serialized" (colorSelected)="useProjectColor($event)" />
     </div>
 
     <button class="paint-add-stop" type="button" *ngIf="capabilities.stopStructure" (click)="addStop()">Add Stop</button>

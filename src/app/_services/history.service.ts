@@ -41,6 +41,7 @@ export class HistoryService {
     private captureSelection(editor: EditorService): HistorySelection {
         return {
             elementId: editor.selectedElement?.id,
+            elementIds: editor.selectedElements?.map((element) => element.id),
             anchorId: editor.selectedPathAnchor?.id,
             lineId: editor.selectedPathLine?.id,
             lineIds: editor.selectedPathLines.map((line) => line.id),
@@ -51,7 +52,12 @@ export class HistoryService {
         const element = selection.elementId
             ? this.findElement(editor.selectedSVG?.elements ?? [], selection.elementId)
             : undefined;
-        editor.selectedElement = element;
+        if(selection.elementIds) {
+            editor.selectedElements = selection.elementIds.flatMap((id) => {
+                const found = this.findElement(editor.selectedSVG?.elements ?? [], id);
+                return found ? [found] : [];
+            });
+        } else editor.selectedElement = element;
         editor.activeElement = undefined;
         if(element instanceof Path) {
             const lines = element.contours.flatMap((contour) => contour.lines);
@@ -78,6 +84,7 @@ export class HistoryService {
 }
 
 interface HistorySelection {
+    elementIds?: string[];
     elementId?: string;
     anchorId?: string;
     lineId?: string;

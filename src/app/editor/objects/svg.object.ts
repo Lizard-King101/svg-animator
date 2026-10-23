@@ -1,3 +1,5 @@
+import { ReferenceImage, restoreReferenceImage } from './reference-image';
+import { ProjectColor, restoreProjectColors } from './project-colors';
 import { EditorService } from "src/app/_services/editor.service";
 import { Group, GroupSave } from "./elements/group.object";
 import { Path, PathSave } from "./elements/path.object";
@@ -25,6 +27,7 @@ export interface ImportedSourceNode {
 }
 
 export interface SVGSave {
+    projectColors?: ProjectColor[];
     id: string;
     name: string;
     elements: ElementSave[];
@@ -32,6 +35,7 @@ export interface SVGSave {
     guides?: CanvasGuide[];
     guidesLocked?: boolean;
     importedSourceNodes?: ImportedSourceNode[];
+    referenceImage?: ReferenceImage;
     width: number;
     height: number;
     viewBoxX?: number;
@@ -39,6 +43,7 @@ export interface SVGSave {
 }
 
 export class SVG {
+    projectColors: ProjectColor[] = [];
     id: string;
     name?: string;
     elements: AnyElement[] = [];
@@ -47,6 +52,7 @@ export class SVG {
     guides: CanvasGuide[] = [];
     guidesLocked = false;
     importedSourceNodes: ImportedSourceNode[] = [];
+    referenceImage?: ReferenceImage;
     width: number;
     height: number;
     viewBoxX = 0;
@@ -93,6 +99,8 @@ export class SVG {
             ? save.guides.map(restoreGuide).filter((guide): guide is CanvasGuide => !!guide)
             : [];
         svg.guidesLocked = !!save.guidesLocked;
+        svg.referenceImage = restoreReferenceImage(save.referenceImage);
+        svg.projectColors = restoreProjectColors(save.projectColors);
         svg.importedSourceNodes = restoreImportedSourceNodes(save.importedSourceNodes);
         (svg as any)._past = [sharedSnapshot(svg.save())];
         (svg as any)._future = [];
@@ -103,6 +111,7 @@ export class SVG {
 
     save(): SVGSave {
         return {
+            projectColors: this.projectColors.length ? this.projectColors.map(color => ({ ...color })) : undefined,
             id: this.id,
             name: this.name ?? '',
             elements: this.elements.map((e) => e.save()) as ElementSave[],
@@ -114,6 +123,7 @@ export class SVG {
             })),
             guidesLocked: this.guidesLocked,
             importedSourceNodes: this.importedSourceNodes.map((node) => ({ ...node })),
+            referenceImage: this.referenceImage ? { ...this.referenceImage } : undefined,
             width: this.width,
             height: this.height,
             viewBoxX: this.viewBoxX || undefined,
@@ -146,6 +156,8 @@ export class SVG {
             : [];
         this.guidesLocked = !!snap.guidesLocked;
         this.importedSourceNodes = restoreImportedSourceNodes(snap.importedSourceNodes);
+        this.referenceImage = restoreReferenceImage(snap.referenceImage);
+        this.projectColors = restoreProjectColors(snap.projectColors);
     }
 
     // ── History ────────────────────────────────────────────────────
@@ -169,13 +181,16 @@ export class SVG {
     redo() {
         if (!this.canRedo) return;
         const snap = this._future.pop()!;
-        this._past.push(sharedSnapshot(this.save(), this._past[this._past.length - 1]));
+        this._past.push(snap);
         this.restore(snapshotSave(snap));
     }
 }
 
 interface SharedSection<T> { value: T; serialized: string; bytes: number; }
 interface SharedHistorySnapshot {
+    projectColors: SharedSection<SVGSave['projectColors']>;
+    referenceSource: SharedSection<string | undefined>;
+    referencePlacement: SharedSection<Omit<ReferenceImage, "source"> | undefined>;
     identity: SharedSection<Pick<SVGSave, "id" | "name" | "width" | "height" | "viewBoxX" | "viewBoxY">>;
     artwork: SharedSection<Pick<SVGSave, "elements" | "importedSourceNodes">>;
     animation: SharedSection<SVGSave["animation"]>;
@@ -183,7 +198,11 @@ interface SharedHistorySnapshot {
 }
 
 function sharedSnapshot(save: SVGSave, previous?: SharedHistorySnapshot): SharedHistorySnapshot {
+    const { source, ...placement } = save.referenceImage ?? {} as ReferenceImage;
     return {
+        projectColors: shareSection(save.projectColors, previous?.projectColors),
+        referenceSource: shareSection(source, previous?.referenceSource),
+        referencePlacement: shareSection(save.referenceImage ? placement : undefined, previous?.referencePlacement),
         identity: shareSection({ id: save.id, name: save.name, width: save.width, height: save.height, viewBoxX: save.viewBoxX, viewBoxY: save.viewBoxY }, previous?.identity),
         artwork: shareSection({ elements: save.elements, importedSourceNodes: save.importedSourceNodes }, previous?.artwork),
         animation: shareSection(save.animation, previous?.animation),
@@ -192,22 +211,25 @@ function sharedSnapshot(save: SVGSave, previous?: SharedHistorySnapshot): Shared
 }
 
 function shareSection<T>(value: T, previous?: SharedSection<T>): SharedSection<T> {
-    const serialized = JSON.stringify(value);
+    const serialized = JSON.stringify(value) ?? 'undefined';
     if(previous?.serialized === serialized) return previous;
     return { value, serialized, bytes: new Blob([serialized]).size };
 }
 
 function sameSnapshot(a: SharedHistorySnapshot, b: SharedHistorySnapshot): boolean {
-    return a.identity === b.identity && a.artwork === b.artwork && a.animation === b.animation && a.guides === b.guides;
+    return a.projectColors === b.projectColors && a.referenceSource === b.referenceSource && a.referencePlacement === b.referencePlacement && a.identity === b.identity && a.artwork === b.artwork && a.animation === b.animation && a.guides === b.guides;
 }
 
 function snapshotSave(snapshot: SharedHistorySnapshot): SVGSave {
-    return { ...snapshot.identity.value, ...snapshot.artwork.value, animation: snapshot.animation.value, ...snapshot.guides.value };
+    return { projectColors: snapshot.projectColors.value, referenceImage: snapshot.referencePlacement.value && snapshot.referenceSource.value ? { ...snapshot.referencePlacement.value, source: snapshot.referenceSource.value } : undefined, ...snapshot.identity.value, ...snapshot.artwork.value, animation: snapshot.animation.value, ...snapshot.guides.value };
 }
 
 function uniqueSectionBytes(snapshots: readonly SharedHistorySnapshot[]): number {
     const sections = new Set<SharedSection<unknown>>();
     snapshots.forEach((snapshot) => {
+        sections.add(snapshot.projectColors);
+        sections.add(snapshot.referenceSource);
+        sections.add(snapshot.referencePlacement);
         sections.add(snapshot.identity as SharedSection<unknown>);
         sections.add(snapshot.artwork as SharedSection<unknown>);
         sections.add(snapshot.animation as SharedSection<unknown>);

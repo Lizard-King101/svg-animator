@@ -1,0 +1,22 @@
+{
+  "kind": "svg-animator/document",
+  "version": 6,
+  "data": {
+    "id": "reference-fixture",
+    "name": "Tracing reference",
+    "width": 800,
+    "height": 600,
+    "elements": [],
+    "referenceImage": {
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7cAAAAASUVORK5CYII=",
+      "name": "reference.png",
+      "x": 100,
+      "y": 0,
+      "width": 600,
+      "height": 600,
+      "opacity": 0.4,
+      "locked": true,
+      "visible": true
+    }
+  }
+}

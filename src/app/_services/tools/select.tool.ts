@@ -3,7 +3,7 @@ import { Line } from "src/app/editor/objects/line.object";
 import { Path, PathContour } from "src/app/editor/objects/elements/path.object";
 import { Point } from "src/app/editor/objects/point.object";
 import { AnyElement } from "src/app/editor/objects/svg.object";
-import { combinedMatrixFor, pinAncestorTransformOrigins, pinTransformOrigin } from "src/app/editor/objects/element-bounds";
+import { combinedMatrixFor, findElementChain, pinAncestorTransformOrigins, pinTransformOrigin } from "src/app/editor/objects/element-bounds";
 import { applyMatrix, invertMatrix } from "src/app/editor/objects/transform.object";
 import { EditorService } from "../editor.service";
 import { Tool } from "./tool";
@@ -11,6 +11,8 @@ import { contourForLine, deletePathAnchor, insertPathPoint, togglePathLineType }
 import { TransformInteraction } from "./transform.interaction";
 import { elementGradient, GradientHandle, moveGradientHandle } from "src/app/editor/objects/gradient-geometry";
 import { GradientPaint } from "src/app/editor/objects/paint.object";
+import { MarqueeInteraction } from "./marquee.interaction";
+import { PathAnchorInteraction } from './path-anchor.interaction';
 
 export class SelectTool extends Tool {
     override readonly preferenceKey = "select";
@@ -22,17 +24,25 @@ export class SelectTool extends Tool {
 
     moveStart?: Point;
     movingPoint?: Point;
-    movingPointRole?: 'anchor' | 'control-start' | 'control-end' | 'anchor-convert';
+    movingPointRole?: 'control-start' | 'control-end' | 'anchor-convert';
     movingLine?: Line;
     movingLines?: Line[];
     convertingIncomingLine?: Line;
     convertingOutgoingLine?: Line;
     private readonly transformInteraction: TransformInteraction;
+    private readonly marquee: MarqueeInteraction;
+    private readonly anchorInteraction: PathAnchorInteraction;
+    get pointSnapFeedback() { return this.anchorInteraction.feedback; }
+    get marqueeBounds() { return this.marquee.bounds; }
+    get snapFeedback() { return this.transformInteraction.snapFeedback; }
+    get rotationSnapFeedback() { return this.transformInteraction.rotationSnapFeedback; }
     private gradientDrag?: { element: AnyElement; paint: GradientPaint; handle: GradientHandle };
 
     constructor(private _editor: EditorService) {
         super(_editor);
         this.transformInteraction = new TransformInteraction(_editor);
+        this.marquee = new MarqueeInteraction(_editor);
+        this.anchorInteraction = new PathAnchorInteraction(_editor);
     }
 
     private clonePoint(point: Point) {
@@ -72,23 +82,6 @@ export class SelectTool extends Tool {
         const inverse = invertMatrix(combinedMatrixFor(this.rootElements(), this._editor.selectedElement));
         const local = applyMatrix(inverse, point.x, point.y);
         return new Point(local.x, local.y);
-    }
-
-    private moveAnchor(path: Path, anchor: Point, delta: Point) {
-        const moved: Point[] = [anchor];
-        anchor.addTo(delta);
-
-        this.allLines(path).forEach((line) => {
-            if(line.points[0] == anchor && line.controlStart && !moved.includes(line.controlStart)) {
-                line.controlStart.addTo(delta);
-                moved.push(line.controlStart);
-            }
-
-            if(line.points[1] == anchor && line.controlEnd && !moved.includes(line.controlEnd)) {
-                line.controlEnd.addTo(delta);
-                moved.push(line.controlEnd);
-            }
-        });
     }
 
     private mirroredHandle(anchor: Point, handle: Point) {
@@ -232,9 +225,16 @@ export class SelectTool extends Tool {
     }
 
     override down(event: MouseEvent) {
+        this.movedElement = false;
+        this.canDeselect = false;
         let target = <HTMLElement>event.target;
         const canvasPoint = this._editor.toCanvasPoint(event.clientX, event.clientY);
         this.moveStart = canvasPoint;
+
+        if((event.shiftKey || event.ctrlKey || event.metaKey) && target.dataset['segmentId'] && this._editor.selectedElement) {
+            this._editor.selectedElements = [];
+            return;
+        }
 
         const gradientHandle = this.findGradientHandle(target);
         const selectedGradient = this._editor.selectedElement ? elementGradient(this._editor.selectedElement, this._editor.selectedGradientPaintKey) : undefined;
@@ -248,7 +248,8 @@ export class SelectTool extends Tool {
         }
 
         const transformHandle = this.transformInteraction.handle(target);
-        if(transformHandle && this.transformInteraction.begin(transformHandle, event)) {
+        const modifyingSelection = event.shiftKey || event.ctrlKey || event.metaKey;
+        if(transformHandle && !(transformHandle === 'move' && modifyingSelection) && this.transformInteraction.begin(transformHandle, event)) {
             this.canDeselect = false;
             this._editor.selectedPathAnchor = undefined;
             this._editor.selectedPathLine = undefined;
@@ -258,12 +259,19 @@ export class SelectTool extends Tool {
 
         const overlayPoint = this.findOverlayPoint(target);
         if(overlayPoint) {
+            if(overlayPoint.role === 'anchor' && !(event.altKey || this._editor.keysDown['Alt']) && this._editor.selectedElement instanceof Path) {
+                this.anchorInteraction.begin(this._editor.selectedElement, overlayPoint.point, canvasPoint);
+                this._editor.selectedPathAnchor = overlayPoint.point;
+                this._editor.selectedPathLine = undefined;
+                this._editor.selectedPathLines = [];
+                return;
+            }
             if(this._editor.selectedElement) {
                 pinAncestorTransformOrigins(this.rootElements(), this._editor.selectedElement);
                 pinTransformOrigin(this._editor.selectedElement);
             }
             this.moveStart = this.canvasToSelectedLocal(canvasPoint);
-            if(overlayPoint.role == 'anchor' && this._editor.keysDown['Alt'] && this._editor.selectedElement instanceof Path) {
+            if(overlayPoint.role == 'anchor' && this._editor.selectedElement instanceof Path) {
                 this.movingPoint = overlayPoint.point;
                 this.movingPointRole = 'anchor-convert';
                 this.convertingIncomingLine = this.findIncomingLine(this._editor.selectedElement, overlayPoint.point);
@@ -276,9 +284,10 @@ export class SelectTool extends Tool {
             }
 
             this.movingPoint = overlayPoint.point;
+            if(overlayPoint.role === 'anchor') return;
             this.movingPointRole = overlayPoint.role;
             this.movingLine = overlayPoint.line;
-            this._editor.selectedPathAnchor = overlayPoint.role == 'anchor' ? overlayPoint.point : undefined;
+            this._editor.selectedPathAnchor = undefined;
             this._editor.selectedPathLine = overlayPoint.line;
             this._editor.selectedPathLines = [];
             this.canDeselect = false;
@@ -303,27 +312,47 @@ export class SelectTool extends Tool {
             return;
         }
 
-        // Walk up in case the click landed on a child element (e.g. tspan inside text)
-        let idTarget: HTMLElement | null = target;
-        while (idTarget && !idTarget.id) {
-            idTarget = idTarget.parentElement;
-        }
-
-        if(idTarget?.id) {
-            let foundElement = this._editor.findElement(idTarget.id);
-            if(foundElement && !foundElement.locked && foundElement.visible) {
-                this._editor.selectedElement = foundElement;
-                this._editor.selectedPathAnchor = undefined;
-                this._editor.selectedPathLine = undefined;
-                this._editor.selectedPathLines = [];
-                this.transformInteraction.begin("move", event);
+        const foundElement = this.elementAt(event, transformHandle === 'move' && modifyingSelection);
+        if(foundElement) {
+            const selected = this._editor.selectedElements ?? (this._editor.selectedElement ? [this._editor.selectedElement] : []);
+            const selectedAncestor = findElementChain(this.rootElements(), foundElement)?.find((element) => selected.includes(element));
+            if(modifyingSelection) {
+                const toggled = selectedAncestor ?? foundElement;
+                this._editor.selectedElements = selected.includes(toggled)
+                    ? selected.filter((element) => element !== toggled) : [...selected, toggled];
+                return;
             }
+            if(!selectedAncestor) this._editor.selectedElement = foundElement;
+            this.transformInteraction.begin('move', event);
+        } else if(this._editor.selectedElements) {
+            this.marquee.begin(event);
         } else {
-            this.canDeselect = true;
+            this.canDeselect = true; // Legacy tool hosts without shared selection.
         }
     }
 
+    private elementAt(event: MouseEvent, underneathOverlay: boolean): AnyElement | undefined {
+        const targets = underneathOverlay ? document.elementsFromPoint(event.clientX, event.clientY) : [event.target as Element];
+        for(const target of targets) {
+            let current: Element | null = target;
+            while(current) {
+                const found = current.id ? this._editor.findElement(current.id) : undefined;
+                if(found) {
+                    const chain = findElementChain(this.rootElements(), found);
+                    return chain?.every((element) => element.visible && !element.locked) ? found : undefined;
+                }
+                current = current.parentElement;
+            }
+        }
+        return undefined;
+    }
+
     override drag(event: MouseEvent) {
+        if(this.marquee.update(event)) return;
+        if(this.anchorInteraction.update(this._editor.toCanvasPoint(event.clientX, event.clientY), event.altKey)) {
+            this.movedElement = true;
+            return;
+        }
         if(this.gradientDrag && this._editor.selectedElement === this.gradientDrag.element) {
             const point = this.canvasToSelectedLocal(this._editor.toCanvasPoint(event.clientX, event.clientY));
             if(moveGradientHandle(this.gradientDrag.element, this.gradientDrag.paint, this.gradientDrag.handle, point)) {
@@ -372,8 +401,6 @@ export class SelectTool extends Tool {
                         );
                     }
                 }
-            } else if(this.movingPointRole == 'anchor') {
-                this.moveAnchor(this._editor.selectedElement, this.movingPoint, delta);
             } else {
                 this.movingPoint.addTo(delta);
 
@@ -413,7 +440,9 @@ export class SelectTool extends Tool {
     }
 
     override up(event: MouseEvent) {
+        if(this.marquee.end()) return;
         this.transformInteraction.end();
+        this.anchorInteraction.end();
         this.gradientDrag = undefined;
         this.movingPoint = undefined;
         this.movingPointRole = undefined;
@@ -432,7 +461,9 @@ export class SelectTool extends Tool {
     }
 
     override reset(): void {
+        this.marquee.cancel();
         this.transformInteraction.cancel();
+        this.anchorInteraction.cancel();
         this.gradientDrag = undefined;
         this.movingPoint = undefined;
         this.movingLines = undefined;
@@ -533,6 +564,9 @@ export class SelectTool extends Tool {
     }
 
     override keyPressed(key: string): void {
+        if(key === 'Alt') { this.transformInteraction.setSnapBypass(true); this.anchorInteraction.setBypass(true); }
+        if(key === 'Escape' && this.anchorInteraction.cancel()) return;
+        if(key === 'Escape' && this.marquee.cancel()) return;
         if(key === 'Escape' && this.transformInteraction.cancel()) {
             this.movedElement = false;
             this.canDeselect = false;
@@ -562,5 +596,9 @@ export class SelectTool extends Tool {
                 }
                 break;
         }
+    }
+
+    override keyReleased(key: string): void {
+        if(key === 'Alt') { this.transformInteraction.setSnapBypass(false); this.anchorInteraction.setBypass(false); }
     }
 }

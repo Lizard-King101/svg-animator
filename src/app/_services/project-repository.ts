@@ -15,6 +15,7 @@ export interface ProjectRepository {
     readonly kind: "indexeddb" | "localstorage" | "memory";
     readonly persistent: boolean;
     initialize(): Promise<void>;
+    hasSavedProjects(): Promise<boolean>;
     list(): Promise<RepositoryProjectRecord[]>;
     get(id: string): Promise<RepositoryProjectRecord | null>;
     put(record: RepositoryProjectRecord, thumbnailChanged: boolean): Promise<void>;
@@ -35,6 +36,10 @@ export class IndexedDbProjectRepository implements ProjectRepository {
     async initialize(): Promise<void> {
         this.database = await openDatabase();
         await this.migrateLegacyOnce();
+    }
+
+    async hasSavedProjects(): Promise<boolean> {
+        return !!(await readOne<{ value: boolean }>(this.requireDatabase(), "meta", "projectHistory"))?.value;
     }
 
     async list(): Promise<RepositoryProjectRecord[]> {
@@ -58,8 +63,9 @@ export class IndexedDbProjectRepository implements ProjectRepository {
 
     async put(record: RepositoryProjectRecord, thumbnailChanged: boolean): Promise<void> {
         const db = this.requireDatabase();
-        const stores = thumbnailChanged ? ["projects", "documents", "thumbnails"] : ["projects", "documents"];
+        const stores = thumbnailChanged ? ["projects", "documents", "thumbnails", "meta"] : ["projects", "documents", "meta"];
         const transaction = db.transaction(stores, "readwrite");
+        transaction.objectStore("meta").put({ key: "projectHistory", value: true });
         transaction.objectStore("projects").put(metadataOf(record));
         transaction.objectStore("documents").put({ id: record.id, revision: record.revision, document: createDocumentEnvelope(record.svgData) });
         if(thumbnailChanged) transaction.objectStore("thumbnails").put({ id: record.id, revision: record.revision, thumbnail: record.thumbnail });
@@ -67,7 +73,8 @@ export class IndexedDbProjectRepository implements ProjectRepository {
     }
 
     async remove(id: string): Promise<void> {
-        const transaction = this.requireDatabase().transaction(["projects", "documents", "thumbnails"], "readwrite");
+        const transaction = this.requireDatabase().transaction(["projects", "documents", "thumbnails", "meta"], "readwrite");
+        transaction.objectStore("meta").put({ key: "projectHistory", value: true });
         transaction.objectStore("projects").delete(id);
         transaction.objectStore("documents").delete(id);
         transaction.objectStore("thumbnails").delete(id);
@@ -98,6 +105,7 @@ export class IndexedDbProjectRepository implements ProjectRepository {
         });
         transaction.objectStore("meta").put({ key: "legacyMigrationComplete", value: true });
         transaction.objectStore("meta").put({ key: "databaseVersion", value: DB_VERSION });
+        if(migrated?.status === 'ok') transaction.objectStore("meta").put({ key: "projectHistory", value: true });
         await transactionDone(transaction);
         if(raw != null && localStorage.getItem(`${this.legacyStorageKey}:legacy-backup-v1`) == null) {
             try { localStorage.setItem(`${this.legacyStorageKey}:legacy-backup-v1`, raw); } catch {}
@@ -114,6 +122,7 @@ export class LocalStorageProjectRepository implements ProjectRepository {
     readonly kind = "localstorage" as const;
     readonly persistent = true;
     constructor(private storageKey: string) {}
+    async hasSavedProjects(): Promise<boolean> { return localStorage.getItem(this.storageKey) != null; }
     async initialize(): Promise<void> {
         void localStorage.length;
         const raw = localStorage.getItem(this.storageKey);
@@ -147,11 +156,18 @@ export class LocalStorageProjectRepository implements ProjectRepository {
 export class MemoryProjectRepository implements ProjectRepository {
     readonly kind = "memory" as const;
     readonly persistent = false;
-    constructor(private records: RepositoryProjectRecord[] = []) {}
+    private records: RepositoryProjectRecord[];
+    private saved: boolean;
+    constructor(records?: RepositoryProjectRecord[]) {
+        this.records = records ?? [];
+        this.saved = records != null;
+    }
     async initialize(): Promise<void> {}
-    async list(): Promise<RepositoryProjectRecord[]> { return this.records; }
+    async hasSavedProjects(): Promise<boolean> { return this.saved; }
+    async list(): Promise<RepositoryProjectRecord[]> { return [...this.records]; }
     async get(id: string): Promise<RepositoryProjectRecord | null> { return this.records.find((record) => record.id === id) ?? null; }
     async put(record: RepositoryProjectRecord): Promise<void> {
+        this.saved = true;
         const index = this.records.findIndex((candidate) => candidate.id === record.id);
         if(index >= 0) this.records[index] = record; else this.records.unshift(record);
     }
@@ -159,7 +175,7 @@ export class MemoryProjectRepository implements ProjectRepository {
         const record = await this.get(id);
         if(record) record.thumbnail = thumbnail;
     }
-    async remove(id: string): Promise<void> { this.records = this.records.filter((record) => record.id !== id); }
+    async remove(id: string): Promise<void> { this.saved = true; this.records = this.records.filter((record) => record.id !== id); }
 }
 
 export async function createResilientProjectRepository(storageKey: string): Promise<ProjectRepository> {

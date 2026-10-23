@@ -1,4 +1,5 @@
-import { AfterViewInit, Component, ElementRef, HostBinding } from "@angular/core";
+import { ReferenceImage } from '../../editor/objects/reference-image';
+import { AfterViewInit, Component, ElementRef, HostBinding, Input } from "@angular/core";
 import { NgFor, NgIf, NgTemplateOutlet } from "@angular/common";
 import { EditorService } from "src/app/_services/editor.service";
 import { Group } from "src/app/editor/objects/elements/group.object";
@@ -21,6 +22,7 @@ import { drawProgressVisible, effectiveStrokeAlignment, StrokeAlignment, strokeD
     styles: ':host { user-select: none; }'
 })
 export class SVGDisplay implements AfterViewInit {
+    @Input() referenceImage?: ReferenceImage;
     get nativeElement(): SVGElement { return this.host.nativeElement; }
 
     @HostBinding('attr.width') get width() { return this.editor.selectedSVG?.width }

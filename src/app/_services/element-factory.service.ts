@@ -5,7 +5,7 @@ import { Shape } from "../editor/objects/elements/shape.object";
 import { TextElement } from "../editor/objects/elements/text.object";
 import { Line } from "../editor/objects/line.object";
 import { Point } from "../editor/objects/point.object";
-import { AnyElement } from "../editor/objects/svg.object";
+import { AnyElement, SVG, SVGSave } from "../editor/objects/svg.object";
 import { EditorService } from "./editor.service";
 import { clonePaint } from "../editor/objects/paint.object";
 
@@ -17,6 +17,12 @@ import { clonePaint } from "../editor/objects/paint.object";
 @Injectable()
 export class ElementFactory {
     constructor(private editor: EditorService) {}
+
+    restoreDocument(save: SVGSave): SVG {
+        return SVG.fromSave(save, this.editor);
+    }
+
+    createPath(): Path { return new Path(this.editor); }
 
     createGroup(): Group {
         return new Group(this.editor);

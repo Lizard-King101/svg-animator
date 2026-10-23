@@ -1,0 +1,30 @@
+<section *ngIf="animation.mode === 'edit'" aria-label="Selection actions">
+  <div class="clipboard-actions" aria-label="Object clipboard">
+    <button type="button" [disabled]="!clipboard.canCopy" (click)="clipboard.copy()" title="Copy objects within this app (Ctrl/Cmd+C)">Copy</button>
+    <button type="button" [disabled]="!clipboard.canPaste" (click)="clipboard.paste()" title="Paste objects with an offset (Ctrl/Cmd+V)">Paste</button>
+    <button type="button" [disabled]="!clipboard.canPaste" (click)="clipboard.paste(true)" title="Paste at original canvas coordinates (Ctrl/Cmd+Shift+V)">In place</button>
+  </div>
+  <div class="arrangement" *ngIf="editor.selectedElements.length">
+    <label class="reference" title="Align geometric bounds; excludes strokes and effects">Align to
+      <select aria-label="Alignment reference" [ngModel]="arrangement.effectiveReference" (ngModelChange)="arrangement.reference = $event" [disabled]="arrangement.count < 2">
+        <option value="selection">Selection</option>
+        <option value="canvas">Canvas</option>
+        <option value="last">Last selected</option>
+      </select>
+    </label>
+    <div class="alignment-actions" aria-label="Align objects">
+      <button type="button" [disabled]="!arrangement.available" (click)="arrangement.align('left')" title="Align left edges">Left</button>
+      <button type="button" [disabled]="!arrangement.available" (click)="arrangement.align('centerX')" title="Align horizontal centers">Center X</button>
+      <button type="button" [disabled]="!arrangement.available" (click)="arrangement.align('right')" title="Align right edges">Right</button>
+      <button type="button" [disabled]="!arrangement.available" (click)="arrangement.align('top')" title="Align top edges">Top</button>
+      <button type="button" [disabled]="!arrangement.available" (click)="arrangement.align('centerY')" title="Align vertical centers">Center Y</button>
+      <button type="button" [disabled]="!arrangement.available" (click)="arrangement.align('bottom')" title="Align bottom edges">Bottom</button>
+    </div>
+    <div class="distribution-actions" aria-label="Equal gaps within selection">
+      <button type="button" [disabled]="!arrangement.available || arrangement.count < 3" (click)="arrangement.distribute('x')" title="Equal horizontal gaps; keeps outer objects fixed (3+ objects)">Space X</button>
+      <button type="button" [disabled]="!arrangement.available || arrangement.count < 3" (click)="arrangement.distribute('y')" title="Equal vertical gaps; keeps outer objects fixed (3+ objects)">Space Y</button>
+    </div>
+    <p *ngIf="!arrangement.available" class="hint">Show and unlock layers, and detach motion paths, to arrange this selection.</p>
+  </div>
+  <p *ngIf="clipboard.message" role="status" class="hint">{{ clipboard.message }}</p>
+</section>

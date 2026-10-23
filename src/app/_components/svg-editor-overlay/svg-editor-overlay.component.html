@@ -1,14 +1,18 @@
-<ng-container *ngIf="selectionBox(editor.selectedElement) as box">
+<svg:polygon *ngFor="let outline of selectionOutlines()" [attr.points]="outline.points"
+    fill="none" stroke="var(--accent)" stroke-width="1" opacity="0.55" pointer-events="none" />
+
+<ng-container *ngIf="selectedBox() as box">
     <svg:polygon
-        data-transform-handle="move"
+        class="selection-move"
+        [attr.data-transform-handle]="box.canMove ? 'move' : null"
         [attr.points]="box.points"
         fill="rgba(45, 212, 191, 0.025)"
         stroke="#2dd4bf"
         [attr.stroke-width]="screenPx(1.25)"
         [attr.stroke-dasharray]="screenDash(5, 4)"
-        pointer-events="all"
-    />
-    <svg:line
+        [attr.pointer-events]="box.canMove ? (box.multiple ? 'stroke' : 'all') : 'none'"
+    ><svg:title>Move selection</svg:title></svg:polygon>
+    <svg:line *ngIf="box.canRotate"
         [attr.x1]="box.topCenter.x"
         [attr.y1]="box.topCenter.y"
         [attr.x2]="box.rotate.x"
@@ -19,19 +23,29 @@
     />
 </ng-container>
 
-<ng-container *ngIf="editor.selectedElement?.visible && !editor.selectedElement?.locked && asPath(editor.selectedElement) as selectedPath">
+<ng-container *ngIf="asPath(editableElement) as selectedPath">
     <svg:g [attr.transform]="projectedTransform(selectedPath)">
-        <ng-container *ngFor="let segment of completeSegments(selectedPath)">
+        <svg:g class="path-segment" *ngFor="let segment of completeSegments(selectedPath)" [class.selected]="segmentSelected(segment)">
             <svg:path
+                class="segment-hit"
                 [attr.data-segment-id]="segment.id"
                 [attr.d]="segmentPath(selectedPath, segment)"
                 fill="none"
-                [attr.stroke]="segmentSelected(segment) ? '#2dd4bf' : 'transparent'"
-                [attr.stroke-width]="screenPx(segmentSelected(segment) ? 2.5 : 12)"
+                stroke="transparent"
+                [attr.stroke-width]="screenPx(12)"
                 vector-effect="non-scaling-stroke"
                 pointer-events="stroke"
+            ><svg:title>Move path segment · double-click to select contour</svg:title></svg:path>
+            <svg:path
+                class="segment-highlight"
+                [attr.d]="segmentPath(selectedPath, segment)"
+                fill="none"
+                stroke="var(--accent)"
+                [attr.stroke-width]="screenPx(2.5)"
+                vector-effect="non-scaling-stroke"
+                pointer-events="none"
             />
-        </ng-container>
+        </svg:g>
     </svg:g>
 
     <ng-container *ngFor="let segment of bezierSegments(selectedPath)">
@@ -58,8 +72,10 @@
     </ng-container>
 </ng-container>
 
-<ng-container *ngIf="selectionBox(editor.selectedElement) as box">
+<ng-container *ngIf="selectedBox() as box">
     <svg:circle
+        *ngIf="box.canRotate"
+        class="editor-handle rotation-handle"
         data-transform-handle="rotate"
         [attr.cx]="box.rotate.x"
         [attr.cy]="box.rotate.y"
@@ -68,8 +84,10 @@
         stroke="#2dd4bf"
         [attr.stroke-width]="screenPx(1.5)"
         pointer-events="all"
-    />
+    ><svg:title>Rotate selection</svg:title></svg:circle>
     <svg:circle
+        *ngIf="box.showOrigin"
+        class="editor-handle origin-handle"
         data-transform-handle="origin"
         [attr.cx]="box.pivot.x"
         [attr.cy]="box.pivot.y"
@@ -78,9 +96,11 @@
         stroke="#14141a"
         [attr.stroke-width]="screenPx(1.5)"
         pointer-events="all"
-    />
+    ><svg:title>Move transform origin</svg:title></svg:circle>
     <ng-container *ngFor="let handle of box.handles">
         <svg:rect
+            class="editor-handle"
+            [style.cursor]="handle.cursor"
             [attr.data-transform-handle]="handle.role"
             [attr.x]="handle.x - screenPx(4)"
             [attr.y]="handle.y - screenPx(4)"
@@ -90,13 +110,14 @@
             stroke="#2dd4bf"
             [attr.stroke-width]="screenPx(1.25)"
             pointer-events="all"
-        />
+        ><svg:title>{{ box.multiple ? 'Scale selection proportionally' : 'Resize ' + handle.role.toUpperCase() }}</svg:title></svg:rect>
     </ng-container>
 </ng-container>
 
-<ng-container *ngIf="editor.selectedElement?.visible && !editor.selectedElement?.locked && asPath(editor.selectedElement) as selectedPath">
+<ng-container *ngIf="asPath(editableElement) as selectedPath">
     <ng-container *ngFor="let segment of bezierSegments(selectedPath)">
         <svg:circle
+            class="editor-handle point-handle"
             data-point-role="control-start"
             [attr.data-point-id]="segment.line.controlStart?.id"
             [attr.data-line-id]="segment.line.id"
@@ -107,8 +128,9 @@
             stroke="#2dd4bf"
             [attr.stroke-width]="screenPx(1.5)"
             pointer-events="all"
-        />
+        ><svg:title>Move Bézier control · Alt to move independently</svg:title></svg:circle>
         <svg:circle
+            class="editor-handle point-handle"
             data-point-role="control-end"
             [attr.data-point-id]="segment.line.controlEnd?.id"
             [attr.data-line-id]="segment.line.id"
@@ -119,11 +141,13 @@
             stroke="#2dd4bf"
             [attr.stroke-width]="screenPx(1.5)"
             pointer-events="all"
-        />
+        ><svg:title>Move Bézier control · Alt to move independently</svg:title></svg:circle>
     </ng-container>
 
     <ng-container *ngFor="let anchor of pathAnchors(selectedPath)">
         <svg:circle
+            class="editor-handle point-handle anchor-handle"
+            [class.selected]="editor.selectedPathAnchor == anchor.point"
             data-point-role="anchor"
             [attr.data-point-id]="anchor.point.id"
             [attr.cx]="anchor.x"
@@ -133,29 +157,36 @@
             [attr.stroke]="editor.selectedPathAnchor == anchor.point ? '#2dd4bf' : '#dddde8'"
             [attr.stroke-width]="screenPx(1.5)"
             pointer-events="all"
-        />
+        ><svg:title>Move anchor · Alt-drag to adjust curve handles</svg:title></svg:circle>
     </ng-container>
 </ng-container>
 
-<ng-container *ngIf="editor.selectedElement?.visible && !editor.selectedElement?.locked && gradient(editor.selectedElement) as gradientGeometry">
+<ng-container *ngIf="editableElement && gradient(editableElement) as gradientGeometry">
     <ng-container *ngIf="gradientGeometry.kind == 'linear'">
         <svg:line [attr.x1]="gradientGeometry.start?.x" [attr.y1]="gradientGeometry.start?.y" [attr.x2]="gradientGeometry.end?.x" [attr.y2]="gradientGeometry.end?.y"
             stroke="#f59e0b" [attr.stroke-width]="screenPx(1.5)" pointer-events="none" />
-        <svg:circle data-gradient-handle="start" [attr.cx]="gradientGeometry.start?.x" [attr.cy]="gradientGeometry.start?.y"
-            [attr.r]="screenPx(5)" fill="#14141a" stroke="#f59e0b" [attr.stroke-width]="screenPx(2)" pointer-events="all" />
-        <svg:circle data-gradient-handle="end" [attr.cx]="gradientGeometry.end?.x" [attr.cy]="gradientGeometry.end?.y"
-            [attr.r]="screenPx(5)" fill="#f59e0b" stroke="#14141a" [attr.stroke-width]="screenPx(1.5)" pointer-events="all" />
+        <svg:circle class="editor-handle gradient-handle" data-gradient-handle="start" [attr.cx]="gradientGeometry.start?.x" [attr.cy]="gradientGeometry.start?.y"
+            [attr.r]="screenPx(5)" fill="#14141a" stroke="#f59e0b" [attr.stroke-width]="screenPx(2)" pointer-events="all"><svg:title>Move gradient start</svg:title></svg:circle>
+        <svg:circle class="editor-handle gradient-handle" data-gradient-handle="end" [attr.cx]="gradientGeometry.end?.x" [attr.cy]="gradientGeometry.end?.y"
+            [attr.r]="screenPx(5)" fill="#f59e0b" stroke="#14141a" [attr.stroke-width]="screenPx(1.5)" pointer-events="all"><svg:title>Move gradient end</svg:title></svg:circle>
     </ng-container>
     <ng-container *ngIf="gradientGeometry.kind == 'radial'">
         <svg:line [attr.x1]="gradientGeometry.center?.x" [attr.y1]="gradientGeometry.center?.y" [attr.x2]="gradientGeometry.radius?.x" [attr.y2]="gradientGeometry.radius?.y"
             stroke="#f59e0b" [attr.stroke-width]="screenPx(1.5)" pointer-events="none" />
         <svg:line [attr.x1]="gradientGeometry.center?.x" [attr.y1]="gradientGeometry.center?.y" [attr.x2]="gradientGeometry.focal?.x" [attr.y2]="gradientGeometry.focal?.y"
             stroke="#f59e0b" [attr.stroke-width]="screenPx(1)" [attr.stroke-dasharray]="screenDash(3, 3)" pointer-events="none" />
-        <svg:circle data-gradient-handle="center" [attr.cx]="gradientGeometry.center?.x" [attr.cy]="gradientGeometry.center?.y"
-            [attr.r]="screenPx(5)" fill="#14141a" stroke="#f59e0b" [attr.stroke-width]="screenPx(2)" pointer-events="all" />
-        <svg:circle data-gradient-handle="radius" [attr.cx]="gradientGeometry.radius?.x" [attr.cy]="gradientGeometry.radius?.y"
-            [attr.r]="screenPx(5)" fill="#f59e0b" stroke="#14141a" [attr.stroke-width]="screenPx(1.5)" pointer-events="all" />
-        <svg:circle data-gradient-handle="focal" [attr.cx]="gradientGeometry.focal?.x" [attr.cy]="gradientGeometry.focal?.y"
-            [attr.r]="screenPx(4)" fill="#ffffff" stroke="#f59e0b" [attr.stroke-width]="screenPx(1.5)" pointer-events="all" />
+        <svg:circle class="editor-handle gradient-handle" data-gradient-handle="center" [attr.cx]="gradientGeometry.center?.x" [attr.cy]="gradientGeometry.center?.y"
+            [attr.r]="screenPx(5)" fill="#14141a" stroke="#f59e0b" [attr.stroke-width]="screenPx(2)" pointer-events="all"><svg:title>Move gradient center</svg:title></svg:circle>
+        <svg:circle class="editor-handle gradient-handle" data-gradient-handle="radius" [attr.cx]="gradientGeometry.radius?.x" [attr.cy]="gradientGeometry.radius?.y"
+            [attr.r]="screenPx(5)" fill="#f59e0b" stroke="#14141a" [attr.stroke-width]="screenPx(1.5)" pointer-events="all"><svg:title>Adjust gradient radius</svg:title></svg:circle>
+        <svg:circle class="editor-handle gradient-handle" data-gradient-handle="focal" [attr.cx]="gradientGeometry.focal?.x" [attr.cy]="gradientGeometry.focal?.y"
+            [attr.r]="screenPx(4)" fill="#ffffff" stroke="#f59e0b" [attr.stroke-width]="screenPx(1.5)" pointer-events="all"><svg:title>Move gradient focal point</svg:title></svg:circle>
     </ng-container>
 </ng-container>
+
+<svg:rect *ngIf="marqueeBox() as box" [attr.x]="box.x" [attr.y]="box.y"
+    [attr.width]="box.width" [attr.height]="box.height" fill="rgba(45, 212, 191, 0.1)"
+    stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 3" pointer-events="none" />
+
+<!-- Feedback sits above controls without intercepting their pointer targets. -->
+<svg:g snapFeedbackOverlay *ngIf="snapDisplay() as display" [display]="display" />

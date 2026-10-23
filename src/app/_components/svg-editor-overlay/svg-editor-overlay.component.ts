@@ -1,3 +1,4 @@
+import { ConstructionTool } from '../../_services/tools/construction.tool';
 import { NgFor, NgIf } from "@angular/common";
 import { Component, HostBinding, Input } from "@angular/core";
 import { EditorService } from "../../_services/editor.service";
@@ -11,13 +12,18 @@ import { Point } from "../../editor/objects/point.object";
 import { AnyElement } from "../../editor/objects/svg.object";
 import { applyMatrix, Bounds, Matrix, matrixToSvg, multiplyMatrix, transformedBounds } from "../../editor/objects/transform.object";
 import type { CanvasWorkspaceComponent } from "../canvas-workspace/canvas-workspace.component";
+import { SelectTool } from "../../_services/tools/select.tool";
+import { selectionFrame, selectionRoots } from "../../editor/selection";
 import { CropTool } from "../../_services/tools/crop.tool";
+import { SnapFeedbackOverlayComponent, projectMoveSnapFeedback, projectPointSnapFeedback, projectEdgeRotationFeedback } from '../snap-feedback-overlay/snap-feedback-overlay.component';
+import { PenTool } from '../../_services/tools/pen.tool';
 
 @Component({
     selector: "svg[editorOverlay]",
     standalone: true,
-    imports: [NgFor, NgIf],
+    imports: [NgFor, NgIf, SnapFeedbackOverlayComponent],
     templateUrl: "svg-editor-overlay.component.html",
+    styleUrl: "svg-editor-overlay.component.scss",
 })
 export class SVGEditorOverlayComponent {
     @Input({ required: true }) artwork?: SVGElement;
@@ -32,6 +38,13 @@ export class SVGEditorOverlayComponent {
 
     constructor(public editor: EditorService) {}
 
+    get editableElement(): AnyElement | undefined {
+        if(this.editor.selectedTool && !(this.editor.selectedTool instanceof SelectTool)) return undefined;
+        const element = this.editor.selectedElement;
+        const svg = this.editor.selectedSVG;
+        return element && svg && selectionRoots(svg, [element]).length ? element : undefined;
+    }
+
     asPath(element: unknown): Path | null { return element instanceof Path ? element : null; }
 
     screenPx(px: number): number { return px; }
@@ -45,32 +58,56 @@ export class SVGEditorOverlayComponent {
     selectionBox(element?: AnyElement): SelectionBox | null {
         const matrix = element ? this.elementToWorkspaceMatrix(element) : undefined;
         if(!element || !matrix || !element.visible || element.locked) return null;
+        if(this.editor.selectedSVG && !selectionRoots(this.editor.selectedSVG, [element]).length) return null;
         const bounds = localBounds(element);
         const origin = resolvedOrigin(element);
-        const corners = {
-            nw: applyMatrix(matrix, bounds.x, bounds.y),
-            n: applyMatrix(matrix, bounds.x + bounds.width / 2, bounds.y),
-            ne: applyMatrix(matrix, bounds.x + bounds.width, bounds.y),
-            e: applyMatrix(matrix, bounds.x + bounds.width, bounds.y + bounds.height / 2),
-            se: applyMatrix(matrix, bounds.x + bounds.width, bounds.y + bounds.height),
-            s: applyMatrix(matrix, bounds.x + bounds.width / 2, bounds.y + bounds.height),
-            sw: applyMatrix(matrix, bounds.x, bounds.y + bounds.height),
-            w: applyMatrix(matrix, bounds.x, bounds.y + bounds.height / 2),
-        };
-        const center = applyMatrix(matrix, bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-        return {
-            points: `${corners.nw.x},${corners.nw.y} ${corners.ne.x},${corners.ne.y} ${corners.se.x},${corners.se.y} ${corners.sw.x},${corners.sw.y}`,
-            topCenter: corners.n,
-            rotate: rotationHandle(corners.nw, corners.ne, corners.n, center, 34),
-            pivot: applyMatrix(matrix, origin.x, origin.y),
-            handles: [
-                { role: "nw", ...corners.nw }, { role: "n", ...corners.n }, { role: "ne", ...corners.ne },
-                { role: "e", ...corners.e }, { role: "se", ...corners.se }, { role: "s", ...corners.s },
-                { role: "sw", ...corners.sw }, { role: "w", ...corners.w },
-            ].filter((handle) => (bounds.width > 0.000001 || !/[ew]/.test(handle.role))
-                && (bounds.height > 0.000001 || !/[ns]/.test(handle.role))),
-            hitBounds: transformedBounds(bounds, matrix),
-        };
+        return projectSelectionBox(bounds, origin, matrix);
+    }
+
+    selectedBox(): SelectionBox | null {
+        if(this.editor.selectedTool && !(this.editor.selectedTool instanceof SelectTool)) return null;
+        if((this.editor.selectedElements?.length ?? 0) < 2) return this.selectionBox(this.editor.selectedElement);
+        const svg = this.editor.selectedSVG;
+        const projection = this.canvasToWorkspaceMatrix();
+        const frame = svg && selectionFrame(svg, this.editor.selectedElements);
+        if(!frame || !projection) return null;
+        const bounds = frame.bounds;
+        const box = projectSelectionBox(bounds, { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 },
+            multiplyMatrix(projection, frame.matrix));
+        box.handles = frame.canTransform ? box.handles.filter((handle) => handle.role.length === 2) : [];
+        box.showOrigin = false;
+        box.canRotate = frame.canTransform && frame.canRotate;
+        box.canMove = frame.canTransform;
+        box.multiple = true;
+        return box;
+    }
+
+    selectionOutlines(): SelectionBox[] {
+        return (this.editor.selectedElements?.length ?? 0) > 1
+            ? this.editor.selectedElements.map((element) => this.selectionBox(element)).filter((box): box is SelectionBox => !!box) : [];
+    }
+
+    marqueeBox(): Bounds | undefined {
+        const bounds = this.editor.selectedTool instanceof SelectTool ? this.editor.selectedTool.marqueeBounds : undefined;
+        const matrix = this.canvasToWorkspaceMatrix();
+        return bounds && matrix ? transformedBounds(bounds, matrix) : undefined;
+    }
+
+    snapDisplay() {
+        if(!this.editor.objectSnapping) return undefined;
+        const tool = this.editor.selectedTool;
+        const feedback = tool instanceof SelectTool ? tool.snapFeedback : undefined;
+        const rotation = tool instanceof SelectTool ? tool.rotationSnapFeedback : undefined;
+        const active = tool?.selectedChild ?? tool;
+        const point = active instanceof SelectTool || active instanceof PenTool || active instanceof ConstructionTool
+            ? active.pointSnapFeedback : undefined;
+        const matrix = this.canvasToWorkspaceMatrix();
+        const viewport = this.workspace?.element.getBoundingClientRect();
+        if(!matrix || !viewport) return undefined;
+        // Leave room for the rulers so feedback stays readable near workspace edges.
+        const bounds = { x: 24, y: 24, width: viewport.width - 24, height: viewport.height - 24 };
+        return rotation ? projectEdgeRotationFeedback(rotation, matrix, bounds)
+            : point ? projectPointSnapFeedback(point, matrix, bounds) : feedback ? projectMoveSnapFeedback(feedback, matrix, bounds) : undefined;
     }
 
     pathAnchors(path: Path): ProjectedPoint[] {
@@ -124,25 +161,31 @@ export class SVGEditorOverlayComponent {
     }
 
     private elementToWorkspaceMatrix(element: AnyElement): Matrix | undefined {
+        const matrix = this.canvasToWorkspaceMatrix();
+        const svg = this.editor.selectedSVG;
+        return svg && matrix ? multiplyMatrix(matrix, combinedMotionAdjustedMatrixFor(svg, element)) : undefined;
+    }
+
+    private canvasToWorkspaceMatrix(): Matrix | undefined {
         const svg = this.editor.selectedSVG;
         const artwork = this.artwork;
         const workspace = this.workspace?.element;
         if(!svg || !artwork || !workspace) return undefined;
-        const projection = canvasToWorkspaceProjection(
-            artwork.getBoundingClientRect(),
-            workspace.getBoundingClientRect(),
-            svg.canvasBounds ?? { x: 0, y: 0, width: svg.width, height: svg.height },
-        );
-        return multiplyMatrix(projection.canvasToWorkspace, combinedMotionAdjustedMatrixFor(svg, element));
+        return canvasToWorkspaceProjection(artwork.getBoundingClientRect(), workspace.getBoundingClientRect(),
+            svg.canvasBounds ?? { x: 0, y: 0, width: svg.width, height: svg.height }).canvasToWorkspace;
     }
 }
 
 export interface SelectionBox {
+    canMove: boolean;
+    canRotate: boolean;
+    showOrigin: boolean;
+    multiple: boolean;
     points: string;
     topCenter: { x: number; y: number };
     rotate: { x: number; y: number };
     pivot: { x: number; y: number };
-    handles: Array<{ role: string; x: number; y: number }>;
+    handles: Array<{ role: string; x: number; y: number; cursor: string }>;
     hitBounds: Bounds;
 }
 
@@ -158,6 +201,15 @@ export interface ProjectedBezierSegment {
     end: { x: number; y: number };
     controlStart: { x: number; y: number };
     controlEnd: { x: number; y: number };
+}
+
+/** Resize cursors follow the projected axes, including parent transforms and reflection. */
+function resizeCursor(matrix: Matrix, role: string): string {
+    const x = role.includes("e") ? 1 : role.includes("w") ? -1 : 0;
+    const y = role.includes("s") ? 1 : role.includes("n") ? -1 : 0;
+    const angle = Math.atan2(matrix.b * x + matrix.d * y, matrix.a * x + matrix.c * y);
+    const direction = ((Math.round(angle / (Math.PI / 4)) % 4) + 4) % 4;
+    return ["ew-resize", "nwse-resize", "ns-resize", "nesw-resize"][direction];
 }
 
 function rotationHandle(
@@ -180,4 +232,33 @@ function rotationHandle(
         normalY *= -1;
     }
     return { x: topCenter.x + normalX * distance, y: topCenter.y + normalY * distance };
+}
+
+function projectSelectionBox(bounds: Bounds, origin: { x: number; y: number }, matrix: Matrix): SelectionBox {
+    const corners = {
+        nw: applyMatrix(matrix, bounds.x, bounds.y),
+        n: applyMatrix(matrix, bounds.x + bounds.width / 2, bounds.y),
+        ne: applyMatrix(matrix, bounds.x + bounds.width, bounds.y),
+        e: applyMatrix(matrix, bounds.x + bounds.width, bounds.y + bounds.height / 2),
+        se: applyMatrix(matrix, bounds.x + bounds.width, bounds.y + bounds.height),
+        s: applyMatrix(matrix, bounds.x + bounds.width / 2, bounds.y + bounds.height),
+        sw: applyMatrix(matrix, bounds.x, bounds.y + bounds.height),
+        w: applyMatrix(matrix, bounds.x, bounds.y + bounds.height / 2),
+    };
+    const center = applyMatrix(matrix, bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    return {
+        canMove: true, canRotate: true, showOrigin: true, multiple: false,
+        points: `${corners.nw.x},${corners.nw.y} ${corners.ne.x},${corners.ne.y} ${corners.se.x},${corners.se.y} ${corners.sw.x},${corners.sw.y}`,
+        topCenter: corners.n,
+        rotate: rotationHandle(corners.nw, corners.ne, corners.n, center, 34),
+        pivot: applyMatrix(matrix, origin.x, origin.y),
+        handles: [
+            { role: "nw", ...corners.nw }, { role: "n", ...corners.n }, { role: "ne", ...corners.ne },
+            { role: "e", ...corners.e }, { role: "se", ...corners.se }, { role: "s", ...corners.s },
+            { role: "sw", ...corners.sw }, { role: "w", ...corners.w },
+        ].filter((handle) => (bounds.width > 0.000001 || !/[ew]/.test(handle.role))
+            && (bounds.height > 0.000001 || !/[ns]/.test(handle.role)))
+            .map((handle) => ({ ...handle, cursor: resizeCursor(matrix, handle.role) })),
+        hitBounds: transformedBounds(bounds, matrix),
+    };
 }

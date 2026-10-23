@@ -1,4 +1,14 @@
-import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, HostListener, ViewChild, ViewEncapsulation } from "@angular/core";
+import { ShapeBuildingService } from '../_services/shape-building.service';
+import { ProjectColorsService } from '../_services/project-colors.service';
+import { EyedropperService } from '../_services/eyedropper.service';
+import { EyedropperComponent, EyedropperSurfaceDirective } from '../_components/eyedropper/eyedropper.component';
+import { ShapeBuildingControlsComponent } from '../_components/shape-building-controls/shape-building-controls.component';
+import { ConstructionDrawingService } from '../_services/construction-drawing.service';
+import { ConstructionControlsComponent } from '../_components/construction-controls/construction-controls.component';
+import { EditorClipboardDirective } from './editor-clipboard.directive';
+import { ReferenceImageService } from '../_services/reference-image.service';
+import { ReferenceOverlayComponent } from '../_components/reference-image/reference-overlay.component';
+import { AfterViewInit, ChangeDetectorRef, Component, HostListener, OnInit, ViewEncapsulation } from "@angular/core";
 import { NgIf } from "@angular/common";
 import { ActivatedRoute } from "@angular/router";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
@@ -30,6 +40,9 @@ import { PlaybackPointerGuardDirective } from "./playback-pointer-guard.directiv
 import { CanvasCropComponent } from "../_components/canvas-crop/canvas-crop.component";
 import { CanvasCropService } from "../_services/canvas-crop.service";
 import { AnimationTrackCleanupService } from "../_services/animation-track-cleanup.service";
+import { CanvasSelectionCommandService } from "../_services/canvas-selection-command.service";
+import { ObjectClipboardCommandService } from "../_services/object-clipboard-command.service";
+import { SelectionArrangementService } from "../_services/selection-arrangement.service";
 
 @Component({
     standalone: true,
@@ -49,6 +62,12 @@ import { AnimationTrackCleanupService } from "../_services/animation-track-clean
         SVGEditorOverlayComponent,
         PlaybackPointerGuardDirective,
         CanvasCropComponent,
+        ReferenceOverlayComponent,
+        ConstructionControlsComponent,
+        ShapeBuildingControlsComponent,
+        EditorClipboardDirective,
+        EyedropperComponent,
+        EyedropperSurfaceDirective,
     ],
     providers: [
         EditorService,
@@ -56,6 +75,8 @@ import { AnimationTrackCleanupService } from "../_services/animation-track-clean
         AnimationPlaybackService,
         AnimationGestureService,
         DocumentMutationService,
+        ProjectColorsService,
+        EyedropperService,
         ElementFactory,
         LayerOperationsService,
         LayerCommandService,
@@ -64,15 +85,21 @@ import { AnimationTrackCleanupService } from "../_services/animation-track-clean
         CurrentDocumentSVGImportService,
         CanvasCropService,
         AnimationTrackCleanupService,
+        CanvasSelectionCommandService,
+        ObjectClipboardCommandService,
+        SelectionArrangementService,
+        ReferenceImageService,
+        ConstructionDrawingService,
+        ShapeBuildingService,
     ],
     templateUrl: 'editor.page.html',
     styleUrls: ['editor.page.scss'],
     encapsulation: ViewEncapsulation.None,
 })
-export class EditorPage implements AfterViewInit {
-    @ViewChild("canvas", { read: ElementRef }) canvas?: ElementRef<SVGElement>;
+export class EditorPage implements OnInit, AfterViewInit {
 
     @HostListener('document:keydown', ['$event']) handleKeyDown(event: KeyboardEvent) {
+        if(event.defaultPrevented) return;
         if(this.ui.activeDialog) {
             if(event.key == 'Escape') this.ui.closeDialog();
             return;
@@ -91,6 +118,12 @@ export class EditorPage implements AfterViewInit {
         if(isEditableEventTarget(event.target)) {
             return;
         }
+
+        // Focused controls keep native Enter/Space activation instead of renaming a layer.
+        if((event.key === 'Enter' || event.key === ' ') && event.target instanceof Element
+            && event.target.closest('button, a, [role="button"]')) return;
+
+        if(!this.layers.renamingLayer && this.selectionCommands.handleKey(event)) return;
 
         if((event.ctrlKey || event.metaKey) && !this.layers.renamingLayer) {
             if(event.key.toLowerCase() == 'z' && !event.shiftKey) {
@@ -160,6 +193,7 @@ export class EditorPage implements AfterViewInit {
     }
 
     constructor(
+        public reference: ReferenceImageService,
         public editor: EditorService,
         public animation: AnimationPlaybackService,
         public mutations: DocumentMutationService,
@@ -167,11 +201,16 @@ export class EditorPage implements AfterViewInit {
         public layers: LayerCommandService,
         public ui: EditorUiStateService,
         private route: ActivatedRoute,
-        private cdr: ChangeDetectorRef
+        private cdr: ChangeDetectorRef,
+        private selectionCommands: CanvasSelectionCommandService,
     ) {}
 
+    ngOnInit(): void {
+        if(!this.route.snapshot.queryParamMap.get('id')) this.ui.openDialog('new-project');
+    }
+
     async ngAfterViewInit() {
-        // Load project from query params, or auto-open new-project dialog
+        // Load after the workspace exists so restored artwork is centered in its viewport.
         const params = this.route.snapshot.queryParamMap;
         const projectId = params.get('id');
         if (projectId) {
@@ -182,8 +221,6 @@ export class EditorPage implements AfterViewInit {
                 this.mutations.resetBaseline();
             }
             this.cdr.detectChanges();
-        } else {
-            this.ui.openDialog("new-project");
         }
     }
 

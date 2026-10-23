@@ -5,6 +5,7 @@ import { GradientPresetService } from "../../_services/gradient-preset.service";
 import { cloneColor, Color } from "../../editor/objects/color.object";
 import { GradientPaint, GradientStop, gradientStopOpacity, isGradientPaint, Paint } from "../../editor/objects/paint.object";
 import { ColorAttribute } from "../attributes/color/color.component";
+import { ProjectColorsComponent } from '../project-colors/project-colors.component';
 import {
     FULL_PAINT_EDITOR_CAPABILITIES,
     PaintEditorCapabilities,
@@ -14,7 +15,7 @@ import {
 @Component({
     selector: "app-paint-editor",
     standalone: true,
-    imports: [FormsModule, NgFor, NgIf, ColorAttribute],
+    imports: [FormsModule, NgFor, NgIf, ColorAttribute, ProjectColorsComponent],
     templateUrl: "paint-editor.component.html",
     styleUrls: ["paint-editor.component.scss"],
     changeDetection: ChangeDetectionStrategy.OnPush,
@@ -58,6 +59,11 @@ export class PaintEditorComponent implements OnChanges {
 
     setSolidColor(color: Color): void {
         this.paintChange.emit({ type: "solid-color", color: cloneColor(color) });
+    }
+
+    useProjectColor(value: string): void {
+        if(this.gradient) this.setStopColor(new Color(value));
+        else this.setSolidColor(new Color(value));
     }
 
     selectStop(stop: GradientStop): void { this.selectedStopId = stop.id; }

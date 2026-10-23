@@ -1,4 +1,9 @@
+import { Paths } from '../../_services/tools/paths.tool';
+import { PenTool } from '../../_services/tools/pen.tool';
+import { Component } from "@angular/core";
+import { TestBed } from "@angular/core/testing";
 import { EditorService } from "../../_services/editor.service";
+import { SelectTool } from "../../_services/tools/select.tool";
 import { canvasToWorkspaceProjection } from "../../editor/canvas-workspace-projection";
 import { Group } from "../../editor/objects/elements/group.object";
 import { Path } from "../../editor/objects/elements/path.object";
@@ -11,7 +16,60 @@ import { SVG } from "../../editor/objects/svg.object";
 import { applyMatrix, multiplyMatrix } from "../../editor/objects/transform.object";
 import { SVGEditorOverlayComponent } from "./svg-editor-overlay.component";
 
+@Component({
+    standalone: true,
+    imports: [SVGEditorOverlayComponent],
+    template: `<svg editorOverlay [artwork]="artwork" [workspace]="workspace"
+        style="position:fixed;left:0;top:0;width:600px;height:400px;pointer-events:none;z-index:2147483647"></svg>`,
+})
+class OverlayTestHost {
+    artwork?: SVGElement;
+    workspace?: SVGEditorOverlayComponent["workspace"];
+}
+
 describe("viewport SVG editor overlay", () => {
+    it('keeps selected-object hit handles out of drawing and trim tools', () => {
+        const { editor, svg, overlay } = setup();
+        const path = new Path(editor); path.lines = [new Line(editor, { points: [new Point(0, 0), new Point(20, 20)] })];
+        svg.elements = [path]; editor.selectedElement = path;
+        editor.selectedTool = new Paths(editor);
+        expect(overlay.selectedBox()).toBeNull(); expect(overlay.editableElement).toBeUndefined();
+    });
+    it('projects snap feedback from the active pen inside the Paths group', () => {
+        const { editor, overlay } = setup();
+        Object.defineProperty(editor, 'objectSnapping', { value: true });
+        const paths = new Paths(editor);
+        editor.selectedTool = paths;
+        const pen = paths.selectedChild as PenTool;
+        spyOnProperty(pen, 'pointSnapFeedback').and.returnValue({
+            target: { id: 'tangent', point: { x: 20, y: 30 }, kind: 'tangent', label: 'Tangent' },
+        });
+        expect(overlay.snapDisplay()?.marker).toEqual({ x: 140, y: 110, kind: 'tangent' });
+        paths.selectedChild = paths.children[1];
+        expect(overlay.snapDisplay()).toBeUndefined();
+    });
+
+    it("orients resize cursors with the displayed axes, including nested rotation and reflection", () => {
+        const { editor, svg, overlay } = setup();
+        const group = new Group(editor);
+        const shape = new Shape(editor, {
+            type: "rectangle", position: new Point(10, 20), width: 100, height: 20,
+        });
+        group.elements = [shape];
+        svg.elements = [group];
+        const cursor = (role: string) => overlay.selectionBox(shape)!.handles.find((handle) => handle.role === role)!.cursor;
+
+        expect(cursor("e")).toBe("ew-resize");
+        expect(cursor("n")).toBe("ns-resize");
+        expect(cursor("nw")).toBe("nwse-resize");
+        group.transform.rotation = 90;
+        expect(cursor("e")).toBe("ns-resize");
+        expect(cursor("n")).toBe("ew-resize");
+        expect(cursor("nw")).toBe("nesw-resize");
+        shape.transform.scaleX = -1;
+        expect(cursor("nw")).toBe("nwse-resize");
+    });
+
     it("projects nested, scaled, reflected, and rotated selection geometry", () => {
         const { editor, svg, overlay } = setup();
         const group = new Group(editor);
@@ -111,6 +169,57 @@ describe("viewport SVG editor overlay", () => {
         expect(geometry.start!.y).toBeCloseTo(applyMatrix(matrix, 10, 20).y, 8);
         expect(geometry.end!.x).toBeCloseTo(applyMatrix(matrix, 50, 40).x, 8);
         expect(geometry.end!.y).toBeCloseTo(applyMatrix(matrix, 50, 40).y, 8);
+    });
+});
+
+describe("overlay segment interaction", () => {
+    afterEach(() => TestBed.resetTestingModule());
+
+    it("keeps the full hit area across zoom and selection changes, including outside the artboard", () => {
+        const { editor, svg, overlay } = setup();
+        editor.keysDown = {};
+        let zoom = 2;
+        editor.toCanvasPoint = (pointOrX: Point | number, y?: number) => {
+            const point = typeof pointOrX === "number" ? new Point(pointOrX, y!) : pointOrX;
+            return new Point((point.x - 100) / zoom, (point.y - 50) / zoom);
+        };
+        const path = new Path(editor);
+        const line = new Line(editor, { points: [new Point(10, -20), new Point(80, -20)] });
+        path.lines = [line];
+        svg.elements = [path];
+        editor.selectedElement = path;
+        TestBed.configureTestingModule({
+            imports: [OverlayTestHost],
+            providers: [{ provide: EditorService, useValue: editor }],
+        });
+        const fixture = TestBed.createComponent(OverlayTestHost);
+        fixture.componentInstance.artwork = overlay.artwork;
+        fixture.componentInstance.workspace = overlay.workspace;
+        fixture.detectChanges();
+
+        // Five CSS pixels from the off-artboard segment is inside the hit
+        // stroke but outside the visible selected stroke at every zoom.
+        const tool = new SelectTool(editor);
+        for(zoom of [0.5, 1, 2]) {
+            (overlay.artwork!.getBoundingClientRect as jasmine.Spy).and.returnValue(rect(120, 80, 100 * zoom, 100 * zoom));
+            for(const selected of [false, true]) {
+                editor.selectedPathLine = selected ? line : undefined;
+                editor.selectedPathLines = selected ? [line] : [];
+                fixture.detectChanges();
+                const clientX = 100 + 60 * zoom;
+                const clientY = 50 - 20 * zoom + 5;
+                const target = document.elementFromPoint(clientX, clientY)!;
+                expect(target?.getAttribute("data-segment-id")).toBe(line.id);
+                const event = new MouseEvent("mousedown", { clientX, clientY });
+                Object.defineProperty(event, "target", { value: target });
+                tool.down(event);
+                expect(tool.movingLines).toEqual([line]);
+                tool.up(new MouseEvent("mouseup"));
+            }
+        }
+        expect(line.points[0].y).toBe(-20);
+        expect(line.points[1].y).toBe(-20);
+        fixture.destroy();
     });
 });
 

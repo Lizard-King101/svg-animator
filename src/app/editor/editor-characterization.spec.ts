@@ -55,6 +55,50 @@ function documentWithPath(): { editor: EditorService; svg: SVG; path: Path } {
 }
 
 describe("editor model characterization", () => {
+    it("rounds every corner of an implicit closed contour consistently through save, export, and stroke conversion", () => {
+        const { editor, svg, path } = documentWithPath();
+        const points = [new Point(0, 0), new Point(100, 0), new Point(100, 100), new Point(0, 100)];
+        path.lines = points.slice(1).map((point, i) => line(editor, points[i], point)); path.closed = true;
+        const baseline = path.save(); svg.snapshot();
+        expect(points.every(point => path.cornerEligible(point))).toBeTrue();
+        expect(path.save()).toEqual(baseline); // Topology queries must not add persisted edges.
+        points.forEach(point => point.cornerRadius = 12);
+        const rounded = path.raw, saved = path.save();
+        expect(rounded.match(/C /g)?.length).toBe(4); expect(rounded.startsWith('M 12 0')).toBeTrue();
+        expect(rounded.endsWith('12 0 Z')).toBeTrue();
+        expect(buildSVGMarkup(svg)).toContain(`d="${rounded}"`);
+        expect(Path.fromSave(saved, editor).raw).toBe(rounded);
+        const explicit = Path.fromSave(saved, editor);
+        explicit.lines.push(line(editor, explicit.lines.at(-1)!.points[1], explicit.lines[0].points[0]));
+        expect(explicit.raw).toBe(rounded);
+        expect(convertStrokeToPath(path, editor, 'precise')?.raw).toBe(convertStrokeToPath(explicit, editor, 'precise')?.raw);
+        const cubic = Path.fromSave(explicit.save(), editor);
+        cubic.lines.forEach(segment => {
+            const [a, b] = segment.points;
+            segment.type = 'bezier';
+            segment.controlStart = new Point(a.x + (b.x - a.x) / 3, a.y + (b.y - a.y) / 3);
+            segment.controlEnd = new Point(a.x + 2 * (b.x - a.x) / 3, a.y + 2 * (b.y - a.y) / 3);
+        });
+        expect(cubic.lines.every(segment => cubic.cornerEligible(segment.points[0]))).toBeTrue();
+        expect(cubic.raw).toBe(rounded);
+        expect(convertStrokeToPath(cubic, editor, 'precise')?.raw).toBe(convertStrokeToPath(explicit, editor, 'precise')?.raw);
+        expect(path.save()).toEqual(saved);
+        svg.snapshot(); svg.undo(); expect((svg.elements[0] as Path).save()).toEqual(baseline);
+        svg.redo(); expect((svg.elements[0] as Path).raw).toBe(rounded);
+    });
+
+    it("keeps open endpoints and curved or collinear joins ineligible for corner rounding", () => {
+        const { editor, path } = documentWithPath();
+        const [a, b] = path.lines[0].points, c = path.lines[1].points[1];
+        expect(path.cornerEligible(a)).toBeFalse(); expect(path.cornerEligible(c)).toBeFalse();
+        expect(path.cornerEligible(b)).toBeTrue();
+        path.lines[1] = new Line(editor, { type: 'bezier', points: [b, c], controlStart: new Point(20, 0), controlEnd: new Point(20, 10) });
+        path.closed = true; expect(path.cornerEligible(b)).toBeFalse();
+        path.lines[1].controlStart = new Point(10, -20); path.lines[1].controlEnd = new Point(10, 30);
+        expect(path.cornerEligible(b)).toBeFalse(); // Collinear handles that overshoot are not a straight edge.
+        path.lines[1] = line(editor, b, new Point(20, 0)); expect(path.cornerEligible(b)).toBeFalse();
+    });
+
     it("round-trips the current save schema without changing IDs or values", () => {
         const { editor, svg, path } = documentWithPath();
         path.name = "Saved path";

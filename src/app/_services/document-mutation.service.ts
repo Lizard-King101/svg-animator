@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy } from "@angular/core";
+import { Injectable, OnDestroy, signal } from "@angular/core";
 import { buildSVGMarkup } from "../editor/svg-markup";
 import { AnimationPlaybackService } from "./animation-playback.service";
 import { EditorService } from "./editor.service";
@@ -6,6 +6,7 @@ import { HistoryService } from "./history.service";
 import { ProjectService } from "./project.service";
 import { SVG, SVGSave } from "../editor/objects/svg.object";
 import { Subject } from "rxjs";
+import { committedProjectColors } from '../editor/objects/project-colors';
 
 export type MutationDomain = "artwork" | "animation" | "guides" | "metadata" | "canvas" | "thumbnail-artwork";
 
@@ -19,9 +20,9 @@ export class DocumentMutationService implements OnDestroy {
     private baseline?: string;
     private timer?: ReturnType<typeof setTimeout>;
     private scheduledDomain: MutationDomain = "metadata";
-    private _revision = 0;
+    private readonly _revision = signal(0);
 
-    get revision(): number { return this._revision; }
+    get revision(): number { return this._revision(); }
 
     constructor(
         private editor: EditorService,
@@ -53,13 +54,21 @@ export class DocumentMutationService implements OnDestroy {
 
     commit(domain: MutationDomain = "artwork"): boolean {
         const save = this.captureSave();
-        const after = save ? serializeMutationState(save) : undefined;
+        let after = save ? serializeMutationState(save) : undefined;
         if(after == null || after === this.baseline) return false;
+
+        if(save && this.editor.selectedSVG) {
+            const before = this.baseline ? JSON.parse(this.baseline) as SVGSave : undefined;
+            const palette = committedProjectColors(before?.id === save.id ? before : undefined, save);
+            this.editor.selectedSVG.projectColors = palette;
+            save.projectColors = palette.length ? palette.map(color => ({ ...color })) : undefined;
+            after = serializeMutationState(save);
+        }
 
         this.history.snapshot(this.editor, save);
         this.save(save, domain);
         this.baseline = after;
-        this._revision += 1;
+        this._revision.update(value => value + 1);
         if(domain === "artwork" || domain === "thumbnail-artwork") {
             if(typeof this.animation.invalidate === "function") this.animation.invalidate();
             if(this.animation.mode === "animate") this.animation.previewAt(this.animation.currentTime);
@@ -121,7 +130,7 @@ export class DocumentMutationService implements OnDestroy {
     }
 
     private finishHistoryRestore(): void {
-        this._revision += 1;
+        this._revision.update(value => value + 1);
         if(typeof this.animation.invalidate === "function") this.animation.invalidate();
         if(this.animation.mode === "animate") this.animation.previewAt(this.animation.currentTime);
         this.historyRestored.next();
@@ -130,6 +139,7 @@ export class DocumentMutationService implements OnDestroy {
 
 function serializeMutationState(save: SVGSave): string {
     return JSON.stringify({
+        projectColors: save.projectColors,
         id: save.id,
         name: save.name,
         width: save.width,
@@ -141,6 +151,7 @@ function serializeMutationState(save: SVGSave): string {
         guides: save.guides,
         guidesLocked: save.guidesLocked,
         importedSourceNodes: save.importedSourceNodes,
+        referenceImage: save.referenceImage,
     });
 }
 

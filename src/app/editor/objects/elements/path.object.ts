@@ -8,7 +8,7 @@ import { defaultTransform, restoreTransform, serializeTransform, TransformSave, 
 import { PaintSave, restorePaint, serializePaint } from "../paint.object";
 import { DEFAULT_STROKE_STYLE, restoreStrokeStyle, StrokeAlignment } from "../stroke-style.object";
 import { RuntimeContourV1, RuntimePointV1 } from "../../../../../packages/runtime/src/contracts";
-import { buildRuntimePathData } from "../../../../../packages/runtime/src/path-data";
+import { buildRuntimePathData, contourClosingPoints, isStraightPathSegment } from "../../../../../packages/runtime/src/path-data";
 
 export interface PathSave {
     type: 'path';
@@ -352,8 +352,18 @@ export interface RoundedCorner {
     after: Point;
     controlBefore: Point;
     controlAfter: Point;
-    incoming: Line;
-    outgoing: Line;
+    incoming: PathSegment;
+    outgoing: PathSegment;
+}
+
+type PathSegment = Pick<Line, 'id' | 'type' | 'points' | 'controlStart' | 'controlEnd'>;
+
+/** Read-only contour topology, including the straight edge supplied by SVG's Z command. */
+export function pathContourSegments(contour: PathContour): PathSegment[] {
+    const lines: PathSegment[] = completeLines(contour);
+    const closing = contourClosingPoints(lines, contour.closed);
+    if(closing) lines.push({ id: `${contour.id}:close`, type: 'line', points: closing });
+    return lines;
 }
 
 interface PathDataOptions {
@@ -422,7 +432,8 @@ function appendRenderedSegment(commands: string[], path: Path, contour: PathCont
     const endCorner = roundedCornerForSegmentEnd(path, contour, line);
     const end = endCorner ? endCorner.before : line.points[1];
 
-    if(line.type === "bezier" && line.controlStart && line.controlEnd) {
+    const startCorner = roundedCornerForSegmentStart(path, contour, line);
+    if(line.type === "bezier" && line.controlStart && line.controlEnd && !(startCorner || endCorner)) {
         commands.push(`C ${formatPoint(line.controlStart)} ${formatPoint(line.controlEnd)} ${formatPoint(end)}`);
     } else {
         commands.push(`L ${formatPoint(end)}`);
@@ -442,7 +453,7 @@ function contourForLine(path: Path, line: Line): PathContour | undefined {
 }
 
 function roundedCornerForSegmentStart(path: Path, contour: PathContour, line: Line): RoundedCorner | null {
-    const lines = completeLines(contour);
+    const lines = pathContourSegments(contour);
     const closed = isEffectivelyClosed(contour, lines);
     const index = lines.indexOf(line);
     if(index < 0 || line.points.length < 2) {
@@ -458,7 +469,7 @@ function roundedCornerForSegmentStart(path: Path, contour: PathContour, line: Li
 }
 
 function roundedCornerForSegmentEnd(path: Path, contour: PathContour, line: Line): RoundedCorner | null {
-    const lines = completeLines(contour);
+    const lines = pathContourSegments(contour);
     const closed = isEffectivelyClosed(contour, lines);
     const index = lines.indexOf(line);
     if(index < 0 || line.points.length < 2) {
@@ -475,26 +486,25 @@ function roundedCornerForSegmentEnd(path: Path, contour: PathContour, line: Line
 
 function roundedCornerForAnchor(path: Path, anchor: Point, radiusOverride?: number): RoundedCorner | null {
     for(const contour of path.contours) {
-        const lines = completeLines(contour);
+        const lines = pathContourSegments(contour);
         const closed = isEffectivelyClosed(contour, lines);
         const outgoingIndex = lines.findIndex((line) => line.points[0] === anchor);
+        if(outgoingIndex >= 0) {
+            if(outgoingIndex === 0 && !closed) return null;
+            return computeRoundedCorner(lines[outgoingIndex === 0 ? lines.length - 1 : outgoingIndex - 1], lines[outgoingIndex], radiusOverride);
+        }
         const incomingIndex = lines.findIndex((line) => line.points[1] === anchor);
-        if(incomingIndex < 0 || outgoingIndex < 0) {
-            continue;
+        if(incomingIndex >= 0) {
+            if(incomingIndex === lines.length - 1 && !closed) return null;
+            return computeRoundedCorner(lines[incomingIndex], lines[(incomingIndex + 1) % lines.length], radiusOverride);
         }
-
-        if(!closed && (incomingIndex === lines.length - 1 || outgoingIndex === 0)) {
-            return null;
-        }
-
-        return computeRoundedCorner(lines[incomingIndex], lines[outgoingIndex], radiusOverride);
     }
 
     return null;
 }
 
-function computeRoundedCorner(incoming: Line | undefined, outgoing: Line | undefined, radiusOverride?: number): RoundedCorner | null {
-    if(!incoming || !outgoing || incoming.type !== 'line' || outgoing.type !== 'line') {
+function computeRoundedCorner(incoming: PathSegment | undefined, outgoing: PathSegment | undefined, radiusOverride?: number): RoundedCorner | null {
+    if(!incoming || !outgoing || !isStraightPathSegment(incoming) || !isStraightPathSegment(outgoing)) {
         return null;
     }
 
@@ -565,7 +575,7 @@ function computeRoundedCorner(incoming: Line | undefined, outgoing: Line | undef
     };
 }
 
-function isEffectivelyClosed(contour: PathContour, lines = completeLines(contour)): boolean {
+function isEffectivelyClosed(contour: PathContour, lines: PathSegment[] = completeLines(contour)): boolean {
     if(contour.closed) {
         return true;
     }

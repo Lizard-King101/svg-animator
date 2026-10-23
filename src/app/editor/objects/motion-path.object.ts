@@ -1,3 +1,4 @@
+import { cubicPoint } from "./curve-geometry";
 import { combinedMatrixFor, parentMatrixFor, resolvedOrigin } from "./element-bounds";
 import { Group } from "./elements/group.object";
 import { Path } from "./elements/path.object";
@@ -161,20 +162,6 @@ function flattenLine(line: Line, matrix: Matrix): FlattenedSegment[] {
         segments.push(makeSegment(points[i], points[i + 1]));
     }
     return segments;
-}
-
-function cubicPoint(
-    start: { x: number; y: number },
-    controlStart: { x: number; y: number },
-    controlEnd: { x: number; y: number },
-    end: { x: number; y: number },
-    t: number
-) {
-    const mt = 1 - t;
-    return {
-        x: (mt * mt * mt * start.x) + (3 * mt * mt * t * controlStart.x) + (3 * mt * t * t * controlEnd.x) + (t * t * t * end.x),
-        y: (mt * mt * mt * start.y) + (3 * mt * mt * t * controlStart.y) + (3 * mt * t * t * controlEnd.y) + (t * t * t * end.y),
-    };
 }
 
 function makeSegment(start: { x: number; y: number }, end: { x: number; y: number }): FlattenedSegment {

@@ -1,0 +1,24 @@
+<section aria-label="Drawing colors" (keydown)="key($event)">
+  <strong>Drawing colors</strong>
+  <div class="swatches">
+    <button #fill class="btn btn-sm btn-secondary" aria-label="New artwork fill" [attr.aria-expanded]="target === 'fill'" (click)="begin('fill', fill)">
+      <span class="swatch" [class.none]="paint.fill === null" [style.background-color]="paint.fill"></span> Fill
+    </button>
+    <button #stroke class="btn btn-sm btn-secondary" aria-label="New artwork stroke" [attr.aria-expanded]="target === 'stroke'" (click)="begin('stroke', stroke)">
+      <span class="swatch" [class.none]="paint.stroke === null" [style.background-color]="paint.stroke"></span> Stroke
+    </button>
+    <button class="btn btn-sm btn-secondary" aria-label="Swap drawing fill and stroke" title="Swap fill and stroke" (click)="swap()">⇄</button>
+  </div>
+  <p>For new artwork. Edit selected artwork in Properties.</p>
+  <div *ngIf="target" class="color-editor" [attr.aria-label]="'Drawing ' + target + ' editor'">
+    <color [label]="target === 'fill' ? 'New fill' : 'New stroke'" [ngModel]="draft" (ngModelChange)="setColor($event)" />
+    <label class="no-paint"><input type="checkbox" [(ngModel)]="none"> No paint</label>
+    <div class="actions">
+      <button class="btn btn-sm btn-primary" (click)="apply()">Apply</button>
+      <button class="btn btn-sm btn-secondary" (click)="cancel()">Cancel</button>
+    </div>
+  </div>
+  <p>Project swatches {{ target ? 'preview' : 'apply to' }} new {{ activeTarget }}.</p>
+  <app-project-colors [value]="target ? (none ? null : draft.serialized) : paint[activeTarget]" [manage]="true" (colorSelected)="chooseColor($event)" />
+  <p *ngIf="warning" role="status">{{ warning }}</p>
+</section>

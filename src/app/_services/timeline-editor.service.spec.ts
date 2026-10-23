@@ -14,6 +14,23 @@ import { Point } from "../editor/objects/point.object";
 import { SVG } from "../editor/objects/svg.object";
 
 describe("TimelineEditorService scale and viewport policy", () => {
+    it("reserves keyframe clipboard shortcuts for Animate mode and respects consumed events", () => {
+        const { timeline } = setup();
+        const copy = spyOn(timeline, 'copySelectedKeyframes').and.returnValue(true);
+        timeline.animation.mode = 'edit';
+        timeline.handleTimelineShortcut(new KeyboardEvent('keydown', { key: 'c', ctrlKey: true }));
+        expect(copy).not.toHaveBeenCalled();
+        timeline.animation.mode = 'animate';
+        const consumed = new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, cancelable: true });
+        consumed.preventDefault();
+        timeline.handleTimelineShortcut(consumed);
+        expect(copy).not.toHaveBeenCalled();
+        const event = new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, cancelable: true });
+        timeline.handleTimelineShortcut(event);
+        expect(copy).toHaveBeenCalledTimes(1);
+        expect(event.defaultPrevented).toBeTrue();
+    });
+
     it("redraws selected keyframes during drag and snaps any one of them to the playhead", fakeAsync(() => {
         const { timeline, markForCheck, shape } = setup();
         const track: AnimationTrack = {

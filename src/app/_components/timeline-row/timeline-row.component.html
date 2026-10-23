@@ -1,5 +1,5 @@
 <div class="timeline-left-cell"
-     [ngClass]="{'selected': timeline.editor.selectedElement == row.element, 'property': row.type == 'property', 'popover-open': timeline.colorEditorOpen(row)}"
+     [ngClass]="{'selected': timeline.editor.selectedElements.includes(row.element), 'property': row.type == 'property', 'popover-open': timeline.colorEditorOpen(row)}"
      [style.padding-left.px]="10 + row.depth * 16"
      (click)="timeline.selectTimelineRow(row)"
      (contextmenu)="timeline.openRowContextMenu(row, $event)">

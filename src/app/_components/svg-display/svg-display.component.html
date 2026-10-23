@@ -1,3 +1,8 @@
+<ng-container *ngIf="referenceImage as reference">
+    <svg:image *ngIf="reference.visible" data-editor-reference="true" pointer-events="none"
+        [attr.href]="reference.source" [attr.x]="reference.x" [attr.y]="reference.y"
+        [attr.width]="reference.width" [attr.height]="reference.height" [attr.opacity]="reference.opacity" />
+</ng-container>
 <svg:defs *ngIf="gradients().length">
     <ng-container *ngFor="let gradient of gradients()">
         <svg:linearGradient *ngIf="gradient.type == 'linear-gradient'"

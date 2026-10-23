@@ -1,3 +1,4 @@
+import { arcToCubics } from "../objects/arc-geometry";
 import { PathContourSave } from "../objects/elements/path.object";
 import { LineSave } from "../objects/line.object";
 import { PointSave } from "../objects/point.object";
@@ -170,79 +171,4 @@ function reflect(control: PointSave, anchor: PointSave, createId: (prefix: strin
 
 function interpolate(from: PointSave, to: PointSave, amount: number, createId: (prefix: string) => string): PointSave {
     return point(from.x + ((to.x - from.x) * amount), from.y + ((to.y - from.y) * amount), createId);
-}
-
-interface ArcCubic { controlStart: PointSave; controlEnd: PointSave; end: PointSave; }
-
-function arcToCubics(
-    start: PointSave,
-    end: PointSave,
-    rawRadiusX: number,
-    rawRadiusY: number,
-    rotation: number,
-    largeArc: boolean,
-    sweep: boolean,
-    createId: (prefix: string) => string,
-): ArcCubic[] {
-    let rx = Math.abs(rawRadiusX);
-    let ry = Math.abs(rawRadiusY);
-    if(rx === 0 || ry === 0 || (start.x === end.x && start.y === end.y)) return [];
-    const phi = rotation * Math.PI / 180;
-    const cosPhi = Math.cos(phi);
-    const sinPhi = Math.sin(phi);
-    const dx = (start.x - end.x) / 2;
-    const dy = (start.y - end.y) / 2;
-    const xPrime = (cosPhi * dx) + (sinPhi * dy);
-    const yPrime = (-sinPhi * dx) + (cosPhi * dy);
-    const radiusScale = (xPrime * xPrime) / (rx * rx) + (yPrime * yPrime) / (ry * ry);
-    if(radiusScale > 1) {
-        const scale = Math.sqrt(radiusScale);
-        rx *= scale;
-        ry *= scale;
-    }
-    const numerator = Math.max(0, (rx * rx * ry * ry) - (rx * rx * yPrime * yPrime) - (ry * ry * xPrime * xPrime));
-    const denominator = (rx * rx * yPrime * yPrime) + (ry * ry * xPrime * xPrime);
-    const coefficient = (largeArc === sweep ? -1 : 1) * Math.sqrt(denominator === 0 ? 0 : numerator / denominator);
-    const centerPrimeX = coefficient * ((rx * yPrime) / ry);
-    const centerPrimeY = coefficient * (-(ry * xPrime) / rx);
-    const centerX = cosPhi * centerPrimeX - sinPhi * centerPrimeY + (start.x + end.x) / 2;
-    const centerY = sinPhi * centerPrimeX + cosPhi * centerPrimeY + (start.y + end.y) / 2;
-    const vectorAngle = (ux: number, uy: number, vx: number, vy: number) => {
-        const dot = ux * vx + uy * vy;
-        const length = Math.sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy));
-        const angle = Math.acos(Math.max(-1, Math.min(1, length === 0 ? 1 : dot / length)));
-        return ux * vy - uy * vx < 0 ? -angle : angle;
-    };
-    const ux = (xPrime - centerPrimeX) / rx;
-    const uy = (yPrime - centerPrimeY) / ry;
-    const vx = (-xPrime - centerPrimeX) / rx;
-    const vy = (-yPrime - centerPrimeY) / ry;
-    let startAngle = vectorAngle(1, 0, ux, uy);
-    let deltaAngle = vectorAngle(ux, uy, vx, vy);
-    if(!sweep && deltaAngle > 0) deltaAngle -= Math.PI * 2;
-    if(sweep && deltaAngle < 0) deltaAngle += Math.PI * 2;
-    const count = Math.ceil(Math.abs(deltaAngle) / (Math.PI / 2));
-    const step = deltaAngle / count;
-    const map = (x: number, y: number) => ({
-        x: centerX + cosPhi * rx * x - sinPhi * ry * y,
-        y: centerY + sinPhi * rx * x + cosPhi * ry * y,
-    });
-    const result: ArcCubic[] = [];
-    for(let i = 0; i < count; i++) {
-        const nextAngle = startAngle + step;
-        const alpha = (4 / 3) * Math.tan(step / 4);
-        const p1 = map(Math.cos(startAngle) - alpha * Math.sin(startAngle), Math.sin(startAngle) + alpha * Math.cos(startAngle));
-        const p2 = map(Math.cos(nextAngle) + alpha * Math.sin(nextAngle), Math.sin(nextAngle) - alpha * Math.cos(nextAngle));
-        const p3 = i === count - 1 ? end : (() => {
-            const mapped = map(Math.cos(nextAngle), Math.sin(nextAngle));
-            return point(mapped.x, mapped.y, createId);
-        })();
-        result.push({
-            controlStart: point(p1.x, p1.y, createId),
-            controlEnd: point(p2.x, p2.y, createId),
-            end: p3,
-        });
-        startAngle = nextAngle;
-    }
-    return result;
 }

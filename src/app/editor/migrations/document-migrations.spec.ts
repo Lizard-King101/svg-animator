@@ -62,7 +62,7 @@ describe("document migrations", () => {
         expect(result.status).toBe("ok");
         if(result.status !== "ok") return;
         expect(result.migrated).toBeTrue();
-        expect(result.value.version).toBe(5);
+        expect(result.value.version).toBe(7);
         expect(result.value.data.importedSourceNodes).toEqual([]);
     });
 
@@ -81,7 +81,7 @@ describe("document migrations", () => {
 
         expect(result.status).toBe("ok");
         if(result.status !== "ok") return;
-        expect(result.value.version).toBe(5);
+        expect(result.value.version).toBe(7);
         expect(result.value.data.animation?.version).toBe(2);
         expect(result.value.data.animation?.tracks).toEqual(data.animation.tracks as any);
     });
@@ -90,7 +90,7 @@ describe("document migrations", () => {
         const result = migrateDocument(documentV3AnimationV1);
         expect(result.status).toBe("ok");
         if(result.status !== "ok") return;
-        expect(result.value.version).toBe(5);
+        expect(result.value.version).toBe(7);
         expect(result.value.data.animation?.version).toBe(2);
         expect(result.value.data.animation?.tracks[0].keyframes).toEqual((documentV3AnimationV1.data.animation.tracks[0].keyframes as any));
     });

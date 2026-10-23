@@ -1,8 +1,5 @@
 import { Directive, ElementRef, Input, OnDestroy } from "@angular/core";
-import { sanitizeSVGText } from "src/app/editor/import/svg-sanitizer";
-
-const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
-const XLINK_NAMESPACE = "http://www.w3.org/1999/xlink";
+import { sanitizeSVGFragment } from "src/app/editor/import/svg-sanitizer";
 
 /** Mounts already-preserved SVG source without passing it through HTML parsing. */
 @Directive({
@@ -29,8 +26,7 @@ export class ImportedSVGSourceDirective implements OnDestroy {
         try {
             // DOMParser keeps SVG namespaces intact. Re-sanitizing here makes this
             // boundary safe even if a stored project predates import sanitization.
-            const source = `<svg xmlns="${SVG_NAMESPACE}" xmlns:xlink="${XLINK_NAMESPACE}">${markup}</svg>`;
-            const sanitized = sanitizeSVGText(source);
+            const sanitized = sanitizeSVGFragment(markup);
             const fragment = host.ownerDocument.createDocumentFragment();
             Array.from(sanitized.root.childNodes).forEach((node) => {
                 fragment.appendChild(host.ownerDocument.importNode(node, true));

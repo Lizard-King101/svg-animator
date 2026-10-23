@@ -1,4 +1,5 @@
-import { AfterViewInit, Component, forwardRef, Input } from "@angular/core";
+import { AfterViewInit, Component, forwardRef, Input, OnDestroy, Optional } from "@angular/core";
+import { EyedropperService } from '../../../_services/eyedropper.service';
 import { NgIf, NgStyle } from "@angular/common";
 import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR } from "@angular/forms";
 import { cloneColor, Color, HSL, RGB } from "src/app/editor/objects/color.object";
@@ -17,7 +18,7 @@ import { cloneColor, Color, HSL, RGB } from "src/app/editor/objects/color.object
         }
     ]
 })
-export class ColorAttribute implements AfterViewInit, ControlValueAccessor {
+export class ColorAttribute implements AfterViewInit, OnDestroy, ControlValueAccessor {
     @Input('label') label?: string;
     editType: 'rgbs' | 'rgbp' | 'hsl' = 'hsl';
 
@@ -26,7 +27,7 @@ export class ColorAttribute implements AfterViewInit, ControlValueAccessor {
     rgb: RGB;
     hsl: HSL;
 
-    constructor() {
+    constructor(@Optional() public eyedropper: EyedropperService | null = null) {
         this.color = new Color();
         this.rgb = this.color.rgb;
         this.hsl = this.color.hsl;
@@ -59,6 +60,14 @@ export class ColorAttribute implements AfterViewInit, ControlValueAccessor {
     }
 
     ngAfterViewInit() {}
+    ngOnDestroy(): void { this.eyedropper?.cancelOwner(this); }
+    pickColor(event: MouseEvent): void {
+        event.stopPropagation();
+        this.eyedropper?.begin(this, event.currentTarget as HTMLElement, color => {
+            if(color.serialized === this.color.serialized) return;
+            this.writeValue(color); this.emitChange();
+        });
+    }
 
     onChange(_value: Color) {};
     onTouch(): void {}

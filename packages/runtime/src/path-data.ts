@@ -17,18 +17,48 @@ function buildContour(contour: RuntimeContourV1, rounded: boolean): string {
         if(closed) commands.push("Z");
         return commands.join(" ");
     }
+    const closing = contourClosingPoints(lines, closed);
+    // Keep ordinary Z-only output stable; materialize its edge when a closing corner needs rounding.
+    if(closing && closing.some(point => (point.cornerRadius ?? 0) > 0)) {
+        lines.push({ id: `${contour.id}:close`, type: 'line', points: closing });
+    }
     const startCorner = segmentStartCorner(lines, 0, closed);
     const commands = [`M ${pointText(startCorner?.after ?? lines[0].points[0])}`];
     lines.forEach((line, index) => {
         const corner = segmentEndCorner(lines, index, closed);
         const end = corner?.before ?? line.points[1];
-        commands.push(line.type === "bezier" && line.controlStart && line.controlEnd
+        const startCorner = segmentStartCorner(lines, index, closed);
+        commands.push(line.type === "bezier" && line.controlStart && line.controlEnd && !(startCorner || corner)
             ? `C ${pointText(line.controlStart)} ${pointText(line.controlEnd)} ${pointText(end)}`
             : `L ${pointText(end)}`);
         if(corner) commands.push(`C ${pointText(corner.controlBefore)} ${pointText(corner.controlAfter)} ${pointText(corner.after)}`);
     });
     if(closed) commands.push("Z");
     return commands.join(" ");
+}
+
+/** The implicit Z edge, retaining the caller's endpoint identities without changing saved geometry. */
+export function contourClosingPoints<T extends RuntimePointV1>(lines: readonly { points: readonly T[] }[], closed: boolean): [T, T] | undefined {
+    if(!closed || !lines.length) return undefined;
+    const start = lines[0].points[0], end = lines[lines.length - 1].points[1];
+    return start && end && !samePoint(start, end) ? [end, start] : undefined;
+}
+
+/** Straight geometry may be encoded as a cubic with collapsed or collinear handles. */
+export function isStraightPathSegment(line: {
+    type: 'line' | 'bezier'; points: readonly { x: number; y: number }[];
+    controlStart?: { x: number; y: number }; controlEnd?: { x: number; y: number };
+}): boolean {
+    if(line.type === 'line') return true;
+    const [start, end] = line.points;
+    if(!start || !end) return false;
+    const dx = end.x - start.x, dy = end.y - start.y, length = Math.hypot(dx, dy);
+    if(length < 1e-8) return false;
+    return [line.controlStart ?? start, line.controlEnd ?? end].every(control => {
+        const x = control.x - start.x, y = control.y - start.y;
+        const along = (x * dx + y * dy) / length;
+        return Math.abs(x * dy - y * dx) / length < 1e-7 && along >= -1e-7 && along <= length + 1e-7;
+    });
 }
 
 interface Corner { before: RuntimePointV1; after: RuntimePointV1; controlBefore: RuntimePointV1; controlAfter: RuntimePointV1; }
@@ -41,7 +71,7 @@ function segmentEndCorner(lines: RuntimeLineV1[], index: number, closed: boolean
     return roundedCorner(lines[index], lines[index === lines.length - 1 ? 0 : index + 1]);
 }
 function roundedCorner(incoming: RuntimeLineV1, outgoing: RuntimeLineV1): Corner | null {
-    if(incoming.type !== "line" || outgoing.type !== "line" || !samePoint(incoming.points[1], outgoing.points[0])) return null;
+    if(!isStraightPathSegment(incoming) || !isStraightPathSegment(outgoing) || !samePoint(incoming.points[1], outgoing.points[0])) return null;
     const anchor = outgoing.points[0];
     const radius = Math.max(incoming.points[1].cornerRadius ?? 0, anchor.cornerRadius ?? 0);
     if(radius <= 0) return null;

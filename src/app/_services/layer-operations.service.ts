@@ -5,7 +5,7 @@ import { Path } from "../editor/objects/elements/path.object";
 import { Line } from "../editor/objects/line.object";
 import { Point } from "../editor/objects/point.object";
 import { convertStrokeToPath, StrokeToPathProfile } from "../editor/objects/stroke-outline.object";
-import { AnyElement } from "../editor/objects/svg.object";
+import { AnyElement, SVGSave } from "../editor/objects/svg.object";
 import { applyMatrix, invertMatrix, multiplyMatrix } from "../editor/objects/transform.object";
 import { makeAnimationId } from "../editor/objects/animation.object";
 import { matchingAnimationProperty } from "../editor/objects/animation-targets";
@@ -26,6 +26,33 @@ export class LayerOperationsService {
         private editor: EditorService,
         private elements: ElementFactory,
     ) {}
+
+    /** Append completed construction geometry; the caller owns its mutation transaction. */
+    insertElement(element: AnyElement): void {
+        this.editor.selectedSVG?.elements.push(element);
+    }
+
+    replaceElement(source: AnyElement, replacement: AnyElement): boolean {
+        const context = this.context(source);
+        if(!context) return false;
+        context.elements.splice(context.index, 1, replacement);
+        return true;
+    }
+
+    /** Insert a freshly namespaced clipboard fragment as one structural operation. */
+    insertFragment(save: SVGSave, rootIds: string[]): AnyElement[] {
+        const target = this.editor.selectedSVG;
+        if(!target) return [];
+        const restored = this.elements.restoreDocument(save);
+        target.elements.push(...restored.elements);
+        target.importedSourceNodes.push(...restored.importedSourceNodes);
+        target.animation.tracks.push(...restored.animation.tracks);
+        const previousDuration = target.animation.duration;
+        target.animation.duration = restored.animation.tracks.reduce((duration, track) =>
+            track.keyframes.reduce((end, key) => Math.max(end, key.time), duration), previousDuration);
+        if(target.animation.workArea?.end === previousDuration) target.animation.workArea.end = target.animation.duration;
+        return restored.elements.filter((element) => rootIds.includes(element.id));
+    }
 
     context(element: AnyElement): LayerContext | undefined {
         const roots = this.editor.selectedSVG?.elements;

@@ -1,0 +1,11 @@
+:host { display: block; flex: 0 0 auto; }
+section { padding: 12px; border-bottom: 1px solid var(--border); }
+.clipboard-actions, .alignment-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.distribution-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 4px; }
+.reference { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0 8px; font-size: 11px; color: var(--text-secondary); }
+button, select { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text-primary); font: inherit; font-size: 11px; padding: 5px 6px; }
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button:disabled, select:disabled { opacity: .45; cursor: default; }
+.hint { margin: 8px 0 0; font-size: 10px; line-height: 1.5; color: var(--text-secondary); }

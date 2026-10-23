@@ -1,0 +1,33 @@
+{
+  "kind": "svg-animator/document",
+  "version": 7,
+  "data": {
+    "id": "current-doc",
+    "name": "Current document",
+    "width": 120,
+    "height": 80,
+    "elements": [],
+    "animation": {
+      "version": 2,
+      "duration": 3,
+      "fpsHint": 60,
+      "loop": false,
+      "tracks": [],
+      "markers": [],
+      "variables": []
+    },
+    "guides": [],
+    "guidesLocked": false,
+    "importedSourceNodes": [],
+    "projectColors": [
+      {
+        "color": "#12345680",
+        "name": "Shadow",
+        "pinned": true
+      },
+      {
+        "color": "#ffcc00"
+      }
+    ]
+  }
+}

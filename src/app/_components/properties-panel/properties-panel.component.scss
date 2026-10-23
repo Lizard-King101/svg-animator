@@ -1,0 +1,13 @@
+:host { display: contents; }
+
+.panel-empty.selection-summary {
+    padding: 20px;
+    text-align: center;
+    line-height: 1.5;
+    color: var(--text-secondary);
+
+    > span:first-of-type {
+        color: var(--text-primary);
+        font-weight: 600;
+    }
+}

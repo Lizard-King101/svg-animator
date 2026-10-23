@@ -1,6 +1,6 @@
 import { EditorService } from "src/app/_services/editor.service";
 import { Color } from "./color.object";
-import { Path, PathContour, RoundedCorner } from "./elements/path.object";
+import { Path, PathContour, pathContourSegments, RoundedCorner } from "./elements/path.object";
 import { Line } from "./line.object";
 import { intersectFilledPathContours, subtractFilledPathContours, unionFilledPathContours } from "./path-boolean.object";
 import { Point } from "./point.object";
@@ -395,7 +395,7 @@ function lineSegment(start: Point, end: Point): OutlineSegment {
 }
 
 function strokeSourceSegments(path: Path, contour: PathContour, editor: EditorService): StrokeSourceSegment[] {
-    const lines = completeLines(contour);
+    const lines = pathContourSegments(contour);
     const closed = contourIsClosed(contour);
     const cornerCache = new Map<string, RoundedCorner | null>();
     const cornerFor = (anchor: Point) => {
@@ -409,14 +409,14 @@ function strokeSourceSegments(path: Path, contour: PathContour, editor: EditorSe
     lines.forEach((line, index) => {
         const startCorner = cornerFor(line.points[0]);
         const endCorner = cornerFor(line.points[1]);
-        const roundedStart = startCorner?.outgoing === line ? startCorner : null;
-        const roundedEnd = endCorner?.incoming === line ? endCorner : null;
+        const roundedStart = startCorner?.outgoing.id === line.id ? startCorner : null;
+        const roundedEnd = endCorner?.incoming.id === line.id ? endCorner : null;
         const start = roundedStart?.after ?? line.points[0];
         const end = roundedEnd?.before ?? line.points[1];
-        const renderedLine = start === line.points[0] && end === line.points[1]
+        const renderedLine = line instanceof Line && start === line.points[0] && end === line.points[1]
             ? line
             : new Line(editor, {
-                type: line.type,
+                type: roundedStart || roundedEnd ? 'line' : line.type,
                 points: [start, end],
                 controlStart: line.controlStart,
                 controlEnd: line.controlEnd,
