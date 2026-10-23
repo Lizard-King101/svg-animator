@@ -48,7 +48,7 @@
       </div>
       <label class="paint-number-field">
         <span>Offset</span>
-        <input type="number" min="0" max="1" step="0.01" [ngModel]="stop.offset"
+        <input type="number" numberField="3" min="0" max="1" step="0.01" [ngModel]="stop.offset"
                (ngModelChange)="setStopNumber('offset', $event)" />
       </label>
       <color [ngModel]="stop.color" (ngModelChange)="setStopColor($event)"></color>

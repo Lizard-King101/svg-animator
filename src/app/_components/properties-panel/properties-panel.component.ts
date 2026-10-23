@@ -12,6 +12,7 @@ import { ColorAttribute } from "../attributes/color/color.component";
 import { RangeAttribute } from "../attributes/range/range.component";
 import { SelectAttribut } from "../attributes/select/select.component";
 import { TextAttribute } from "../attributes/text/text.component";
+import { NumberFieldDirective } from "../attributes/number/number-field.directive";
 import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, createAnimationColorValue } from "../../editor/objects/animation.object";
 import { Color } from "../../editor/objects/color.object";
 import { pinTransformOrigin, resolvedOrigin } from "../../editor/objects/element-bounds";
@@ -32,7 +33,7 @@ import { formatDashArray, parseDashArray, StrokeAlignment } from "../../editor/o
 @Component({
     selector: "app-properties-panel",
     standalone: true,
-    imports: [FormsModule, NgFor, NgIf, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute, PaintEditorComponent, SelectionActionsComponent],
+    imports: [FormsModule, NgFor, NgIf, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute, PaintEditorComponent, SelectionActionsComponent, NumberFieldDirective],
     templateUrl: "properties-panel.component.html",
     styleUrl: "properties-panel.component.scss",
 })

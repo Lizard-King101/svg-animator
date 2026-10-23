@@ -6,25 +6,25 @@
     <div class="transform-grid">
       <label>
         <span>X</span>
-        <input type="number"
+        <input type="number" numberField
                [ngModel]="frameValue(frameElement, 'x')"
                (ngModelChange)="setFrameValue(frameElement, 'x', $event)" />
       </label>
       <label>
         <span>Y</span>
-        <input type="number"
+        <input type="number" numberField
                [ngModel]="frameValue(frameElement, 'y')"
                (ngModelChange)="setFrameValue(frameElement, 'y', $event)" />
       </label>
       <label *ngIf="frameFieldSupported(frameElement, 'width')">
         <span>W</span>
-        <input type="number" min="1"
+        <input type="number" numberField min="1"
                [ngModel]="frameValue(frameElement, 'width')"
                (ngModelChange)="setFrameValue(frameElement, 'width', $event)" />
       </label>
       <label *ngIf="frameFieldSupported(frameElement, 'height')">
         <span>H</span>
-        <input type="number" min="1"
+        <input type="number" numberField min="1"
                [ngModel]="frameValue(frameElement, 'height')"
                (ngModelChange)="setFrameValue(frameElement, 'height', $event)" />
       </label>
@@ -36,19 +36,19 @@
       <div class="transform-grid">
         <label>
           <span>X</span>
-          <input type="number"
+          <input type="number" numberField
                  [ngModel]="anchorPositionValue(anchor, 'x')"
                  (ngModelChange)="setAnchorPositionValue(selectedPath, anchor, 'x', $event)" />
         </label>
         <label>
           <span>Y</span>
-          <input type="number"
+          <input type="number" numberField
                  [ngModel]="anchorPositionValue(anchor, 'y')"
                  (ngModelChange)="setAnchorPositionValue(selectedPath, anchor, 'y', $event)" />
         </label>
         <label>
           <span>Corner Radius</span>
-          <input type="number"
+          <input type="number" numberField
                  min="0"
                  step="1"
                  [disabled]="!cornerRadiusEnabled(selectedPath, anchor)"
@@ -63,45 +63,45 @@
     <div class="transform-grid">
       <label>
         <span>Offset X</span>
-        <input type="number"
+        <input type="number" numberField
                [ngModel]="transformValue(editor.inspectedElement, 'translateX')"
                (ngModelChange)="setTransformValue(editor.inspectedElement, 'translateX', $event)" />
       </label>
       <label>
         <span>Offset Y</span>
-        <input type="number"
+        <input type="number" numberField
                [ngModel]="transformValue(editor.inspectedElement, 'translateY')"
                (ngModelChange)="setTransformValue(editor.inspectedElement, 'translateY', $event)" />
       </label>
       <label>
         <span>Scale X</span>
-        <input type="number" step="0.01"
+        <input type="number" numberField step="0.01"
                [ngModel]="transformValue(editor.inspectedElement, 'scaleX')"
                (ngModelChange)="setTransformValue(editor.inspectedElement, 'scaleX', $event)" />
       </label>
       <label>
         <span>Scale Y</span>
-        <input type="number" step="0.01"
+        <input type="number" numberField step="0.01"
                [ngModel]="transformValue(editor.inspectedElement, 'scaleY')"
                (ngModelChange)="setTransformValue(editor.inspectedElement, 'scaleY', $event)" />
       </label>
       <label>
-        <span>Rotate</span>
-        <input type="number" step="1"
-               [ngModel]="transformValue(editor.inspectedElement, 'rotation')"
-               (ngModelChange)="setTransformValue(editor.inspectedElement, 'rotation', $event)" />
-      </label>
-      <label>
         <span>Origin X</span>
-        <input type="number"
+        <input type="number" numberField
                [ngModel]="transformValue(editor.inspectedElement, 'originX')"
                (ngModelChange)="setTransformValue(editor.inspectedElement, 'originX', $event)" />
       </label>
       <label>
         <span>Origin Y</span>
-        <input type="number"
+        <input type="number" numberField
                [ngModel]="transformValue(editor.inspectedElement, 'originY')"
                (ngModelChange)="setTransformValue(editor.inspectedElement, 'originY', $event)" />
+      </label>
+      <label>
+        <span>Rotate</span>
+        <input type="number" numberField step="1"
+               [ngModel]="transformValue(editor.inspectedElement, 'rotation')"
+               (ngModelChange)="setTransformValue(editor.inspectedElement, 'rotation', $event)" />
       </label>
     </div>
     <div class="transform-actions">
@@ -156,7 +156,7 @@
         </label>
         <label>
           <span>Dash Offset</span>
-          <input type="number" step="1"
+          <input type="number" numberField step="1"
                  [ngModel]="strokeElement.settings.stroke_dashoffset"
                  (ngModelChange)="setStrokeNumber(strokeElement, 'stroke_dashoffset', $event)" />
         </label>
@@ -168,7 +168,7 @@
         </label>
         <label>
           <span>Miter Limit</span>
-          <input type="number" min="1" step="1"
+          <input type="number" numberField min="1" step="1"
                  [disabled]="strokeElement.settings.line_join != null && strokeElement.settings.line_join !== 'miter'"
                  [ngModel]="strokeElement.settings.stroke_miterlimit"
                  (ngModelChange)="setStrokeNumber(strokeElement, 'stroke_miterlimit', $event)" />

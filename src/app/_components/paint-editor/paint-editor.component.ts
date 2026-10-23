@@ -5,6 +5,7 @@ import { GradientPresetService } from "../../_services/gradient-preset.service";
 import { cloneColor, Color } from "../../editor/objects/color.object";
 import { GradientPaint, GradientStop, gradientStopOpacity, isGradientPaint, Paint } from "../../editor/objects/paint.object";
 import { ColorAttribute } from "../attributes/color/color.component";
+import { NumberFieldDirective } from "../attributes/number/number-field.directive";
 import { ProjectColorsComponent } from '../project-colors/project-colors.component';
 import {
     FULL_PAINT_EDITOR_CAPABILITIES,
@@ -15,7 +16,7 @@ import {
 @Component({
     selector: "app-paint-editor",
     standalone: true,
-    imports: [FormsModule, NgFor, NgIf, ColorAttribute, ProjectColorsComponent],
+    imports: [FormsModule, NgFor, NgIf, ColorAttribute, ProjectColorsComponent, NumberFieldDirective],
     templateUrl: "paint-editor.component.html",
     styleUrls: ["paint-editor.component.scss"],
     changeDetection: ChangeDetectionStrategy.OnPush,
