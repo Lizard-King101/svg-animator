@@ -3,6 +3,7 @@ import { LayerCommandService } from "./layer-command.service";
 import { LayerOperationsService } from "./layer-operations.service";
 import { DocumentMutationService } from "./document-mutation.service";
 import { EditorService } from "./editor.service";
+import { Group } from "../editor/objects/elements/group.object";
 import { Shape } from "../editor/objects/elements/shape.object";
 import { Point } from "../editor/objects/point.object";
 import { SVG } from "../editor/objects/svg.object";
@@ -32,6 +33,35 @@ describe("LayerCommandService", () => {
         commands.finishLayerRename();
         expect(first.name).toBe("Layer");
         expect(commits).toEqual(["commit"]);
+    });
+
+    it("navigates visible rows like a tree, expanding, collapsing, and extending the selection", () => {
+        const editor = editorDouble();
+        const svg = new SVG(editor, { width: 100, height: 100, pos: new Point(0, 0) });
+        const background = new Shape(editor, { type: "rectangle", position: new Point(0, 0) });
+        const child = new Shape(editor, { type: "ellipse", position: new Point(10, 10) });
+        const group = new Group(editor); group.elements = [child];
+        const label = new Shape(editor, { type: "rectangle", position: new Point(20, 20) });
+        svg.elements = [background, group, label];
+        editor.selectedSVG = svg;
+        const commands = new LayerCommandService(editor, new LayerOperationsService(editor, new ElementFactory(editor)), {} as DocumentMutationService);
+        const visible = () => commands.layerRows.map((row) => row.element);
+        expect(visible()).toEqual([label, group, child, background]);
+
+        commands.selectLayer(label);
+        expect(commands.navigateLayers("ArrowDown", label)).toBe(group);
+        expect(commands.selectedLayers).toEqual([group]);
+        expect(commands.navigateLayers("ArrowLeft", group)).toBe(group);
+        expect(visible()).toEqual([label, group, background]);
+        expect(commands.navigateLayers("ArrowRight", group)).toBe(group);
+        expect(commands.navigateLayers("ArrowRight", group)).toBe(child);
+        expect(commands.navigateLayers("ArrowLeft", child)).toBe(group);
+        expect(commands.navigateLayers("End", group, true)).toBe(background);
+        expect(commands.selectedLayers).toEqual([group, child, background]);
+        expect(commands.navigateLayers("Home", background)).toBe(label);
+        expect(commands.selectedLayers).toEqual([label]);
+        expect(commands.navigateLayers("ArrowUp", label)).toBe(label);
+        expect(commands.navigateLayers("Enter", label)).toBeUndefined();
     });
 });
 

@@ -29,8 +29,8 @@
       </label>
     </div>
   </div>
-  <div class="transform-section" *ngIf="asPath(editor.inspectedElement) as selectedPath">
-    <ng-container *ngIf="selectedCornerAnchor(selectedPath) as anchor">
+  <ng-container *ngIf="asPath(editor.inspectedElement) as selectedPath">
+    <div class="transform-section" *ngIf="selectedCornerAnchor(selectedPath) as anchor">
       <div class="transform-title">Anchor</div>
       <div class="transform-grid">
         <label>
@@ -55,8 +55,8 @@
                  (ngModelChange)="setCornerRadius(selectedPath, anchor, $event)" />
         </label>
       </div>
-    </ng-container>
-  </div>
+    </div>
+  </ng-container>
   <div class="transform-section">
     <div class="transform-title">Transform</div>
     <div class="transform-grid">

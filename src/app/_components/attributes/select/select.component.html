@@ -1,7 +1,7 @@
 <label *ngIf="label">{{label}}</label>
 <div class="inputs">
     <select [(ngModel)]="value">
-        <option [ngValue]="null">Select</option>
+        <option [ngValue]="null">Default</option>
         <option *ngFor="let option of options" [ngValue]="option.value">{{ option.label }}</option>
     </select>
 </div>

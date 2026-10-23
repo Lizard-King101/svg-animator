@@ -63,11 +63,43 @@ export class LayerCommandService {
 
     toggleGroupCollapsed(event: MouseEvent, group: Group) {
         event.stopPropagation();
-        if(this.collapsedGroupIds.has(group.id)) {
-            this.collapsedGroupIds.delete(group.id);
-        } else {
-            this.collapsedGroupIds.add(group.id);
+        this.setGroupCollapsed(group, !this.groupIsCollapsed(group));
+    }
+
+    setGroupCollapsed(group: Group, collapsed: boolean): void {
+        if(collapsed) this.collapsedGroupIds.add(group.id);
+        else this.collapsedGroupIds.delete(group.id);
+    }
+
+    /**
+     * Tree keyboard navigation over visible layer rows. Up/Down/Home/End select a row (Shift extends
+     * the range); Right expands a group or enters it; Left collapses a group or moves to its parent.
+     * Returns the row that should hold focus, or undefined when the key is not a navigation key.
+     */
+    navigateLayers(key: string, from: AnyElement, extend = false): AnyElement | undefined {
+        const rows = this.layerRows;
+        const index = rows.findIndex((row) => row.element === from);
+        if(index < 0) return undefined;
+        const row = rows[index];
+        const group = this.asGroup(from);
+        let target: AnyElement | undefined;
+        switch(key) {
+            case "ArrowDown": target = rows[Math.min(rows.length - 1, index + 1)].element; break;
+            case "ArrowUp": target = rows[Math.max(0, index - 1)].element; break;
+            case "Home": target = rows[0].element; break;
+            case "End": target = rows[rows.length - 1].element; break;
+            case "ArrowRight":
+                if(group && this.groupIsCollapsed(group)) { this.setGroupCollapsed(group, false); return from; }
+                target = group?.elements.length ? rows[index + 1].element : from;
+                break;
+            case "ArrowLeft":
+                if(group && !this.groupIsCollapsed(group) && group.elements.length) { this.setGroupCollapsed(group, true); return from; }
+                target = row.parent ?? from;
+                break;
+            default: return undefined;
         }
+        if(target !== from || !this.isLayerSelected(target)) this.selectLayer(target, { shiftKey: extend, ctrlKey: false, metaKey: false });
+        return target;
     }
 
     isLayerSelected(element: AnyElement): boolean {
@@ -83,7 +115,7 @@ export class LayerCommandService {
         return !!this.clippingGroupFor(element);
     }
 
-    selectLayer(element: AnyElement, event?: MouseEvent) {
+    selectLayer(element: AnyElement, event?: Pick<MouseEvent, "shiftKey" | "ctrlKey" | "metaKey">) {
         if(this.suppressLayerClick) {
             return;
         }

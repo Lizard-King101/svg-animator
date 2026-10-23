@@ -41,7 +41,6 @@ $border-color_1: var(--accent);
 		border-radius: var(--radius-md);
 		box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
 		&.open-left {
-			transform: translateX(-100%);
 			.context-submenu {
 				left: auto;
 				right: calc(100% + 4px);

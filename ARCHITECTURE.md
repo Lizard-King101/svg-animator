@@ -17,7 +17,7 @@ Architecture is part of feature delivery. Pages and shells compose; components o
 | SVG import | `SVGImporterService`, `CurrentDocumentSVGImportService` | Sanitize and normalize external SVG, namespace merge IDs, restore editable layers, and insert one grouped artwork mutation into the active document |
 | Gallery import | `ProjectFileImportService`, `parseProjectJSON` | Validate/migrate external project files, sanitize preserved source, assign a new gallery identity, and persist one complete project; scoped factory context builds thumbnails without selecting a document |
 | Layer structure | `LayerOperationsService` | Group/combine/clip/duplicate/delete/order/visibility/lock/motion-path structural operations |
-| Layer commands | `LayerCommandService` | Layer range/toggle commands over shared editor selection, rename/collapse state, mutation-aware layer commands, context actions, and reorder gestures shared with global shortcuts |
+| Layer commands | `LayerCommandService` | Layer range/toggle commands over shared editor selection, keyboard tree navigation (`LayersPanelComponent` owns roving focus), rename/collapse state, mutation-aware layer commands, context actions, and reorder gestures shared with global shortcuts |
 | Property editing | `PropertiesPanelComponent` | Frame, anchor, transform, attribute, paint, and gradient editing with animation-aware writes |
 | Animation gestures | `AnimationGestureService` | Capture canvas transform/path/gradient baselines and create animation keys once at gesture completion |
 | Rendering | `SVGDisplay`, `SVGEditorOverlayComponent`, `svg-markup.ts` | Interactive artwork, editor-only handles/hit targets, and export-oriented static markup respectively |

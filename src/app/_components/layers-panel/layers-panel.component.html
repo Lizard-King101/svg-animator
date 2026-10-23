@@ -1,7 +1,13 @@
 <div class="panel-header">Layers</div>
-<div class="layer-list" *ngIf="commands.layerRows.length; else emptyLayers">
+<div class="layer-list" role="tree" aria-label="Layers" aria-multiselectable="true" *ngIf="commands.layerRows.length; else emptyLayers">
   <div class="layer-row"
        *ngFor="let row of commands.layerRows; trackBy: commands.trackLayerRow"
+       role="treeitem"
+       [attr.aria-level]="row.depth + 1"
+       [attr.aria-selected]="commands.isLayerSelected(row.element)"
+       [attr.aria-expanded]="commands.asGroup(row.element) ? !commands.groupIsCollapsed($any(row.element)) : null"
+       [attr.aria-label]="row.element.name"
+       [attr.tabindex]="row.element.id === tabStopId ? 0 : -1"
        [attr.data-layer-id]="row.element.id"
        [style.padding-left.px]="12 + (row.depth * 18)"
        [ngClass]="{
@@ -14,6 +20,9 @@
          'drop-after': commands.dragTargetLayer == row.element && commands.dragTargetPosition == 'after',
          'drop-inside': commands.dragTargetLayer == row.element && commands.dragTargetPosition == 'inside'
        }"
+       (mousedown)="keepPointerFocus($event)"
+       (focus)="focusedId = row.element.id"
+       (keydown)="handleKey($event, row.element)"
        (click)="commands.selectLayer(row.element, $event)"
        (dblclick)="commands.beginLayerRename($event, row.element)"
        (contextmenu)="commands.openLayerContextMenu($event, row.element)"

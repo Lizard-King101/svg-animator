@@ -75,14 +75,14 @@ const ShapeBaseAttributes = [
         output: 'fill',
     },
     {
-        label: 'Line Caps',
+        label: 'Line Cap',
         name: 'stroke-linecap',
         input: 'select',
         output: 'line_cap',
         options: [{ label: 'Butt', value: 'butt' }, { label: 'Round', value: 'round' }, { label: 'Square', value: 'square' }]
     },
     {
-        label: 'Line Joint',
+        label: 'Line Join',
         name: 'stroke-linejoin',
         input: 'select',
         output: 'line_join',

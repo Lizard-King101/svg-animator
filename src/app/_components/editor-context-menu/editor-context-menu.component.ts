@@ -1,8 +1,9 @@
 import { NgClass, NgFor, NgIf, NgTemplateOutlet } from "@angular/common";
-import { Component } from "@angular/core";
+import { AfterViewChecked, Component, ElementRef, ViewChild } from "@angular/core";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { DocumentMutationService } from "../../_services/document-mutation.service";
 import { EditorContextMenuItem, EditorService } from "../../_services/editor.service";
+import { positionPointMenu } from "../floating-popover";
 
 @Component({
     selector: "app-editor-context-menu",
@@ -23,11 +24,10 @@ import { EditorContextMenuItem, EditorService } from "../../_services/editor.ser
         </div>
       </ng-template>
 
-      <div class="context-menu" *ngIf="editor.contextMenu"
+      <div #menu class="context-menu" *ngIf="editor.contextMenu"
            [class.open-left]="opensLeft()"
            (mousedown)="$event.stopPropagation()" (click)="$event.stopPropagation()"
-           (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
-           [style.left.px]="editor.contextMenu.x" [style.top.px]="editor.contextMenu.y">
+           (contextmenu)="$event.preventDefault(); $event.stopPropagation()">
         <ng-container *ngTemplateOutlet="itemsTemplate; context: { $implicit: editor.contextMenu.items }"></ng-container>
         <div class="context-menu-info" *ngIf="editor.contextMenu.infoLines?.length">
           <div class="context-menu-info-title" *ngIf="editor.contextMenu.infoTitle">{{ editor.contextMenu.infoTitle }}</div>
@@ -36,8 +36,24 @@ import { EditorContextMenuItem, EditorService } from "../../_services/editor.ser
       </div>
     `,
 })
-export class EditorContextMenuComponent {
+export class EditorContextMenuComponent implements AfterViewChecked {
+    @ViewChild("menu") private menu?: ElementRef<HTMLElement>;
+    private placed?: EditorService["contextMenu"];
+
     constructor(public editor: EditorService, private mutations: DocumentMutationService) {}
+
+    /** Measures each newly opened menu once and keeps it inside the viewport before it paints. */
+    ngAfterViewChecked(): void {
+        const menu = this.editor.contextMenu;
+        if(menu === this.placed) return;
+        this.placed = menu;
+        const element = this.menu?.nativeElement;
+        if(!menu || !element) return;
+        const { width, height } = element.getBoundingClientRect();
+        const position = positionPointMenu({ x: menu.x, y: menu.y }, { width, height }, this.opensLeft());
+        element.style.left = `${position.left}px`;
+        element.style.top = `${position.top}px`;
+    }
 
     run(item: EditorContextMenuItem): void {
         const revision = this.mutations.revision;

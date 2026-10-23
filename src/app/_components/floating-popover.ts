@@ -45,3 +45,23 @@ export function floatingPopoverStyle(position?: FloatingPopoverPosition): Record
         maxHeight: `${position.maxHeight}px`,
     };
 }
+
+export interface PointMenuPosition {
+    left: number;
+    top: number;
+}
+
+/** Places a measured menu at a pointer, opening leftward when requested and keeping it inside the viewport. */
+export function positionPointMenu(
+    point: { x: number; y: number },
+    size: { width: number; height: number },
+    opensLeft: boolean,
+    viewport: FloatingPopoverViewport = { width: window.innerWidth, height: window.innerHeight },
+    margin = 8,
+): PointMenuPosition {
+    const preferredLeft = opensLeft ? point.x - size.width : point.x;
+    return {
+        left: Math.max(margin, Math.min(preferredLeft, viewport.width - size.width - margin)),
+        top: Math.max(margin, Math.min(point.y, viewport.height - size.height - margin)),
+    };
+}

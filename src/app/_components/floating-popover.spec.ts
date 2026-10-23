@@ -1,4 +1,4 @@
-import { floatingPopoverStyle, positionFloatingPopover } from "./floating-popover";
+import { floatingPopoverStyle, positionFloatingPopover, positionPointMenu } from "./floating-popover";
 
 describe("floating popover positioning", () => {
     const viewport = { width: 1000, height: 800 };
@@ -22,5 +22,14 @@ describe("floating popover positioning", () => {
         );
 
         expect(position).toEqual({ left: 8, top: 48, maxHeight: 744 });
+    });
+
+    it("keeps pointer menus inside the viewport and honours leftward opening", () => {
+        const size = { width: 180, height: 300 };
+        expect(positionPointMenu({ x: 100, y: 100 }, size, false, viewport)).toEqual({ left: 100, top: 100 });
+        expect(positionPointMenu({ x: 100, y: 700 }, size, false, viewport)).toEqual({ left: 100, top: 492 });
+        expect(positionPointMenu({ x: 900, y: 50 }, size, true, viewport)).toEqual({ left: 720, top: 50 });
+        expect(positionPointMenu({ x: 990, y: 50 }, size, false, viewport)).toEqual({ left: 812, top: 50 });
+        expect(positionPointMenu({ x: 50, y: 50 }, { width: 180, height: 900 }, true, viewport)).toEqual({ left: 8, top: 8 });
     });
 });

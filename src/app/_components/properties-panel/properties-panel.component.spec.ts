@@ -95,5 +95,9 @@ describe("PropertiesPanelComponent", () => {
         const root = fixture.nativeElement as HTMLElement;
         expect(root.querySelectorAll("app-paint-editor").length).toBe(2);
         expect(root.querySelectorAll(".paint-stop-marker").length).toBe(2);
+        // Without a selected anchor the Anchor section is omitted rather than left as an empty divider.
+        const sections = [...root.querySelectorAll(".transform-section")];
+        expect(sections.every((section) => section.querySelector(".transform-title"))).toBeTrue();
+        expect(sections.map((section) => section.querySelector(".transform-title")?.textContent)).not.toContain("Anchor");
     });
 });
