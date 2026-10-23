@@ -99,12 +99,20 @@
       gap: 6px;
     }
 
-    .alpha {
+    .channel {
       display: flex;
-      flex-direction: column;
-      gap: 5px;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-secondary);
 
-      span { color: var(--text-muted); font-size: 10px; }
+      span { flex: 0 0 10px; }
+      input { flex: 1 1 auto; min-width: 0; }
+      output { flex: 0 0 32px; text-align: right; font-family: 'JetBrains Mono', monospace; font-weight: 400; }
     }
   }
 }

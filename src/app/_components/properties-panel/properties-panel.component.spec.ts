@@ -7,6 +7,8 @@ import { Path } from "../../editor/objects/elements/path.object";
 import { Line } from "../../editor/objects/line.object";
 import { createDefaultGradient } from "../../editor/objects/paint.object";
 import { Point } from "../../editor/objects/point.object";
+import { Shape } from "../../editor/objects/elements/shape.object";
+import { Color } from "../../editor/objects/color.object";
 import { PropertiesPanelComponent } from "./properties-panel.component";
 import { EditorPreferencesService } from "../../_services/editor-preferences.service";
 import { SelectTool } from "../../_services/tools/select.tool";
@@ -90,14 +92,77 @@ describe("PropertiesPanelComponent", () => {
         const fixture = TestBed.createComponent(PropertiesPanelComponent);
 
         fixture.detectChanges();
+        const root = fixture.nativeElement as HTMLElement;
+        const stroke = root.querySelector('button[aria-label^="Stroke:"]') as HTMLButtonElement;
+        expect(stroke.getAttribute("aria-label")).toBe("Stroke: Linear gradient");
+        expect(root.querySelectorAll("app-paint-editor").length).toBe(0);
+        stroke.click();
         for(let index = 0; index < 25; index += 1) fixture.detectChanges();
 
-        const root = fixture.nativeElement as HTMLElement;
-        expect(root.querySelectorAll("app-paint-editor").length).toBe(2);
+        expect(root.querySelectorAll("app-paint-editor").length).toBe(1);
         expect(root.querySelectorAll(".paint-stop-marker").length).toBe(2);
         // Without a selected anchor the Anchor section is omitted rather than left as an empty divider.
         const sections = [...root.querySelectorAll(".transform-section")];
         expect(sections.every((section) => section.querySelector(".transform-title"))).toBeTrue();
         expect(sections.map((section) => section.querySelector(".transform-title")?.textContent)).not.toContain("Anchor");
+    });
+
+    it("switches fill and stroke off and back on, restoring hidden paints and stroke width", async () => {
+        let id = 0;
+        const modelEditor = { get ID() { return `id-${++id}`; } } as EditorService;
+        const shape = new Shape(modelEditor, { type: "rectangle", position: new Point(0, 0), width: 10, height: 10 });
+        shape.settings.fill = new Color("#123456");
+        shape.settings.stroke = new Color("#abcdef");
+        shape.settings.stroke_width = 0;
+        const path = new Path(modelEditor);
+        path.lines = [new Line(modelEditor, { points: [new Point(0, 0), new Point(10, 0)] })];
+        const editor = {
+            inspectedElement: shape as Shape | Path, selectedElement: shape, selectedElements: [shape],
+            selectedGradientPaintKey: "fill" as string | undefined,
+            drawingPaint: { fill: "#ff0000", stroke: "#00ff00", strokeWidth: 4 },
+        };
+        const schedule = jasmine.createSpy("schedule");
+        await TestBed.configureTestingModule({
+            imports: [PropertiesPanelComponent],
+            providers: [
+                { provide: EditorService, useValue: editor },
+                { provide: AnimationPlaybackService, useValue: { mode: "edit" } },
+                { provide: DocumentMutationService, useValue: { schedule } },
+                { provide: PaintEditingService, useValue: { apply: () => true } },
+            ],
+        }).compileComponents();
+        const fixture = TestBed.createComponent(PropertiesPanelComponent);
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        const root = fixture.nativeElement as HTMLElement;
+        const switches = () => [...root.querySelectorAll("[role=switch]")] as HTMLButtonElement[];
+        const field = (name: string) => root.querySelector(`button[aria-label^="${name}:"]`);
+
+        expect(switches().map((item) => item.getAttribute("aria-label"))).toEqual(["Fill", "Stroke"]);
+        expect(switches().map((item) => item.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+        expect(field("Stroke")).toBeNull();
+        expect([...root.querySelectorAll(".transform-grid span")].map((span) => span.textContent)).toContain("Corner radius");
+
+        switches()[0].click(); fixture.detectChanges();
+        expect(shape.settings.fill).toBeNull();
+        expect(editor.selectedGradientPaintKey).toBeUndefined();
+        expect(field("Fill")).toBeNull();
+        switches()[0].click(); fixture.detectChanges();
+        expect((shape.settings.fill as Color).hex).toBe("#123456");
+
+        switches()[1].click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        expect(shape.settings.stroke_width).toBe(4);
+        expect(field("Stroke")?.getAttribute("aria-label")).toBe("Stroke: #ABCDEF, 100% opacity");
+        const selects = [...root.querySelectorAll(".stroke-grid select")] as HTMLSelectElement[];
+        expect(selects.map((select) => select.selectedOptions[0]?.textContent?.trim())).toEqual(["Center", "Butt", "Miter"]);
+        expect(schedule).toHaveBeenCalledTimes(3);
+
+        // A path keeps its paint behind fill_enabled; enabling it never discards the stored fill.
+        const pathFill = path.settings.fill;
+        editor.inspectedElement = path; fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        expect(switches()[0].getAttribute("aria-checked")).toBe(String(!!path.settings.fill_enabled));
+        if(!path.settings.fill_enabled) switches()[0].click();
+        fixture.detectChanges();
+        expect(path.settings.fill_enabled).toBeTrue();
+        expect(path.settings.fill).toBe(pathFill ?? path.settings.fill);
     });
 });

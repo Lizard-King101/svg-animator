@@ -27,6 +27,12 @@
                [ngModel]="frameValue(frameElement, 'height')"
                (ngModelChange)="setFrameValue(frameElement, 'height', $event)" />
       </label>
+      <label *ngIf="attribute(frameElement, 'corner_radius') as radius">
+        <span>Corner radius</span>
+        <input type="number" numberField min="0" step="1"
+               [ngModel]="settingsOf(frameElement)['corner_radius']"
+               (ngModelChange)="setNonNegative(frameElement, radius, $event)" />
+      </label>
     </div>
   </div>
   <ng-container *ngIf="asPath(editor.inspectedElement) as selectedPath">
@@ -108,44 +114,72 @@
       <button type="button" (click)="flipElement(editor.inspectedElement, 'y')">Flip Y</button>
     </div>
   </div>
-  <div class="attr-list">
-    <ng-container *ngFor="let attr of editor.inspectedElement.attributes">
-      <div class="attr-row">
-        <attr-text   *ngIf="attr.input == 'text'"
-                     [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
-                     (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
-                     [label]="attr.label"></attr-text>
-        <attr-bool   *ngIf="attr.input == 'bool'"
-                     [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
-                     (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
-                     [label]="attr.label"></attr-bool>
-        <color       *ngIf="attr.input == 'color'"
-                     [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
-                     (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
-                     [label]="attr.label"></color>
-        <app-paint-editor *ngIf="attr.input == 'paint'"
-                          [label]="attr.label"
-                          [paint]="asPaint(settingsOf(editor.inspectedElement)[attr.output])"
-                          (click)="selectGradientPaint(attr.output)"
-                          (paintChange)="handlePaintChange(editor.inspectedElement, attr.output, $event)" />
-        <range       *ngIf="attr.input == 'range'"
-                     [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
-                     (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
-                     [min]="$any(attr).min" [max]="$any(attr).max"
-                     [label]="attr.label"></range>
-        <attr-select *ngIf="attr.input == 'select'"
-                     [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
-                     (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
-                     [options]="$any(attr).options"
-                     [label]="attr.label"></attr-select>
-      </div>
-    </ng-container>
-    <div class="transform-section" *ngIf="asStrokeElement(editor.inspectedElement) as strokeElement">
-      <div class="transform-title">Stroke Style</div>
-      <div class="transform-grid">
+  <div class="attr-list" *ngIf="otherAttributes(editor.inspectedElement).length">
+    <div class="attr-row" *ngFor="let attr of otherAttributes(editor.inspectedElement)">
+      <attr-text   *ngIf="attr.input == 'text'"
+                   [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
+                   (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
+                   [label]="attr.label"></attr-text>
+      <attr-bool   *ngIf="attr.input == 'bool'"
+                   [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
+                   (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
+                   [label]="attr.label"></attr-bool>
+      <color       *ngIf="attr.input == 'color'"
+                   [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
+                   (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
+                   [label]="attr.label"></color>
+      <range       *ngIf="attr.input == 'range'"
+                   [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
+                   (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
+                   [min]="$any(attr).min" [max]="$any(attr).max"
+                   [label]="attr.label"></range>
+      <attr-select *ngIf="attr.input == 'select'"
+                   [ngModel]="settingsOf(editor.inspectedElement)[attr.output]"
+                   (ngModelChange)="handleAttributeChange(editor.inspectedElement, attr, $event)"
+                   [options]="$any(attr).options"
+                   [label]="attr.label"></attr-select>
+    </div>
+  </div>
+
+  <div class="transform-section" *ngIf="fillKey(editor.inspectedElement) as key">
+    <div class="section-heading">
+      <div class="transform-title">{{ key === 'color' ? 'Color' : 'Fill' }}</div>
+      <attr-bool *ngIf="key === 'fill'" class="inline" ariaLabel="Fill"
+                 [ngModel]="fillEnabled(editor.inspectedElement)"
+                 (ngModelChange)="setFillEnabled(editor.inspectedElement, $event)"></attr-bool>
+    </div>
+    <app-paint-field *ngIf="fillEnabled(editor.inspectedElement)"
+                     [label]="key === 'color' ? 'Text color' : 'Fill'"
+                     [owner]="editor.inspectedElement"
+                     [paint]="asPaint(settingsOf(editor.inspectedElement)[key])"
+                     (click)="selectGradientPaint(key)"
+                     (paintChange)="handlePaintChange(editor.inspectedElement, key, $event)" />
+  </div>
+
+  <div class="transform-section" *ngIf="asStrokeElement(editor.inspectedElement) as strokeElement">
+    <div class="section-heading">
+      <div class="transform-title">Stroke</div>
+      <attr-bool class="inline" ariaLabel="Stroke"
+                 [ngModel]="strokeEnabled(strokeElement)"
+                 (ngModelChange)="setStrokeEnabled(strokeElement, $event)"></attr-bool>
+    </div>
+    <ng-container *ngIf="strokeEnabled(strokeElement)">
+      <app-paint-field label="Stroke"
+                       [owner]="strokeElement"
+                       [paint]="asPaint(strokeElement.settings.stroke)"
+                       (click)="selectGradientPaint('stroke')"
+                       (paintChange)="handlePaintChange(strokeElement, 'stroke', $event)" />
+      <div class="transform-grid stroke-grid">
+        <label *ngIf="attribute(strokeElement, 'stroke_width') as width">
+          <span>Width</span>
+          <input type="number" numberField min="0" step="1"
+                 [ngModel]="strokeElement.settings.stroke_width"
+                 (ngModelChange)="setNonNegative(strokeElement, width, $event)" />
+        </label>
         <label>
           <span>Alignment</span>
           <select [disabled]="strokeAlignmentDisabled(strokeElement)"
+                  [title]="strokeAlignmentDisabled(strokeElement) ? 'Open paths always use a centered stroke' : ''"
                   [ngModel]="strokeElement.settings.stroke_alignment"
                   (ngModelChange)="setStrokeAlignment(strokeElement, $event)">
             <option value="center">Center</option>
@@ -153,27 +187,41 @@
             <option value="outside">Outside</option>
           </select>
         </label>
-        <label>
-          <span>Dash Offset</span>
-          <input type="number" numberField step="1"
-                 [ngModel]="strokeElement.settings.stroke_dashoffset"
-                 (ngModelChange)="setStrokeNumber(strokeElement, 'stroke_dashoffset', $event)" />
+        <label *ngIf="attribute(strokeElement, 'line_cap') as cap">
+          <span>Cap</span>
+          <select [ngModel]="strokeElement.settings.line_cap ?? 'butt'"
+                  (ngModelChange)="handleAttributeChange(strokeElement, cap, $event)">
+            <option *ngFor="let option of $any(cap).options" [ngValue]="option.value">{{ option.label }}</option>
+          </select>
+        </label>
+        <label *ngIf="attribute(strokeElement, 'line_join') as join">
+          <span>Join</span>
+          <select [ngModel]="strokeElement.settings.line_join ?? 'miter'"
+                  (ngModelChange)="handleAttributeChange(strokeElement, join, $event)">
+            <option *ngFor="let option of $any(join).options" [ngValue]="option.value">{{ option.label }}</option>
+          </select>
         </label>
         <label class="stroke-pattern-field">
-          <span>Dash Pattern</span>
+          <span>Dash pattern</span>
           <input type="text" placeholder="Solid"
                  [value]="dashPattern(strokeElement)"
                  (change)="setDashPattern(strokeElement, $any($event.target).value)" />
         </label>
         <label>
-          <span>Miter Limit</span>
+          <span>Dash offset</span>
+          <input type="number" numberField step="1"
+                 [ngModel]="strokeElement.settings.stroke_dashoffset"
+                 (ngModelChange)="setStrokeNumber(strokeElement, 'stroke_dashoffset', $event)" />
+        </label>
+        <label>
+          <span>Miter limit</span>
           <input type="number" numberField min="1" step="1"
                  [disabled]="strokeElement.settings.line_join != null && strokeElement.settings.line_join !== 'miter'"
                  [ngModel]="strokeElement.settings.stroke_miterlimit"
                  (ngModelChange)="setStrokeNumber(strokeElement, 'stroke_miterlimit', $event)" />
         </label>
       </div>
-    </div>
+    </ng-container>
   </div>
 </ng-container>
 <div class="panel-empty" [class.selection-summary]="editor.selectedElements.length > 1" *ngIf="!editor.inspectedElement">

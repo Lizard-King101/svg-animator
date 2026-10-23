@@ -1,11 +1,11 @@
 import { Component, forwardRef, Input } from "@angular/core";
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from "@angular/forms";
-import { NgClass } from "@angular/common";
+import { NgClass, NgIf } from "@angular/common";
 
 @Component({
     standalone: true,
     selector: 'attr-bool',
-    imports: [NgClass],
+    imports: [NgClass, NgIf],
     templateUrl: 'bool.component.html',
     styleUrls: ['bool.component.scss'],
     providers: [
@@ -18,6 +18,8 @@ import { NgClass } from "@angular/common";
 })
 export class BoolAttribute implements ControlValueAccessor {
     @Input() label?: string;
+    /** Accessible name when the switch is shown without a visible label. */
+    @Input() ariaLabel?: string;
     value = false;
 
     onChange(_: boolean) {}
@@ -26,6 +28,7 @@ export class BoolAttribute implements ControlValueAccessor {
     toggle() {
         this.value = !this.value;
         this.onChange(this.value);
+        this.onTouch();
     }
 
     writeValue(v: boolean) { this.value = !!v; }

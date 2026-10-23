@@ -24,7 +24,7 @@ import { Paint, PaintSettingKey } from "../../editor/objects/paint.object";
 import { Point } from "../../editor/objects/point.object";
 import { AnyElement } from "../../editor/objects/svg.object";
 import { geometryAnimationChanges, geometryAnimationValues, readAnimationProperty } from "../../editor/objects/animation-targets";
-import { PaintEditorComponent } from "../paint-editor/paint-editor.component";
+import { PaintFieldComponent } from "../paint-field/paint-field.component";
 import { PaintEditorChange } from "../paint-editor/paint-editor.types";
 import { PaintEditingService } from "../../_services/paint-editing.service";
 import { formatDashArray, parseDashArray, StrokeAlignment } from "../../editor/objects/stroke-style.object";
@@ -32,7 +32,7 @@ import { formatDashArray, parseDashArray, StrokeAlignment } from "../../editor/o
 @Component({
     selector: "app-properties-panel",
     standalone: true,
-    imports: [FormsModule, NgFor, NgIf, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute, PaintEditorComponent, NumberFieldDirective],
+    imports: [FormsModule, NgFor, NgIf, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute, PaintFieldComponent, NumberFieldDirective],
     templateUrl: "properties-panel.component.html",
     styleUrl: "properties-panel.component.scss",
 })
@@ -47,6 +47,10 @@ export class PropertiesPanelComponent {
     }
 
     readonly ANIMATABLE_PROPERTIES = ANIMATABLE_PROPERTIES;
+    /** Settings rendered by the dedicated Frame, Fill, and Stroke sections instead of the generic list. */
+    private static readonly SECTION_OUTPUTS = new Set(["fill", "fill_enabled", "color", "stroke", "stroke_width", "line_cap", "line_join", "corner_radius"]);
+    /** Paints switched off this session, restored when the switch turns back on. */
+    private readonly hiddenPaints = new WeakMap<AnyElement, Partial<Record<"fill" | "stroke", Paint>>>();
 
     constructor(
         public editor: EditorService,
@@ -71,6 +75,74 @@ export class PropertiesPanelComponent {
 
     asStrokeElement(element: AnyElement | undefined): Path | Shape | null {
         return element instanceof Path || element instanceof Shape ? element : null;
+    }
+
+    attribute(element: AnyElement, output: string): ElementAttribute | undefined {
+        return element.attributes.find((attr) => attr.output === output);
+    }
+
+    otherAttributes(element: AnyElement): ElementAttribute[] {
+        return element.attributes.filter((attr) => !PropertiesPanelComponent.SECTION_OUTPUTS.has(attr.output));
+    }
+
+    fillKey(element: AnyElement): "fill" | "color" | null {
+        return this.attribute(element, "fill") ? "fill" : this.attribute(element, "color") ? "color" : null;
+    }
+
+    /** Paths keep their fill behind `fill_enabled`; shapes have no fill when it is null; text always fills. */
+    fillEnabled(element: AnyElement): boolean {
+        if(this.fillKey(element) !== "fill") return true;
+        const settings = this.settingsOf(element);
+        return this.attribute(element, "fill_enabled") ? !!settings["fill_enabled"] : settings["fill"] != null;
+    }
+
+    setFillEnabled(element: AnyElement, enabled: boolean): void {
+        const settings = this.settingsOf(element);
+        const toggle = this.attribute(element, "fill_enabled");
+        if(enabled && settings["fill"] == null) settings["fill"] = this.restorePaint(element, "fill");
+        if(toggle) {
+            this.handleAttributeChange(element, toggle, enabled);
+            return;
+        }
+        if(!enabled) this.hidePaint(element, "fill");
+        this.scheduleAttributeSnapshot();
+    }
+
+    strokeEnabled(element: Path | Shape): boolean {
+        return element.settings.stroke != null && element.settings.stroke_width > 0;
+    }
+
+    setStrokeEnabled(element: Path | Shape, enabled: boolean): void {
+        if(enabled) {
+            if(element.settings.stroke == null) element.settings.stroke = this.restorePaint(element, "stroke");
+            if(!(element.settings.stroke_width > 0)) {
+                const width = this.editor.drawingPaint.strokeWidth;
+                element.settings.stroke_width = width > 0 ? width : 1;
+            }
+        } else {
+            this.hidePaint(element, "stroke");
+        }
+        this.scheduleAttributeSnapshot();
+    }
+
+    setNonNegative(element: AnyElement, attr: ElementAttribute, value: number | string | null): void {
+        const numeric = typeof value === "number" ? value : Number(value);
+        if(Number.isFinite(numeric)) this.handleAttributeChange(element, attr, Math.max(0, numeric));
+    }
+
+    private hidePaint(element: AnyElement, key: "fill" | "stroke"): void {
+        const settings = this.settingsOf(element);
+        const paint = settings[key] as Paint | null;
+        if(paint) this.hiddenPaints.set(element, { ...this.hiddenPaints.get(element), [key]: paint });
+        settings[key] = null;
+        if(this.editor.selectedGradientPaintKey === key) this.editor.selectedGradientPaintKey = undefined;
+    }
+
+    /** The paint hidden this session, else the new-artwork default, else black. */
+    private restorePaint(element: AnyElement, key: "fill" | "stroke"): Paint {
+        const hidden = this.hiddenPaints.get(element)?.[key];
+        if(hidden) return hidden;
+        return new Color(this.editor.drawingPaint[key] ?? "#000000");
     }
 
     strokeAlignmentDisabled(element: Path | Shape): boolean {

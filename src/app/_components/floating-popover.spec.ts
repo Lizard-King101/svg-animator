@@ -1,4 +1,4 @@
-import { floatingPopoverStyle, positionFloatingPopover, positionPointMenu } from "./floating-popover";
+import { floatingPopoverStyle, positionFloatingPopover, positionPointMenu, positionSidePopover } from "./floating-popover";
 
 describe("floating popover positioning", () => {
     const viewport = { width: 1000, height: 800 };
@@ -31,5 +31,17 @@ describe("floating popover positioning", () => {
         expect(positionPointMenu({ x: 900, y: 50 }, size, true, viewport)).toEqual({ left: 720, top: 50 });
         expect(positionPointMenu({ x: 990, y: 50 }, size, false, viewport)).toEqual({ left: 812, top: 50 });
         expect(positionPointMenu({ x: 50, y: 50 }, { width: 180, height: 900 }, true, viewport)).toEqual({ left: 8, top: 8 });
+    });
+
+    it("opens side popovers left of the panel, clamped vertically, and falls back below without room", () => {
+        const options = { width: 280, preferredHeight: 600, inset: 12 };
+        expect(positionSidePopover({ left: 700, right: 940, top: 500, bottom: 528 }, options, viewport))
+            .toEqual({ left: 404, top: 192, maxHeight: 600 });
+        expect(positionSidePopover({ left: 700, right: 940, top: 40, bottom: 68 }, options, viewport))
+            .toEqual({ left: 404, top: 40, maxHeight: 600 });
+        expect(positionSidePopover({ left: 700, right: 940, top: 40, bottom: 68 }, { ...options, preferredHeight: 2000 }, viewport))
+            .toEqual({ left: 404, top: 8, maxHeight: 784 });
+        expect(positionSidePopover({ left: 200, right: 440, top: 40, bottom: 68 }, options, viewport))
+            .toEqual(positionFloatingPopover({ left: 200, right: 440, top: 40, bottom: 68 }, options, viewport));
     });
 });

@@ -1,6 +1,7 @@
 <div class="bool-row">
-  <span class="bool-label">{{ label }}</span>
-  <button class="bool-toggle" [ngClass]="{'on': value}" (click)="toggle()" type="button">
+  <span class="bool-label" *ngIf="label">{{ label }}</span>
+  <button class="bool-toggle" [ngClass]="{'on': value}" (click)="toggle()" type="button"
+          role="switch" [attr.aria-checked]="value" [attr.aria-label]="ariaLabel ?? label">
     <span class="bool-knob"></span>
   </button>
 </div>

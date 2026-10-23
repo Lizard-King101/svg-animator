@@ -53,7 +53,7 @@ describe("PaintEditorComponent", () => {
 
         const root = fixture.nativeElement as HTMLElement;
         expect(root.querySelector(".paint-alpha-field")).toBeNull();
-        expect(root.querySelector(".paint-selected-stop color")?.textContent).toContain("Alpha 40%");
+        expect(root.querySelector(".paint-selected-stop color output")?.textContent).toBe("40%");
         expect(fixture.componentInstance.stopOpacity(gradient.stops[0])).toBe(0.4);
     });
 

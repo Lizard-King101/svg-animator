@@ -11,3 +11,19 @@
         font-weight: 600;
     }
 }
+
+.section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 18px;
+    margin-bottom: 8px;
+
+    .transform-title { margin-bottom: 0; }
+}
+
+// A switched-off section is just its heading.
+.section-heading:last-child { margin-bottom: 0; }
+
+.stroke-grid { margin-top: 10px; }
+.stroke-grid select { font-family: inherit; }
