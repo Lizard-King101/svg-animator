@@ -10,6 +10,7 @@ const preloadedDirectory = resolve(root, "Preloaded");
 const projectExports = [
     "Animation Example.svg-animator.json",
     "favicon.svg-animator.json",
+    "Welcome Banner.svg-animator.json",
 ];
 
 // Thumbnail generation runs in Node, where canvas-based text measurement is not

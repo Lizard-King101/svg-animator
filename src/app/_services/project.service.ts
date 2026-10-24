@@ -12,7 +12,7 @@ import {
     ProjectRepository,
     RepositoryProjectRecord,
 } from './project-repository';
-import { PRELOADED_PROJECTS } from './preloaded-projects';
+import { PreloadedProject, PRELOADED_PROJECTS } from './preloaded-projects';
 
 export interface ProjectRecord {
     id: string;
@@ -105,6 +105,17 @@ export class ProjectService {
         let index = 2;
         while(names.has(`${trimmed} ${index}`.toLowerCase())) index++;
         return `${trimmed} ${index}`;
+    }
+
+    /**
+     * The gallery copy of a bundled project, adding it back when it is missing (galleries saved
+     * before it shipped, or after the user deleted it). An existing copy, edited or not, is kept.
+     */
+    ensurePreloaded(project: PreloadedProject): ProjectRecord {
+        const existing = this.get(project.id);
+        if(existing) return existing;
+        this.upsert(structuredClone(project.svgData), project.thumbnail);
+        return this.get(project.id)!;
     }
 
     /** Renames a project in place; blank or unchanged names are ignored. */

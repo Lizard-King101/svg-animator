@@ -9,6 +9,7 @@ import { ProjectFileImportService } from "../_services/project-file-import.servi
 import { ElementFactory } from "../_services/element-factory.service";
 import { EditorService } from "../_services/editor.service";
 import { formatEditedTime, formatFullTime } from "./relative-time";
+import { HomeBannerComponent } from "./home-banner.component";
 
 export type ProjectSort = "edited" | "name" | "created";
 const SORT_STORAGE_KEY = "svg-animator.home-sort";
@@ -16,7 +17,7 @@ const SORTS: readonly ProjectSort[] = ["edited", "name", "created"];
 
 @Component({
     standalone: true,
-    imports: [NgFor, NgIf, FormsModule, FaIconComponent, RouterLink],
+    imports: [NgFor, NgIf, FormsModule, FaIconComponent, RouterLink, HomeBannerComponent],
     templateUrl: 'home.page.html',
     styleUrls: ['home.page.scss'],
     providers: [EditorService, ElementFactory, ProjectFileImportService],

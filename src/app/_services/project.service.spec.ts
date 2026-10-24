@@ -123,4 +123,15 @@ describe('Project deletion recovery and write ordering', () => {
         await service.flush();
         expect((await repository.list()).map((project) => project.name).sort()).toEqual(['Logo', 'Logo copy', 'Logo copy 2', 'b', 'c']);
     });
+
+    it('restores a missing bundled project once and keeps an existing copy', async () => {
+        const bundled = { ...record('banner'), name: 'Welcome Banner' };
+        const restored = service.ensurePreloaded(bundled);
+        expect(restored.id).toBe('banner');
+        expect(restored.svgData).not.toBe(bundled.svgData);
+        service.rename('banner', 'My banner');
+        expect(service.ensurePreloaded(bundled).name).toBe('My banner');
+        await service.flush();
+        expect((await repository.list()).filter((project) => project.id === 'banner').length).toBe(1);
+    });
 });

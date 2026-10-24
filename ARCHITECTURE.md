@@ -41,6 +41,7 @@ Architecture is part of feature delivery. Pages and shells compose; components o
 | Publishing | `ProjectExportService`, `RuntimeExportService` | Serialize deterministic editable Project JSON from the project gallery; build base-state Static, Embedded Animation, and self-contained Animated SVG plus Runtime Assets/Web Bundle ZIP artifacts asynchronously in the editor |
 | Standalone playback | `packages/runtime` | Framework-free validation, evaluation, scoped SVG mutation, playback/events, reduced motion, and cleanup |
 | Persistence | `ProjectService`, `ProjectRepository` implementations | Async project lifecycle, IndexedDB transactions, legacy migration, serialized/coalesced writes, session deletion recovery, and fallback state |
+| Home | `HomePage`, `HomeBannerComponent`, `relative-time.ts` | Gallery search/sort, inline rename, duplicate, drop import, and card menus over `ProjectService`; the hero mounts `WELCOME_BANNER_PROJECT` with `compileRuntimeAnimation` + `buildSVGMarkup` and the runtime `createPlayer`, and restores the gallery copy through `ProjectService.ensurePreloaded`. `scripts/generate-welcome-banner.ts` authors the banner deterministically and validates it compiles without diagnostics |
 | UI shell | `EditorPage` | Route-driven project loading, provider lifetime, global shortcut precedence, and surface composition |
 | UI surfaces | Header, tool palette, dialogs, context menu, guides, panels, and timeline components | Own their templates, local form/gesture state, and feature-specific interaction methods |
 

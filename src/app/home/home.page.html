@@ -20,8 +20,10 @@
 
   <section class="gallery-section" aria-labelledby="projects-heading">
 
+    <app-home-banner (newProject)="newProject()" />
+
     <div class="gallery-toolbar">
-      <h1 id="projects-heading">Projects <span class="project-count" *ngIf="!loading">{{ projects.length }}</span></h1>
+      <h2 id="projects-heading">Projects <span class="project-count" *ngIf="!loading">{{ projects.length }}</span></h2>
       <div class="gallery-controls" *ngIf="!loading && projects.length > 0">
         <label class="search">
           <fa-icon icon="magnifying-glass"></fa-icon>
