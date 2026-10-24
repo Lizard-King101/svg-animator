@@ -7,6 +7,7 @@ import { applyDrawingPaint } from '../../../editor/objects/drawing-paint';
 
 export class Ellipse extends Tool {
     override readonly preferenceKey = 'ellipse';
+    override readonly usesDrawingPaint = true;
     override readonly label = 'Ellipse / Circle';
     override icon: IconName = 'circle';
     private startPoint?: Point;

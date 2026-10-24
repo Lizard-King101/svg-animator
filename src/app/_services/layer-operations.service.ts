@@ -218,6 +218,24 @@ export class LayerOperationsService {
         return true;
     }
 
+    /** Moves the layer to the top of its parent's stacking order. */
+    bringToFront(element: AnyElement): boolean {
+        const context = this.context(element);
+        if(!context || context.index >= context.elements.length - 1) return false;
+        context.elements.splice(context.index, 1);
+        context.elements.push(element);
+        return true;
+    }
+
+    /** Moves the layer to the bottom of its parent's stacking order. */
+    sendToBack(element: AnyElement): boolean {
+        const context = this.context(element);
+        if(!context || context.index <= 0) return false;
+        context.elements.splice(context.index, 1);
+        context.elements.unshift(element);
+        return true;
+    }
+
     groupWithBelow(element: AnyElement, clipping = false): Group | undefined {
         const context = this.context(element);
         if(!context || context.index <= 0) return undefined;

@@ -6,11 +6,13 @@ import type { ShapeBuildingMode, ShapeBuildingService } from '../shape-building.
 export class ShapeBuildingTool extends Tool {
     override readonly preferenceKey: string;
     override readonly label: string;
+    override readonly usesDrawingPaint: boolean;
     override icon: IconName;
     building?: ShapeBuildingService;
     constructor(editor: EditorService, parent: Tool, readonly mode: ShapeBuildingMode) {
         super(editor, parent);
         this.preferenceKey = mode; this.label = mode === 'regions' ? 'Create shape' : 'Trim';
+        this.usesDrawingPaint = mode === 'regions';
         this.icon = mode === 'regions' ? 'object-group' : 'scissors';
     }
     override onselect(): boolean { super.onselect(); this.building?.activate(this.mode); return true; }

@@ -14,6 +14,8 @@ export class Tool {
     }
     selected: boolean = false;
     interactsWithGuides = false;
+    /** Whether this tool authors new artwork with the editor's drawing fill, stroke, and width defaults. */
+    readonly usesDrawingPaint: boolean = false;
 
     children: Tool[] = [];
     selectedChild?: Tool;

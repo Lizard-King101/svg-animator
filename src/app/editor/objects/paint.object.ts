@@ -83,6 +83,22 @@ export function gradientStopOpacity(stop: Pick<GradientStop, "color"> & { opacit
     return Number.isFinite(stop.color?.alpha) ? clamp01(stop.color.alpha) : 1;
 }
 
+/** CSS color for a gradient stop, including its stop opacity. */
+export function gradientStopCss(stop: Pick<GradientStop, "color"> & { opacity?: number }): string {
+    return `${stop.color.hex}${Math.round(gradientStopOpacity(stop) * 255).toString(16).padStart(2, "0")}`;
+}
+
+/** CSS background previewing a gradient left to right (linear) or from the center (radial). */
+export function gradientPreviewCss(gradient: GradientPaint): string {
+    const stops = [...gradient.stops]
+        .sort((a, b) => a.offset - b.offset)
+        .map((stop) => `${gradientStopCss(stop)} ${clamp01(stop.offset) * 100}%`)
+        .join(", ");
+    return gradient.type === "radial-gradient"
+        ? `radial-gradient(circle, ${stops})`
+        : `linear-gradient(90deg, ${stops})`;
+}
+
 export function restorePaint(value: PaintSave | undefined): Paint | null {
     if(value == null) return null;
     if(typeof value === "string") return new Color(value);

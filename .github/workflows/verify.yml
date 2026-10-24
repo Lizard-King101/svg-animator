@@ -8,13 +8,12 @@ jobs:
   runtime-and-editor:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - run: npm ci --legacy-peer-deps
+      # Builds the runtime and editor, runs the full test suite in headless Chrome,
+      # and checks fixtures, the runtime API report and size budget, and whitespace.
       - run: npm run verify
-      - run: npm test -- --watch=false
-      - run: npm run build
-      - run: git diff --check

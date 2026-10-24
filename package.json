@@ -14,6 +14,7 @@
     "copy:runtime": "node scripts/copy-runtime-assets.mjs",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
+    "test:ci": "ng test --watch=false --browsers=ChromeHeadlessNoSandbox",
     "runtime:size": "npm --prefix packages/runtime run size",
     "runtime:web-smoke": "esbuild scripts/test-runtime-web-export.ts --bundle --platform=node --format=esm --outfile=/tmp/svg-animator-runtime-web-smoke.mjs && node /tmp/svg-animator-runtime-web-smoke.mjs",
     "api:report": "npm run build:runtime && node scripts/generate-runtime-api-report.mjs --write",
@@ -22,7 +23,7 @@
     "fixtures:update": "esbuild scripts/generate-runtime-fixtures.ts --bundle --platform=node --format=esm --outfile=/tmp/svg-animator-runtime-fixtures.mjs && node /tmp/svg-animator-runtime-fixtures.mjs",
     "fixtures:check": "esbuild scripts/generate-runtime-fixtures.ts --bundle --platform=node --format=esm --outfile=/tmp/svg-animator-runtime-fixtures.mjs && node /tmp/svg-animator-runtime-fixtures.mjs --check",
     "preloaded:thumbnails": "esbuild scripts/generate-preloaded-thumbnails.ts --bundle --platform=node --format=esm --outfile=/tmp/svg-animator-preloaded-thumbnails.mjs && node /tmp/svg-animator-preloaded-thumbnails.mjs",
-    "verify": "npm run build:runtime && npm run fixtures:check && npm test -- --watch=false && npm run runtime:web-smoke && npm run build:editor && npm run api:check && npm run runtime:size && git diff --check"
+    "verify": "npm run build:runtime && npm run fixtures:check && npm run test:ci && npm run runtime:web-smoke && npm run build:editor && npm run api:check && npm run runtime:size && git diff --check"
   },
   "private": true,
   "dependencies": {

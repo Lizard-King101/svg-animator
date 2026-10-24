@@ -498,10 +498,13 @@ export class SelectTool extends Tool {
         this.canDeselect = false;
     }
 
+    /** Opens the object menu for a canvas object, or the canvas menu when `element` is undefined; bound by the editor page. */
+    objectMenu?: (event: MouseEvent, element?: AnyElement) => void;
+
     override contextMenu(event: MouseEvent): void {
         const target = <HTMLElement>event.target;
         if(!(this._editor.selectedElement instanceof Path) || this._editor.selectedElement.locked || !this._editor.selectedElement.visible) {
-            this._editor.closeContextMenu();
+            this.openObjectMenu(event);
             return;
         }
 
@@ -515,14 +518,15 @@ export class SelectTool extends Tool {
             this._editor.selectedPathLines = [];
             this._editor.openContextMenu(menuPosition.x, menuPosition.y, [
                 {
-                    label: 'Delete Point',
+                    label: 'Delete point',
+                    danger: true,
                     shortcut: 'Del',
                     action: () => {
                         this.deleteAnchor(this._editor.selectedElement as Path, overlayPoint.point);
                     }
                 }
             ]);
-            this._editor.contextMenu!.infoTitle = 'Path Shortcuts';
+            this._editor.contextMenu!.infoTitle = 'Path shortcuts';
             this._editor.contextMenu!.infoLines = [
                 'Alt-drag anchor: convert point',
                 'Delete or Backspace: delete selected point',
@@ -537,21 +541,21 @@ export class SelectTool extends Tool {
             this._editor.selectedPathAnchor = undefined;
             this._editor.openContextMenu(menuPosition.x, menuPosition.y, [
                 {
-                    label: 'Insert Point',
+                    label: 'Insert point',
                     shortcut: 'I',
                     action: () => {
                         this.insertPoint(this._editor.selectedElement as Path, overlaySegment, canvasPoint);
                     }
                 },
                 {
-                    label: overlaySegment.type == 'line' ? 'Convert To Curve' : 'Convert To Line',
+                    label: overlaySegment.type == 'line' ? 'Convert to curve' : 'Convert to line',
                     shortcut: 'C',
                     action: () => {
                         this.convertLine(overlaySegment);
                     }
                 }
             ]);
-            this._editor.contextMenu!.infoTitle = 'Path Shortcuts';
+            this._editor.contextMenu!.infoTitle = 'Path shortcuts';
             this._editor.contextMenu!.infoLines = [
                 'C: convert selected segment',
                 'I: insert point on selected segment',
@@ -560,7 +564,24 @@ export class SelectTool extends Tool {
             return;
         }
 
-        this._editor.closeContextMenu();
+        this.openObjectMenu(event);
+    }
+
+    /** Right-clicking an object selects it as a left click would (keeping a selected ancestor or selection). */
+    private openObjectMenu(event: MouseEvent): void {
+        if(!this.objectMenu) {
+            this._editor.closeContextMenu();
+            return;
+        }
+        const found = this.elementAt(event, true);
+        if(!found) {
+            this.objectMenu(event);
+            return;
+        }
+        const selected = this._editor.selectedElements;
+        const target = findElementChain(this.rootElements(), found)?.find((element) => selected.includes(element)) ?? found;
+        if(!selected.includes(target)) this._editor.selectedElement = target;
+        this.objectMenu(event, target);
     }
 
     override keyPressed(key: string): void {

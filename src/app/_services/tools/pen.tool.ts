@@ -13,6 +13,7 @@ import { clonePaint } from '../../editor/objects/paint.object';
 
 export class PenTool extends Tool{
     override readonly preferenceKey = 'pen';
+    override readonly usesDrawingPaint = true;
     override readonly label = 'Bézier / Pen';
     override icon: IconName = 'pen-fancy';
 

@@ -9,11 +9,20 @@ describe("EditorPreferencesService panel layout", () => {
     it('normalizes persisted drawing colors, preserves no paint and rejects malformed values', () => {
         localStorage.setItem(storageKey, JSON.stringify({ drawingPaint: { fill: null, stroke: '#abcd' } }));
         const preferences = new EditorPreferencesService();
-        expect(preferences.drawingPaint).toEqual({ fill: null, stroke: '#aabbccdd' });
+        expect(preferences.drawingPaint).toEqual({ fill: null, stroke: '#aabbccdd', strokeWidth: 2 });
         const copy = preferences.drawingPaint; copy.stroke = '#000000';
         expect(preferences.drawingPaint.stroke).toBe('#aabbccdd');
-        localStorage.setItem(storageKey, JSON.stringify({ drawingPaint: { fill: 'garbage', stroke: 123 } }));
-        expect(new EditorPreferencesService().drawingPaint).toEqual({ fill: '#2dd4bf', stroke: '#2dd4bf' });
+        localStorage.setItem(storageKey, JSON.stringify({ drawingPaint: { fill: 'garbage', stroke: 123, strokeWidth: 'wide' } }));
+        expect(new EditorPreferencesService().drawingPaint).toEqual({ fill: '#2dd4bf', stroke: '#2dd4bf', strokeWidth: 2 });
+        localStorage.setItem(storageKey, JSON.stringify({ drawingPaint: { fill: null, stroke: null, strokeWidth: -4 } }));
+        expect(new EditorPreferencesService().drawingPaint.strokeWidth).toBe(0);
+    });
+
+    it('merges partial drawing default updates and persists the stroke width', () => {
+        const preferences = new EditorPreferencesService();
+        preferences.setDrawingPaint({ fill: '#ff0000', stroke: '#00ff00', strokeWidth: 2 });
+        preferences.setDrawingPaint({ strokeWidth: 6.5 });
+        expect(new EditorPreferencesService().drawingPaint).toEqual({ fill: '#ff0000', stroke: '#00ff00', strokeWidth: 6.5 });
     });
 
     it("loads defaults for panel sizes saved before the fields existed", () => {

@@ -39,9 +39,11 @@ export class EditorPreferencesService {
     private preferences = this.load();
 
     get drawingPaint(): DrawingPaint { return { ...this.preferences.drawingPaint }; }
-    setDrawingPaint(value: DrawingPaint): void {
-        const drawingPaint = normalizeDrawingPaint(value);
-        if(drawingPaint.fill !== this.preferences.drawingPaint.fill || drawingPaint.stroke !== this.preferences.drawingPaint.stroke) {
+    /** Merges the given drawing defaults into the current ones. */
+    setDrawingPaint(value: Partial<DrawingPaint>): void {
+        const current = this.preferences.drawingPaint;
+        const drawingPaint = normalizeDrawingPaint({ ...current, ...value });
+        if(drawingPaint.fill !== current.fill || drawingPaint.stroke !== current.stroke || drawingPaint.strokeWidth !== current.strokeWidth) {
             this.update({ drawingPaint });
         }
     }

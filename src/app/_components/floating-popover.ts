@@ -45,3 +45,41 @@ export function floatingPopoverStyle(position?: FloatingPopoverPosition): Record
         maxHeight: `${position.maxHeight}px`,
     };
 }
+
+export interface PointMenuPosition {
+    left: number;
+    top: number;
+}
+
+/** Places a measured menu at a pointer, opening leftward when requested and keeping it inside the viewport. */
+export function positionPointMenu(
+    point: { x: number; y: number },
+    size: { width: number; height: number },
+    opensLeft: boolean,
+    viewport: FloatingPopoverViewport = { width: window.innerWidth, height: window.innerHeight },
+    margin = 8,
+): PointMenuPosition {
+    const preferredLeft = opensLeft ? point.x - size.width : point.x;
+    return {
+        left: Math.max(margin, Math.min(preferredLeft, viewport.width - size.width - margin)),
+        top: Math.max(margin, Math.min(point.y, viewport.height - size.height - margin)),
+    };
+}
+
+/**
+ * Places a popover beside its trigger, to the left (clearing `inset` pixels of the trigger's panel), with
+ * its top aligned to the trigger and clamped so the whole popover stays in the viewport. Falls back to
+ * opening above or below the trigger when there is no room on the left.
+ */
+export function positionSidePopover(
+    anchor: Pick<DOMRect, "left" | "right" | "top" | "bottom">,
+    options: FloatingPopoverOptions & { inset?: number },
+    viewport: FloatingPopoverViewport = { width: window.innerWidth, height: window.innerHeight },
+): FloatingPopoverPosition {
+    const margin = options.margin ?? 8;
+    const left = anchor.left - (options.inset ?? 0) - (options.gap ?? 4) - options.width;
+    if(left < margin) return positionFloatingPopover(anchor, options, viewport);
+    const maxHeight = Math.max(0, Math.min(options.preferredHeight, viewport.height - margin * 2));
+    const top = Math.max(margin, Math.min(anchor.top, viewport.height - margin - maxHeight));
+    return { left, top, maxHeight };
+}

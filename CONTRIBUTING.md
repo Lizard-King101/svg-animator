@@ -46,3 +46,5 @@ npm test -- --watch=false
 npm run build
 git diff --check
 ```
+
+On a machine without a display (CI, containers), use `npm run test:ci`, which runs the suite in headless Chrome. `npm run verify` runs the complete CI check: runtime build, fixtures, headless tests, runtime web smoke tests, editor build, API report, runtime size budget, and whitespace.

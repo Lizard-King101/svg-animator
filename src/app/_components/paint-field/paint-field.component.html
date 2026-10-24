@@ -1,0 +1,9 @@
+<button #trigger type="button" class="paint-field" aria-haspopup="dialog" [attr.aria-expanded]="open"
+        [attr.aria-label]="label + ': ' + summary + (opacity ? ', ' + opacity + ' opacity' : '')" (click)="toggle()">
+  <span class="swatch"><span [style.background]="preview"></span></span>
+  <span class="value">{{ summary }}</span>
+  <span class="opacity" *ngIf="opacity">{{ opacity }}</span>
+</button>
+<div #popover *ngIf="open" class="popover" role="dialog" tabindex="-1" [attr.aria-label]="label" [ngStyle]="popoverStyle" (keydown)="key($event)">
+  <app-paint-editor [label]="label" [paint]="paint" [capabilities]="capabilities" (paintChange)="paintChange.emit($event)" />
+</div>

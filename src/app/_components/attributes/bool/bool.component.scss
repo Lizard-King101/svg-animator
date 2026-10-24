@@ -1,4 +1,5 @@
 :host { display: block; }
+:host(.inline) .bool-row { padding: 0; }
 
 .bool-row {
     display: flex;
@@ -14,6 +15,7 @@
 
 .bool-toggle {
     position: relative;
+    flex: 0 0 auto;
     width: 32px;
     height: 18px;
     padding: 0;
@@ -44,3 +46,5 @@
         }
     }
 }
+
+.bool-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

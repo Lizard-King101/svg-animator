@@ -1,24 +1,31 @@
-<section aria-label="Drawing colors" (keydown)="key($event)">
-  <strong>Drawing colors</strong>
-  <div class="swatches">
-    <button #fill class="btn btn-sm btn-secondary" aria-label="New artwork fill" [attr.aria-expanded]="target === 'fill'" (click)="begin('fill', fill)">
-      <span class="swatch" [class.none]="paint.fill === null" [style.background-color]="paint.fill"></span> Fill
-    </button>
-    <button #stroke class="btn btn-sm btn-secondary" aria-label="New artwork stroke" [attr.aria-expanded]="target === 'stroke'" (click)="begin('stroke', stroke)">
-      <span class="swatch" [class.none]="paint.stroke === null" [style.background-color]="paint.stroke"></span> Stroke
-    </button>
-    <button class="btn btn-sm btn-secondary" aria-label="Swap drawing fill and stroke" title="Swap fill and stroke" (click)="swap()">⇄</button>
-  </div>
-  <p>For new artwork. Edit selected artwork in Properties.</p>
-  <div *ngIf="target" class="color-editor" [attr.aria-label]="'Drawing ' + target + ' editor'">
+<div class="drawing-defaults" role="group" aria-label="New artwork defaults" (keydown)="key($event)">
+  <span class="caption">New artwork</span>
+  <button #fill type="button" class="chip" aria-label="New artwork fill" aria-haspopup="dialog" [attr.aria-expanded]="target === 'fill'"
+          [title]="'Fill for new artwork · ' + (paint.fill ?? 'none')" (click)="begin('fill', fill)">
+    <span class="swatch" [class.none]="paint.fill === null" [style.background-color]="paint.fill"></span>Fill
+  </button>
+  <button #stroke type="button" class="chip" aria-label="New artwork stroke" aria-haspopup="dialog" [attr.aria-expanded]="target === 'stroke'"
+          [title]="'Stroke for new artwork · ' + (paint.stroke ?? 'none')" (click)="begin('stroke', stroke)">
+    <span class="swatch" [class.none]="paint.stroke === null" [style.background-color]="paint.stroke"></span>Stroke
+  </button>
+  <button type="button" class="icon" aria-label="Swap drawing fill and stroke" title="Swap fill and stroke" (click)="swap()">
+    <fa-icon icon="right-left"></fa-icon>
+  </button>
+  <label class="width" title="Stroke width for new artwork">
+    <span>W</span>
+    <input type="number" numberField min="0" step="1" aria-label="New artwork stroke width"
+           [ngModel]="paint.strokeWidth" (ngModelChange)="setStrokeWidth($event)" />
+  </label>
+  <fa-icon *ngIf="warning" class="warning" icon="triangle-exclamation" role="img" [attr.aria-label]="warning" [title]="warning"></fa-icon>
+
+  <div #popover *ngIf="target" class="popover" role="dialog" tabindex="-1" [attr.aria-label]="'New artwork ' + target" [ngStyle]="popoverStyle">
     <color [label]="target === 'fill' ? 'New fill' : 'New stroke'" [ngModel]="draft" (ngModelChange)="setColor($event)" />
     <label class="no-paint"><input type="checkbox" [(ngModel)]="none"> No paint</label>
+    <app-project-colors [value]="none ? null : draft.serialized" [manage]="true" (colorSelected)="chooseColor($event)" />
+    <p *ngIf="warning" role="status">{{ warning }}</p>
     <div class="actions">
-      <button class="btn btn-sm btn-primary" (click)="apply()">Apply</button>
-      <button class="btn btn-sm btn-secondary" (click)="cancel()">Cancel</button>
+      <button type="button" class="btn btn-sm btn-primary" (click)="apply()">Apply</button>
+      <button type="button" class="btn btn-sm btn-secondary" (click)="cancel()">Cancel</button>
     </div>
   </div>
-  <p>Project swatches {{ target ? 'preview' : 'apply to' }} new {{ activeTarget }}.</p>
-  <app-project-colors [value]="target ? (none ? null : draft.serialized) : paint[activeTarget]" [manage]="true" (colorSelected)="chooseColor($event)" />
-  <p *ngIf="warning" role="status">{{ warning }}</p>
-</section>
+</div>
