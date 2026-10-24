@@ -126,8 +126,8 @@ export class CanvasGuidesComponent implements DoCheck {
         event.preventDefault(); event.stopPropagation();
         if(this.editor.selectedSVG?.guidesLocked) return;
         this.editor.openContextMenu(event.clientX, event.clientY, [
-            { label: "Edit Position", action: () => this.openInput(guide.axis, event.clientX, event.clientY, guide) },
-            { label: "Delete Guide", shortcut: "Del", action: () => this.delete(guide) },
+            { label: "Edit position", action: () => this.openInput(guide.axis, event.clientX, event.clientY, guide) },
+            { label: "Delete guide", shortcut: "Del", danger: true, action: () => this.delete(guide) },
         ]);
     }
 

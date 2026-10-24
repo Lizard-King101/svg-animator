@@ -1,13 +1,12 @@
 import { Injectable, Optional } from "@angular/core";
 import { DocumentMutationService } from "./document-mutation.service";
-import { EditorContextMenuItem, EditorService } from "./editor.service";
+import { contextMenuSections, EditorContextMenuItem, EditorService } from "./editor.service";
 import { LayerContext, LayerOperationsService } from "./layer-operations.service";
 import { ObjectClipboardCommandService } from "./object-clipboard-command.service";
 import { Group } from "../editor/objects/elements/group.object";
 import { Path } from "../editor/objects/elements/path.object";
 import { Shape } from "../editor/objects/elements/shape.object";
 import { TextElement } from "../editor/objects/elements/text.object";
-import { Point } from "../editor/objects/point.object";
 import { canConvertStrokeToPath, StrokeToPathProfile } from "../editor/objects/stroke-outline.object";
 import { AnyElement } from "../editor/objects/svg.object";
 
@@ -269,6 +268,14 @@ export class LayerCommandService {
         if(this.layerOperations.moveForward(element)) this.snapshotAndSave();
     }
 
+    bringLayerToFront(element: AnyElement) {
+        if(this.layerOperations.bringToFront(element)) this.snapshotAndSave();
+    }
+
+    sendLayerToBack(element: AnyElement) {
+        if(this.layerOperations.sendToBack(element)) this.snapshotAndSave();
+    }
+
     groupLayerWithBelow(element: AnyElement) {
         const group = this.layerOperations.groupWithBelow(element);
         if(group) {
@@ -341,7 +348,7 @@ export class LayerCommandService {
             ...(clipboard.canCopy ? [{ label: 'Copy', shortcut: 'Ctrl+C', action: () => { clipboard.copy(); } }] : []),
             ...(clipboard.canPaste ? [
                 { label: 'Paste', shortcut: 'Ctrl+V', action: () => { clipboard.paste(); } },
-                { label: 'Paste In Place', shortcut: 'Ctrl+Shift+V', action: () => { clipboard.paste(true); } },
+                { label: 'Paste in place', shortcut: 'Ctrl+Shift+V', action: () => { clipboard.paste(true); } },
             ] : []),
         ];
     }
@@ -353,142 +360,66 @@ export class LayerCommandService {
             this.selectLayer(element);
         }
 
-        const menuPosition = new Point(event.clientX, event.clientY);
-        const motionPaths = this.availableMotionPaths(element);
-        const items: EditorContextMenuItem[] = [
-            ...this.clipboardItems(),
-            {
-                label: 'Rename Layer',
-                shortcut: 'Enter',
-                action: () => {
-                    this.renamingLayer = element;
-                }
-            },
-            {
-                label: 'Duplicate Layer',
-                shortcut: 'Ctrl+D',
-                action: () => {
-                    this.duplicateLayer(element);
-                }
-            },
-            ...(motionPaths.length ? [{
-                label: 'Attach Motion To',
-                children: motionPaths.map((path) => ({
-                    label: path.name,
-                    action: () => {
-                        this.attachMotionPath(element, path);
-                    }
-                }))
-            }] : []),
-            ...(element.motion.pathId ? [{
-                label: 'Detach Motion Path',
-                action: () => {
-                    this.detachMotionPath(element);
-                }
-            }] : []),
-            ...(element instanceof Path && canConvertStrokeToPath(element) ? [{
-                label: 'Convert Stroke To Path',
-                children: [{
-                    label: 'Optimized',
-                    action: () => {
-                        this.convertLayerStrokeToPath(element, 'optimized');
-                    }
-                }, {
-                    label: 'Precise',
-                    action: () => {
-                        this.convertLayerStrokeToPath(element, 'precise');
-                    }
-                }]
-            }] : []),
-            ...(this.canCombineSelectedPaths(element) ? [{
-                label: 'Combine Selected Paths',
-                action: () => {
-                    this.combineSelectedPaths(element);
-                }
-            }] : []),
-            ...(this.canGroupSelectedLayers() ? [{
-                label: 'Group Selection',
-                shortcut: 'Ctrl+G',
-                action: () => {
-                    this.groupSelectedLayers();
-                }
-            }] : []),
-            ...(this.selectedLayers.length > 1 ? [{
-                label: 'Delete Selection',
-                shortcut: 'Del',
-                action: () => {
-                    this.deleteSelectedLayers();
-                }
-            }] : []),
-            ...(this.canGroupWithBelow(element) ? [{
-                label: 'Group With Layer Below',
-                action: () => {
-                    this.groupLayerWithBelow(element);
-                }
-            }] : []),
-            ...(this.canClipWithLayerBelow(element) ? [{
-                label: 'Clip With Layer Below',
-                action: () => {
-                    this.clipLayerWithBelow(element);
-                }
-            }] : []),
-            ...(element instanceof Group ? [{
-                label: 'Ungroup',
-                action: () => {
-                    this.ungroupLayer(element);
-                }
-            }] : []),
-            ...(this.canUseAsClippingMask(element) ? [{
-                label: 'Use As Clipping Mask',
-                action: () => {
-                    this.useLayerAsClippingMask(element);
-                }
-            }] : []),
-            ...(this.clippingGroupFor(element) ? [{
-                label: 'Release Clipping Mask',
-                action: () => {
-                    this.releaseClippingMask(this.clippingGroupFor(element)!);
-                }
-            }] : []),
-            ...(element instanceof Group && element.clipElement ? [{
-                label: 'Release Clipping Mask',
-                action: () => {
-                    this.releaseClippingMask(element);
-                }
-            }] : []),
-            {
-                label: 'Move Forward',
-                shortcut: ']',
-                action: () => {
-                    this.moveLayerForward(element);
-                }
-            },
-            {
-                label: 'Move Backward',
-                shortcut: '[',
-                action: () => {
-                    this.moveLayerBackward(element);
-                }
-            },
-            {
-                label: 'Delete Layer',
-                shortcut: 'Del',
-                action: () => {
-                    this.deleteLayer(element);
-                }
-            }
-        ];
+        const items = this.selectedLayers.length > 1 ? this.selectionMenuItems(element) : this.layerMenuItems(element);
+        this.editor.openContextMenu(event.clientX, event.clientY, items);
+    }
 
-        this.editor.openContextMenu(menuPosition.x, menuPosition.y, items);
-        this.editor.contextMenu!.infoTitle = 'Layer Shortcuts';
-        this.editor.contextMenu!.infoLines = [
-            'Enter: rename selected layer',
-            'Ctrl+D: duplicate selected layer',
-            'Group layers from the layer context menu',
-            ']: move selected layer forward',
-            '[: move selected layer backward',
-            'Del: delete selected layer',
-        ];
+    /** Commands for the whole selection; single-layer commands are omitted so nothing acts on just the clicked row. */
+    private selectionMenuItems(element: AnyElement): EditorContextMenuItem[] {
+        return contextMenuSections(
+            this.clipboardItems(),
+            [
+                ...(this.canGroupSelectedLayers() ? [{ label: 'Group selection', shortcut: 'Ctrl+G', action: () => this.groupSelectedLayers() }] : []),
+                ...(this.canCombineSelectedPaths(element) ? [{ label: 'Combine selected paths', action: () => this.combineSelectedPaths(element) }] : []),
+            ],
+            [{ label: 'Delete selection', shortcut: 'Del', danger: true, action: () => this.deleteSelectedLayers() }],
+        );
+    }
+
+    private layerMenuItems(element: AnyElement): EditorContextMenuItem[] {
+        const context = this.layerContext(element);
+        const atFront = !context || context.index >= context.elements.length - 1;
+        const atBack = !context || context.index <= 0;
+        const motionPaths = this.availableMotionPaths(element);
+        const clipGroup = this.clippingGroupFor(element);
+        return contextMenuSections(
+            this.clipboardItems(),
+            [
+                { label: 'Rename layer', shortcut: 'Enter', action: () => { this.renamingLayer = element; } },
+                { label: 'Duplicate', shortcut: 'Ctrl+D', action: () => this.duplicateLayer(element) },
+            ],
+            [
+                ...(this.canGroupWithBelow(element) ? [{ label: 'Group with layer below', action: () => this.groupLayerWithBelow(element) }] : []),
+                ...(element instanceof Group ? [{ label: 'Ungroup', action: () => this.ungroupLayer(element) }] : []),
+            ],
+            [
+                ...(this.canClipWithLayerBelow(element) ? [{ label: 'Clip with layer below', action: () => this.clipLayerWithBelow(element) }] : []),
+                ...(this.canUseAsClippingMask(element) ? [{ label: 'Use as clipping mask', action: () => this.useLayerAsClippingMask(element) }] : []),
+                ...(clipGroup ? [{ label: 'Release clipping mask', action: () => this.releaseClippingMask(clipGroup) }] : []),
+                ...(element instanceof Group && element.clipElement ? [{ label: 'Release clipping mask', action: () => this.releaseClippingMask(element) }] : []),
+            ],
+            [
+                ...(motionPaths.length ? [{
+                    label: 'Attach motion to',
+                    children: motionPaths.map((path) => ({ label: path.name, action: () => this.attachMotionPath(element, path) })),
+                }] : []),
+                ...(element.motion.pathId ? [{ label: 'Detach motion path', action: () => this.detachMotionPath(element) }] : []),
+                ...(element instanceof Path && canConvertStrokeToPath(element) ? [{
+                    label: 'Convert stroke to path',
+                    children: [
+                        { label: 'Optimized', action: () => this.convertLayerStrokeToPath(element, 'optimized') },
+                        { label: 'Precise', action: () => this.convertLayerStrokeToPath(element, 'precise') },
+                    ],
+                }] : []),
+            ],
+            [
+                { label: 'Bring to front', shortcut: 'Shift+]', disabled: atFront, action: () => this.bringLayerToFront(element) },
+                { label: 'Bring forward', shortcut: ']', disabled: atFront, action: () => this.moveLayerForward(element) },
+                { label: 'Send backward', shortcut: '[', disabled: atBack, action: () => this.moveLayerBackward(element) },
+                { label: 'Send to back', shortcut: 'Shift+[', disabled: atBack, action: () => this.sendLayerToBack(element) },
+            ],
+            [{ label: 'Delete layer', shortcut: 'Del', danger: true, action: () => this.deleteLayer(element) }],
+        );
     }
 
     toggleLayerVisibility(event: MouseEvent, element: AnyElement) {

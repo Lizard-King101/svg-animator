@@ -432,4 +432,16 @@ export interface EditorContextMenuItem {
     shortcut?: string;
     action?: () => void;
     children?: EditorContextMenuItem[];
+    /** Shown but not runnable, e.g. ordering commands at the end of the stack. */
+    disabled?: boolean;
+    /** Destructive actions are styled as such. */
+    danger?: boolean;
+    /** Draws a divider above the item; set by `contextMenuSections`. */
+    separatorBefore?: boolean;
+}
+
+/** Joins non-empty item groups, dividing each group from the previous one. */
+export function contextMenuSections(...sections: EditorContextMenuItem[][]): EditorContextMenuItem[] {
+    return sections.filter((section) => section.length)
+        .flatMap((section, index) => section.map((item, itemIndex) => index > 0 && itemIndex === 0 ? { ...item, separatorBefore: true } : item));
 }

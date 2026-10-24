@@ -518,14 +518,15 @@ export class SelectTool extends Tool {
             this._editor.selectedPathLines = [];
             this._editor.openContextMenu(menuPosition.x, menuPosition.y, [
                 {
-                    label: 'Delete Point',
+                    label: 'Delete point',
+                    danger: true,
                     shortcut: 'Del',
                     action: () => {
                         this.deleteAnchor(this._editor.selectedElement as Path, overlayPoint.point);
                     }
                 }
             ]);
-            this._editor.contextMenu!.infoTitle = 'Path Shortcuts';
+            this._editor.contextMenu!.infoTitle = 'Path shortcuts';
             this._editor.contextMenu!.infoLines = [
                 'Alt-drag anchor: convert point',
                 'Delete or Backspace: delete selected point',
@@ -540,21 +541,21 @@ export class SelectTool extends Tool {
             this._editor.selectedPathAnchor = undefined;
             this._editor.openContextMenu(menuPosition.x, menuPosition.y, [
                 {
-                    label: 'Insert Point',
+                    label: 'Insert point',
                     shortcut: 'I',
                     action: () => {
                         this.insertPoint(this._editor.selectedElement as Path, overlaySegment, canvasPoint);
                     }
                 },
                 {
-                    label: overlaySegment.type == 'line' ? 'Convert To Curve' : 'Convert To Line',
+                    label: overlaySegment.type == 'line' ? 'Convert to curve' : 'Convert to line',
                     shortcut: 'C',
                     action: () => {
                         this.convertLine(overlaySegment);
                     }
                 }
             ]);
-            this._editor.contextMenu!.infoTitle = 'Path Shortcuts';
+            this._editor.contextMenu!.infoTitle = 'Path shortcuts';
             this._editor.contextMenu!.infoLines = [
                 'C: convert selected segment',
                 'I: insert point on selected segment',

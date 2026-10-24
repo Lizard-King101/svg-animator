@@ -165,6 +165,19 @@ export class EditorPage implements OnInit, AfterViewInit {
                 return;
             }
 
+            // Shift+[ / Shift+] (reported as { and } on many layouts) send to back / bring to front.
+            if(event.shiftKey && (event.code == 'BracketLeft' || event.key == '{')) {
+                event.preventDefault();
+                this.layers.sendLayerToBack(this.editor.selectedElement);
+                return;
+            }
+
+            if(event.shiftKey && (event.code == 'BracketRight' || event.key == '}')) {
+                event.preventDefault();
+                this.layers.bringLayerToFront(this.editor.selectedElement);
+                return;
+            }
+
             if(event.key == '[') {
                 event.preventDefault();
                 this.layers.moveLayerBackward(this.editor.selectedElement);

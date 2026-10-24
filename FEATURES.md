@@ -54,7 +54,8 @@ SVG Animator is a motion SVG studio: a browser-based drawing, editing, and keyfr
 
 ## Layers and composition
 
-- Recursive layer tree with selection, range/multiple selection, rename, drag ordering/reparenting, duplicate, visibility, lock, and delete.
+- Recursive layer tree with selection, range/multiple selection, rename, drag ordering/reparenting, duplicate, visibility, lock, and delete. Keyboard tree navigation (arrows, Home/End, Shift to extend). Bring forward/Send backward (`]`/`[`) and Bring to front/Send to back (Shift+`]`/Shift+`[`) within the parent.
+- The layer/object right-click menu groups clipboard, layer, grouping, clipping, motion, ordering, and delete commands, shows unavailable ordering as disabled, and offers only whole-selection commands for multi-selections. Menus are keyboard navigable (arrows, Home/End, Right/Enter to open submenus, Left/Escape to back out).
 - Groups, ungrouping, nested rendering, and clipping masks.
 - Combine selected paths while preserving world-space geometry.
 - Motion-path attachment and detachment.
