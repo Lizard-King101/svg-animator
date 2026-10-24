@@ -97,6 +97,34 @@ export class ProjectService {
         this.queuePut(record, options.thumbnailChanged !== false);
     }
 
+    /** The base name, or the first free "base N" (N ≥ 2) when a project already uses it. */
+    uniqueName(base: string): string {
+        const names = new Set(this.projects.map((project) => project.name.trim().toLowerCase()));
+        const trimmed = base.trim() || "Untitled";
+        if(!names.has(trimmed.toLowerCase())) return trimmed;
+        let index = 2;
+        while(names.has(`${trimmed} ${index}`.toLowerCase())) index++;
+        return `${trimmed} ${index}`;
+    }
+
+    /** Renames a project in place; blank or unchanged names are ignored. */
+    rename(id: string, name: string): ProjectRecord | undefined {
+        const record = this.get(id);
+        const trimmed = name.trim();
+        if(!record || !trimmed || trimmed === record.name) return undefined;
+        this.upsert({ ...record.svgData, name: trimmed }, record.thumbnail, { thumbnailChanged: false });
+        return this.get(id) ?? undefined;
+    }
+
+    /** Copies a project under a new gallery identity, keeping internal IDs that artwork references depend on. */
+    duplicate(id: string): ProjectRecord | undefined {
+        const record = this.get(id);
+        if(!record) return undefined;
+        const svgData: SVGSave = { ...structuredClone(record.svgData), id: crypto.randomUUID(), name: this.uniqueName(`${record.name} copy`) };
+        this.upsert(svgData, record.thumbnail);
+        return this.get(svgData.id) ?? undefined;
+    }
+
     remove(id: string): void {
         const index = this.projects.findIndex((project) => project.id === id);
         if(index < 0) return;

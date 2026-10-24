@@ -16,7 +16,7 @@ describe("HomePage project actions", () => {
     let importer: jasmine.SpyObj<ProjectFileImportService>;
 
     beforeEach(() => {
-        projects = jasmine.createSpyObj<ProjectService>("ProjectService", ["list", "remove", "undoDelete"]);
+        projects = jasmine.createSpyObj<ProjectService>("ProjectService", ["list", "remove", "undoDelete", "rename", "duplicate"]);
         projects.list.and.returnValue([]);
         exporter = jasmine.createSpyObj<ProjectExportService>("ProjectExportService", ["download"]);
         importer = jasmine.createSpyObj<ProjectFileImportService>("ProjectFileImportService", ["import"]);
@@ -130,5 +130,96 @@ describe("HomePage project actions", () => {
         page.toggleProjectMenu(pointerOpen, project);
         expect(page.openProjectMenuId).toBe(project.id);
         expect(document.activeElement).toBe(before);
+    });
+
+    describe("gallery organisation and actions", () => {
+        const make = (id: string, name: string, createdAt: number, updatedAt: number): ProjectRecord => ({
+            id, name, thumbnail: "<svg/>", createdAt, updatedAt,
+            svgData: { id, name, width: 10, height: 10, elements: [] },
+        });
+        const alpha = make("a", "Alpha 10", 1, 50);
+        const beta = make("b", "beta", 3, 10);
+        const gamma = make("c", "Alpha 9", 2, 30);
+
+        beforeEach(() => {
+            page.projects = [beta, alpha, gamma];
+            try { localStorage.removeItem("svg-animator.home-sort"); } catch {}
+        });
+        afterEach(() => { try { localStorage.removeItem("svg-animator.home-sort"); } catch {} page.ngOnDestroy(); });
+
+        it("filters by name and sorts by last edited, name (natural), or creation", () => {
+            expect(page.visibleProjects.map((project) => project.id)).toEqual(["a", "c", "b"]);
+            page.setSort("name");
+            expect(page.visibleProjects.map((project) => project.id)).toEqual(["c", "a", "b"]);
+            expect(localStorage.getItem("svg-animator.home-sort")).toBe("name");
+            page.setSort("created");
+            expect(page.visibleProjects.map((project) => project.id)).toEqual(["b", "c", "a"]);
+            page.query = "  ALPHA ";
+            expect(page.visibleProjects.map((project) => project.id)).toEqual(["c", "a"]);
+            expect(page.projects.map((project) => project.id)).toEqual(["b", "a", "c"]);
+        });
+
+        it("renames on commit, ignores a second commit, and cancels without renaming", () => {
+            const click = { stopPropagation: () => {} } as MouseEvent;
+            page.startRename(click, alpha);
+            expect(page.renamingId).toBe("a");
+            page.commitRename(alpha, "Logo");
+            page.commitRename(alpha, "Ignored");
+            expect(projects.rename).toHaveBeenCalledOnceWith("a", "Logo");
+            expect(page.renamingId).toBeUndefined();
+
+            page.startRename(click, beta);
+            page.cancelRename(new KeyboardEvent("keydown", { key: "Escape" }), beta);
+            page.commitRename(beta, "Blurred after cancel");
+            expect(projects.rename).toHaveBeenCalledTimes(1);
+        });
+
+        it("duplicates through ProjectService and refreshes the gallery", () => {
+            projects.duplicate.and.returnValue(make("d", "Alpha 10 copy", 4, 60));
+            projects.list.and.returnValue([alpha]);
+            page.duplicateProject({ stopPropagation: () => {} } as MouseEvent, alpha);
+            expect(projects.duplicate).toHaveBeenCalledOnceWith("a");
+            expect(page.projects).toEqual([alpha]);
+        });
+
+        it("imports several files, counting successes and reporting the first failure", async () => {
+            importer.import.and.callFake(async (file: File) => {
+                if(file.name === "bad.svg") throw new Error("Not an SVG.");
+                return `Imported ${file.name}.`;
+            });
+            projects.list.and.returnValue([alpha]);
+            const files = ["one.svg", "bad.svg", "two.json"].map((name) => new File(["<svg/>"], name));
+            await page.importFiles(files);
+            expect(importer.import).toHaveBeenCalledTimes(3);
+            expect(page.importMessage).toBe("Imported 2 of 3 files.");
+            expect(page.importError).toBe("bad.svg: Not an SVG.");
+            expect(page.projects).toEqual([alpha]);
+        });
+
+        it("shows the drop overlay only for file drags and imports dropped files", async () => {
+            importer.import.and.resolveTo("Imported.");
+            const transfer = new DataTransfer();
+            transfer.items.add(new File(["<svg/>"], "drop.svg", { type: "image/svg+xml" }));
+            const drag = (type: string) => new DragEvent(type, { dataTransfer: transfer, cancelable: true });
+
+            page.handleDragEnter(new DragEvent("dragenter", { dataTransfer: new DataTransfer(), cancelable: true }));
+            expect(page.dropActive).toBeFalse();
+            const enter = drag("dragenter");
+            page.handleDragEnter(enter);
+            page.handleDragEnter(drag("dragenter"));
+            page.handleDragLeave(drag("dragleave"));
+            expect(page.dropActive).toBeTrue();
+            expect(enter.defaultPrevented).toBeTrue();
+            page.handleDragLeave(drag("dragleave"));
+            expect(page.dropActive).toBeFalse();
+
+            page.handleDragEnter(drag("dragenter"));
+            const drop = drag("drop");
+            await page.handleDrop(drop);
+            expect(drop.defaultPrevented).toBeTrue();
+            expect(page.dropActive).toBeFalse();
+            expect(importer.import).toHaveBeenCalledTimes(1);
+            expect(page.importMessage).toBe("Imported.");
+        });
     });
 });

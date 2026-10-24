@@ -6,7 +6,7 @@
       <span>SVG Animator</span>
     </div>
     <div class="header-actions">
-      <input #projectFileInput class="file-input" type="file" accept=".svg,.json,image/svg+xml,application/json" aria-label="Import SVG or Project JSON" (change)="importFile($event)" />
+      <input #projectFileInput class="file-input" type="file" multiple accept=".svg,.json,image/svg+xml,application/json" aria-label="Import SVG or Project JSON" (change)="importFile($event)" />
       <button class="btn-import" (click)="projectFileInput.click()" [disabled]="importing || loading" title="Import SVG artwork or an exported Project JSON file">
         <fa-icon [icon]="importing ? 'spinner' : 'file-import'" [animation]="importing ? 'spin' : undefined"></fa-icon>
         <span class="label">{{ importing ? 'Importing…' : 'Import SVG / Project' }}</span>
@@ -20,9 +20,19 @@
 
   <section class="gallery-section" aria-labelledby="projects-heading">
 
-    <div class="gallery-heading">
-      <h1 id="projects-heading">Create and animate SVG artwork</h1>
-      <p>Draw, edit, animate, and export production-ready SVGs directly in your browser.</p>
+    <div class="gallery-toolbar">
+      <h1 id="projects-heading">Projects <span class="project-count" *ngIf="!loading">{{ projects.length }}</span></h1>
+      <div class="gallery-controls" *ngIf="!loading && projects.length > 0">
+        <label class="search">
+          <fa-icon icon="magnifying-glass"></fa-icon>
+          <input type="search" placeholder="Search projects" aria-label="Search projects" [(ngModel)]="query" />
+        </label>
+        <select aria-label="Sort projects" [ngModel]="sort" (ngModelChange)="setSort($event)">
+          <option value="edited">Last edited</option>
+          <option value="name">Name</option>
+          <option value="created">Date created</option>
+        </select>
+      </div>
     </div>
 
     <div class="import-notice error" *ngIf="projectService.savingWarning">
@@ -59,17 +69,39 @@
       <span>Click <strong>New Project</strong> to start drawing</span>
     </div>
 
-    <div class="gallery-grid" *ngIf="!loading && projects.length > 0">
-      <div class="project-card" *ngFor="let project of projects" [class.menu-open]="openProjectMenuId === project.id">
-        <a class="card-open" [routerLink]="['/editor']" [queryParams]="{ id: project.id }" [attr.aria-label]="'Open ' + project.name">
+    <div class="gallery-empty no-matches" *ngIf="!loading && projects.length > 0 && !visibleProjects.length" role="status">
+      <fa-icon icon="magnifying-glass"></fa-icon>
+      <p>No projects match “{{ query.trim() }}”</p>
+      <button type="button" class="clear-search" (click)="query = ''">Clear search</button>
+    </div>
+
+    <div class="gallery-grid" *ngIf="!loading && visibleProjects.length > 0">
+      <div class="project-card" *ngFor="let project of visibleProjects; trackBy: trackProject" [class.menu-open]="openProjectMenuId === project.id">
+        <a *ngIf="renamingId !== project.id; else renaming" class="card-open" [id]="'project-open-' + project.id"
+           [routerLink]="['/editor']" [queryParams]="{ id: project.id }" [attr.aria-label]="'Open ' + project.name">
           <div class="card-preview">
             <img [src]="thumbnailUrl(project)" alt="" />
           </div>
           <div class="card-meta">
             <span class="card-name">{{ project.name }}</span>
-            <span class="card-date">{{ project.updatedAt | date: 'MMM d, y' }}</span>
+            <span class="card-date" [title]="fullTime(project)">{{ edited(project) }}</span>
           </div>
         </a>
+        <ng-template #renaming>
+          <div class="card-open">
+            <div class="card-preview">
+              <img [src]="thumbnailUrl(project)" alt="" />
+            </div>
+            <div class="card-meta">
+              <input #renameInput class="card-rename" [id]="'project-rename-' + project.id" type="text" maxlength="80"
+                     [value]="project.name" aria-label="Project name"
+                     (keydown.enter)="commitRename(project, renameInput.value)"
+                     (keydown.escape)="cancelRename($event, project)"
+                     (blur)="commitRename(project, renameInput.value)" />
+              <span class="card-date">{{ edited(project) }}</span>
+            </div>
+          </div>
+        </ng-template>
         <button #projectAction [id]="'project-actions-' + project.id" class="card-menu-trigger" type="button" title="Project actions" [attr.aria-label]="'Actions for ' + project.name"
                 aria-haspopup="menu" [attr.aria-expanded]="openProjectMenuId === project.id"
                 [attr.aria-controls]="'project-menu-' + project.id"
@@ -79,6 +111,12 @@
         <div class="card-menu" *ngIf="openProjectMenuId === project.id"
              [id]="'project-menu-' + project.id" role="menu" aria-label="Project actions"
              (click)="$event.stopPropagation()" (keydown)="handleMenuKey($event)">
+          <button type="button" role="menuitem" (click)="startRename($event, project)">
+            <fa-icon icon="pen"></fa-icon><span>Rename</span>
+          </button>
+          <button type="button" role="menuitem" (click)="duplicateProject($event, project)">
+            <fa-icon icon="clone"></fa-icon><span>Duplicate</span>
+          </button>
           <button type="button" role="menuitem" (click)="exportProject($event, project)">
             <fa-icon icon="file-export"></fa-icon><span>Export project</span>
           </button>
@@ -90,5 +128,13 @@
     </div>
 
   </section>
+
+  <div class="drop-overlay" *ngIf="dropActive" aria-hidden="true">
+    <div class="drop-target">
+      <fa-icon icon="file-import"></fa-icon>
+      <strong>Drop to import</strong>
+      <span>SVG artwork or exported .svg-animator.json projects</span>
+    </div>
+  </div>
 
 </main>
