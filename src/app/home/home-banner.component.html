@@ -1,0 +1,22 @@
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-copy">
+    <h1 id="hero-title">Create and animate SVG artwork</h1>
+    <p>Draw, edit, animate, and export production-ready SVGs directly in your browser.</p>
+    <div class="hero-actions">
+      <button type="button" class="hero-primary" (click)="newProject.emit()">
+        <fa-icon icon="plus"></fa-icon><span>New project</span>
+      </button>
+      <button type="button" class="hero-secondary" (click)="openBanner()">
+        <fa-icon icon="pen"></fa-icon><span>Edit this animation</span>
+      </button>
+    </div>
+  </div>
+  <figure class="hero-art">
+    <div #stage class="stage" role="img"
+         aria-label="Animated illustration made with SVG Animator: a curve draws itself, then shapes and sparkles pop in."></div>
+    <button type="button" class="playback" (click)="togglePlayback()"
+            [attr.aria-label]="playing ? 'Pause animation' : 'Play animation'" [title]="playing ? 'Pause animation' : 'Play animation'">
+      <fa-icon [icon]="playing ? 'pause' : 'play'"></fa-icon>
+    </button>
+  </figure>
+</section>

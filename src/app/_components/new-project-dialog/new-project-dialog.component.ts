@@ -6,6 +6,7 @@ import { AnimationPlaybackService } from "../../_services/animation-playback.ser
 import { DocumentMutationService } from "../../_services/document-mutation.service";
 import { EditorService } from "../../_services/editor.service";
 import { EditorUiStateService } from "../../_services/editor-ui-state.service";
+import { ProjectService } from "../../_services/project.service";
 
 interface CanvasPreset { label: string; sublabel: string; width: number; height: number }
 
@@ -55,11 +56,12 @@ export class NewProjectDialogComponent implements DoCheck {
         private editor: EditorService,
         private animation: AnimationPlaybackService,
         private mutations: DocumentMutationService,
+        private projects: ProjectService,
     ) {}
 
     ngDoCheck(): void {
         if(this.open && !this.wasOpen) {
-            this.name = "Untitled";
+            this.name = this.projects.uniqueName("Untitled");
             this.width = 800;
             this.height = 600;
         }
@@ -72,7 +74,7 @@ export class NewProjectDialogComponent implements DoCheck {
     selected(preset: CanvasPreset): boolean { return this.width === preset.width && this.height === preset.height; }
     cancel(): void { this.ui.closeDialog("new-project"); }
     confirm(): void {
-        this.editor.newSVG(this.width, this.height, this.name.trim() || "Untitled");
+        this.editor.newSVG(this.width, this.height, this.name.trim() || this.projects.uniqueName("Untitled"));
         if(this.animation.mode === "animate") this.animation.seek(this.animation.currentTime);
         this.ui.closeDialog("new-project");
         this.mutations.resetBaseline();

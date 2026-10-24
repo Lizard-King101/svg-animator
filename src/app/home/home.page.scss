@@ -100,22 +100,73 @@
   padding: 32px;
 }
 
-.gallery-heading {
-  margin-bottom: 24px;
+.gallery-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin-bottom: 20px;
 
-  h1 {
+  h2 {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
     margin: 0;
     color: var(--text-primary);
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.02em;
   }
 
-  p {
-    margin: 7px 0 0;
-    color: var(--text-muted);
+  .project-count {
+    color: var(--text-secondary);
     font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0;
   }
+}
+
+.gallery-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin: 0;
+
+    fa-icon {
+      position: absolute;
+      left: 10px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      pointer-events: none;
+    }
+  }
+
+  input, select {
+    height: 32px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 12px;
+
+    &:focus { outline: none; border-color: var(--accent); }
+  }
+
+  input {
+    width: 220px;
+    padding: 0 10px 0 28px;
+
+    &::placeholder { color: var(--text-secondary); }
+  }
+
+  select { padding: 0 8px; cursor: pointer; }
 }
 
 .import-notice {
@@ -138,7 +189,7 @@
 
   > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 
-  small { display: block; margin-top: 4px; color: var(--text-muted); }
+  small { display: block; margin-top: 4px; color: var(--text-secondary); }
 
   button {
     width: 24px;
@@ -159,7 +210,7 @@
     border: 1px solid var(--border-bright);
     border-radius: var(--radius-md);
     color: var(--text-primary);
-    &:hover { background: var(--bg-hover); }
+    &:hover { background: var(--bg-elevated); }
   }
 }
 
@@ -196,6 +247,24 @@
   }
 }
 
+.gallery-empty.no-matches {
+  height: auto;
+  min-height: 200px;
+
+  .clear-search {
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+
+    &:hover { border-color: var(--accent); color: var(--accent); }
+  }
+}
+
 .gallery-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -227,18 +296,36 @@
     .card-menu-trigger { opacity: 1; }
   }
 
+  .card-open {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    color: inherit;
+    text-decoration: none;
+    border-radius: inherit;
+
+    &:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+  }
+
+  // The artboard is drawn as a white page at its own proportions on the canvas backdrop, as in the editor.
   .card-preview {
     display: flex;
     align-items: center;
     justify-content: center;
     height: 150px;
-    background: #ffffff;
+    padding: 12px;
+    background: var(--bg-canvas);
     overflow: hidden;
 
     img {
       max-width: 100%;
       max-height: 100%;
       object-fit: contain;
+      background: #ffffff;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
     }
   }
 
@@ -261,7 +348,23 @@
 
   .card-date {
     font-size: 11px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
+  }
+
+  .card-rename {
+    width: 100%;
+    min-width: 0;
+    height: 22px;
+    margin: -2px 0 -1px -5px;
+    padding: 0 4px;
+    background: var(--bg-input);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    outline: none;
   }
 
   .card-menu-trigger {
@@ -351,4 +454,76 @@
       }
     }
   }
+}
+
+// ── Narrow screens ───────────────────────────────────────────────────────────
+
+@media (max-width: 640px) {
+  .home-header {
+    padding: 0 16px;
+
+    .logo span { white-space: nowrap; }
+
+    .btn-new,
+    .btn-import {
+      padding: 8px 11px;
+
+      // Icon-only buttons keep their text as the accessible name.
+      .label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+    }
+  }
+
+  .gallery-section { padding: 20px 16px; }
+
+  .gallery-toolbar h2 { font-size: 18px; }
+
+  .gallery-controls { width: 100%; }
+
+  .gallery-controls .search { flex: 1 1 auto; }
+
+  .gallery-controls input { width: 100%; }
+
+  .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+
+  .project-card .card-preview { height: 120px; }
+}
+
+// ── Drop to import ───────────────────────────────────────────────────────────
+
+.drop-overlay {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(13, 13, 17, 0.72);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+
+.drop-target {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(520px, 100%);
+  padding: 40px 24px;
+  border: 2px dashed var(--accent);
+  border-radius: 14px;
+  background: var(--accent-dim);
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+
+  fa-icon { color: var(--accent); font-size: 28px; }
+  strong { color: var(--text-primary); font-size: 16px; }
 }

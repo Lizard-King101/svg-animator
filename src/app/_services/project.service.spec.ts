@@ -98,4 +98,40 @@ describe('Project deletion recovery and write ordering', () => {
             expect(await reopened.list()).toEqual([]);
         } finally { localStorage.removeItem(key); }
     });
+
+    it('picks unique names, renames in place, and duplicates under a new identity', async () => {
+        expect(service.uniqueName('Untitled')).toBe('Untitled');
+        expect(service.uniqueName('A')).toBe('A 2');
+        expect(service.uniqueName('  ')).toBe('Untitled');
+
+        expect(service.rename('a', '  ')).toBeUndefined();
+        expect(service.rename('a', 'a')).toBeUndefined();
+        const renamed = service.rename('a', '  Logo  ')!;
+        expect(renamed.name).toBe('Logo');
+        expect(renamed.svgData.name).toBe('Logo');
+        expect(renamed.thumbnail).toBe('<svg/>');
+        expect(renamed.createdAt).toBe(10);
+        expect(service.uniqueName('logo')).toBe('logo 2');
+
+        const copy = service.duplicate('a')!;
+        expect(copy.id).not.toBe('a');
+        expect(copy.svgData.id).toBe(copy.id);
+        expect(copy.name).toBe('Logo copy');
+        expect(service.duplicate('a')!.name).toBe('Logo copy 2');
+        copy.svgData.width = 999;
+        expect(service.get('a')!.svgData.width).toBe(10);
+        await service.flush();
+        expect((await repository.list()).map((project) => project.name).sort()).toEqual(['Logo', 'Logo copy', 'Logo copy 2', 'b', 'c']);
+    });
+
+    it('restores a missing bundled project once and keeps an existing copy', async () => {
+        const bundled = { ...record('banner'), name: 'Welcome Banner' };
+        const restored = service.ensurePreloaded(bundled);
+        expect(restored.id).toBe('banner');
+        expect(restored.svgData).not.toBe(bundled.svgData);
+        service.rename('banner', 'My banner');
+        expect(service.ensurePreloaded(bundled).name).toBe('My banner');
+        await service.flush();
+        expect((await repository.list()).filter((project) => project.id === 'banner').length).toBe(1);
+    });
 });

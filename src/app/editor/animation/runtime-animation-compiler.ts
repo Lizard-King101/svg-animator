@@ -387,7 +387,12 @@ function expandHex(value: string): string {
     const match = /^#([0-9a-f])([0-9a-f])([0-9a-f])([0-9a-f])?$/i.exec(value);
     return match ? `#${match[1]}${match[1]}${match[2]}${match[2]}${match[3]}${match[3]}${match[4] ? match[4] + match[4] : ""}` : value;
 }
-function normalizedNumber(value: number, precision = 1e6): number { return Object.is(value, -0) ? 0 : Math.round(value * precision) / precision; }
+// Integers (including packed RGBA colors up to 2^32) are already exact; scaling them by the
+// precision factor could exceed 2^53 and reintroduce fractions that players reject.
+function normalizedNumber(value: number, precision = 1e6): number {
+    if(Object.is(value, -0)) return 0;
+    return Number.isInteger(value) ? value : Math.round(value * precision) / precision;
+}
 function normalizeValue(value: unknown, precision = 1e6): unknown {
     if(typeof value === "number") return normalizedNumber(value, precision);
     if(Array.isArray(value)) return value.map((item) => normalizeValue(item, precision));

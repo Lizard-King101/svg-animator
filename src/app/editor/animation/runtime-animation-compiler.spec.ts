@@ -30,6 +30,20 @@ describe("runtime animation compiler", () => {
         expect(first.bundle.generator.version).toBe("1.0.0");
     });
 
+    it("keeps packed colors integral so players accept them", () => {
+        const input = document();
+        input.animation!.tracks = [{
+            id: "fill", targetId: "shape", property: "settings.fill", valueType: "color",
+            keyframes: ["#2dd4bf", "#818cf8", "#f472b6"].map((hex, index) => ({
+                id: `k${index}`, time: index / 2, value: { type: "color", space: "rgb", hex, rgb: { r: 0, g: 0, b: 0 }, hsl: { h: 0, s: 0, l: 0 }, alpha: 1 },
+            })),
+        }];
+        const [track] = compileRuntimeAnimation(input).bundle.animation.tracks;
+        expect(track.kind).toBe("color");
+        expect(track.values).toEqual([0x2dd4bfff, 0x818cf8ff, 0xf472b6ff]);
+        expect((track.values as number[]).every(Number.isInteger)).toBeTrue();
+    });
+
     it("emits diagnostics and skips orphaned tracks", () => {
         const input = document();
         input.animation!.tracks[0].targetId = "missing";

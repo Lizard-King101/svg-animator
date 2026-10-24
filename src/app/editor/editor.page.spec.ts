@@ -104,7 +104,7 @@ describe('new project canvas lifecycle', () => {
         await TestBed.configureTestingModule({ imports: [EditorPage], providers: [
             provideRouter([]),
             { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({}) } } },
-            { provide: ProjectService, useValue: { get: () => undefined, upsert: () => undefined } },
+            { provide: ProjectService, useValue: { get: () => undefined, upsert: () => undefined, uniqueName: (base: string) => base } },
         ] }).compileComponents();
         TestBed.inject(FaIconLibrary).addIconPacks(fas, far);
         const fixture = TestBed.createComponent(EditorPage);

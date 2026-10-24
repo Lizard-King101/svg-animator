@@ -1,10 +1,12 @@
-import { PRELOADED_PROJECTS } from "./preloaded-projects";
+import { compileRuntimeAnimation } from "../editor/animation/runtime-animation-compiler";
+import { PRELOADED_PROJECTS, WELCOME_BANNER_PROJECT } from "./preloaded-projects";
 
 describe("preloaded projects", () => {
-    it("loads the current exported favicon and animation showcase", () => {
+    it("loads the current exported favicon, animation showcase, and welcome banner", () => {
         expect(PRELOADED_PROJECTS.map((project) => project.name)).toEqual([
             "Animation Example",
             "favicon",
+            "Welcome Banner",
         ]);
 
         const animation = PRELOADED_PROJECTS[0].svgData.animation;
@@ -20,6 +22,17 @@ describe("preloaded projects", () => {
             expect(favicon.elements[0].clipElementId).toBeTruthy();
             expect(favicon.elements[0].elements.length).toBe(4);
         }
+    });
+
+    it("ships a looping welcome banner that compiles for the runtime without diagnostics", () => {
+        expect(PRELOADED_PROJECTS).toContain(WELCOME_BANNER_PROJECT);
+        const animation = WELCOME_BANNER_PROJECT.svgData.animation!;
+        expect(animation.loop).toBeTrue();
+        const compiled = compileRuntimeAnimation(WELCOME_BANNER_PROJECT.svgData);
+        expect(compiled.diagnostics).toEqual([]);
+        expect(compiled.bundle.animation.tracks.length).toBe(animation.tracks.length);
+        expect(compiled.bundle.animation.tracks.filter((track) => track.kind === "color")
+            .every((track) => (track.values as number[]).every(Number.isInteger))).toBeTrue();
     });
 
     it("provides valid SVG gallery thumbnails for every seed", () => {
