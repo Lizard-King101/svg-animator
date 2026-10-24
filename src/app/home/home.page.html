@@ -9,11 +9,11 @@
       <input #projectFileInput class="file-input" type="file" accept=".svg,.json,image/svg+xml,application/json" aria-label="Import SVG or Project JSON" (change)="importFile($event)" />
       <button class="btn-import" (click)="projectFileInput.click()" [disabled]="importing || loading" title="Import SVG artwork or an exported Project JSON file">
         <fa-icon [icon]="importing ? 'spinner' : 'file-import'" [animation]="importing ? 'spin' : undefined"></fa-icon>
-        {{ importing ? 'Importing…' : 'Import SVG / Project' }}
+        <span class="label">{{ importing ? 'Importing…' : 'Import SVG / Project' }}</span>
       </button>
-      <button class="btn-new" (click)="newProject()">
+      <button class="btn-new" (click)="newProject()" title="New Project">
         <fa-icon icon="plus"></fa-icon>
-        New Project
+        <span class="label">New Project</span>
       </button>
     </div>
   </header>
@@ -60,14 +60,16 @@
     </div>
 
     <div class="gallery-grid" *ngIf="!loading && projects.length > 0">
-      <div class="project-card" *ngFor="let project of projects" [class.menu-open]="openProjectMenuId === project.id" (click)="openProject(project)">
-        <div class="card-preview">
-          <img [src]="thumbnailUrl(project)" [alt]="project.name" />
-        </div>
-        <div class="card-meta">
-          <span class="card-name">{{ project.name }}</span>
-          <span class="card-date">{{ project.updatedAt | date: 'MMM d, y' }}</span>
-        </div>
+      <div class="project-card" *ngFor="let project of projects" [class.menu-open]="openProjectMenuId === project.id">
+        <a class="card-open" [routerLink]="['/editor']" [queryParams]="{ id: project.id }" [attr.aria-label]="'Open ' + project.name">
+          <div class="card-preview">
+            <img [src]="thumbnailUrl(project)" alt="" />
+          </div>
+          <div class="card-meta">
+            <span class="card-name">{{ project.name }}</span>
+            <span class="card-date">{{ project.updatedAt | date: 'MMM d, y' }}</span>
+          </div>
+        </a>
         <button #projectAction [id]="'project-actions-' + project.id" class="card-menu-trigger" type="button" title="Project actions" [attr.aria-label]="'Actions for ' + project.name"
                 aria-haspopup="menu" [attr.aria-expanded]="openProjectMenuId === project.id"
                 [attr.aria-controls]="'project-menu-' + project.id"
@@ -76,7 +78,7 @@
         </button>
         <div class="card-menu" *ngIf="openProjectMenuId === project.id"
              [id]="'project-menu-' + project.id" role="menu" aria-label="Project actions"
-             (click)="$event.stopPropagation()">
+             (click)="$event.stopPropagation()" (keydown)="handleMenuKey($event)">
           <button type="button" role="menuitem" (click)="exportProject($event, project)">
             <fa-icon icon="file-export"></fa-icon><span>Export project</span>
           </button>

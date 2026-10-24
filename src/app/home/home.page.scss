@@ -113,7 +113,7 @@
 
   p {
     margin: 7px 0 0;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 13px;
   }
 }
@@ -138,7 +138,7 @@
 
   > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 
-  small { display: block; margin-top: 4px; color: var(--text-muted); }
+  small { display: block; margin-top: 4px; color: var(--text-secondary); }
 
   button {
     width: 24px;
@@ -159,7 +159,7 @@
     border: 1px solid var(--border-bright);
     border-radius: var(--radius-md);
     color: var(--text-primary);
-    &:hover { background: var(--bg-hover); }
+    &:hover { background: var(--bg-elevated); }
   }
 }
 
@@ -227,18 +227,36 @@
     .card-menu-trigger { opacity: 1; }
   }
 
+  .card-open {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    color: inherit;
+    text-decoration: none;
+    border-radius: inherit;
+
+    &:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+  }
+
+  // The artboard is drawn as a white page at its own proportions on the canvas backdrop, as in the editor.
   .card-preview {
     display: flex;
     align-items: center;
     justify-content: center;
     height: 150px;
-    background: #ffffff;
+    padding: 12px;
+    background: var(--bg-canvas);
     overflow: hidden;
 
     img {
       max-width: 100%;
       max-height: 100%;
       object-fit: contain;
+      background: #ffffff;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
     }
   }
 
@@ -261,7 +279,7 @@
 
   .card-date {
     font-size: 11px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
   }
 
   .card-menu-trigger {
@@ -351,4 +369,37 @@
       }
     }
   }
+}
+
+// ── Narrow screens ───────────────────────────────────────────────────────────
+
+@media (max-width: 640px) {
+  .home-header {
+    padding: 0 16px;
+
+    .logo span { white-space: nowrap; }
+
+    .btn-new,
+    .btn-import {
+      padding: 8px 11px;
+
+      // Icon-only buttons keep their text as the accessible name.
+      .label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+    }
+  }
+
+  .gallery-section { padding: 20px 16px; }
+
+  .gallery-heading h1 { font-size: 19px; }
+
+  .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+
+  .project-card .card-preview { height: 120px; }
 }

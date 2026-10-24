@@ -87,4 +87,48 @@ describe("HomePage project actions", () => {
         expect(projects.remove).toHaveBeenCalledOnceWith(project.id);
         expect(page.projects).toEqual([]);
     });
+
+    it("moves into the menu on keyboard activation and cycles items with arrows, Home, and End", () => {
+        const menu = document.createElement("div");
+        menu.id = `project-menu-${project.id}`;
+        menu.innerHTML = '<button role="menuitem">Export</button><button role="menuitem">Delete</button>';
+        document.body.appendChild(menu);
+        const [exportItem, deleteItem] = Array.from(menu.querySelectorAll("button"));
+        const key = (name: string) => {
+            const event = new KeyboardEvent("keydown", { key: name, cancelable: true });
+            page.handleMenuKey(event);
+            return event;
+        };
+        try {
+            const keyboardOpen = new MouseEvent("click", { detail: 0 });
+            Object.defineProperty(keyboardOpen, "currentTarget", { value: document.createElement("button") });
+            page.toggleProjectMenu(keyboardOpen, project);
+            expect(document.activeElement).toBe(exportItem);
+
+            expect(key("ArrowDown").defaultPrevented).toBeTrue();
+            expect(document.activeElement).toBe(deleteItem);
+            key("ArrowDown");
+            expect(document.activeElement).toBe(exportItem);
+            key("End");
+            expect(document.activeElement).toBe(deleteItem);
+            key("Home");
+            expect(document.activeElement).toBe(exportItem);
+            key("ArrowUp");
+            expect(document.activeElement).toBe(deleteItem);
+
+            key("Tab");
+            expect(page.openProjectMenuId).toBeUndefined();
+        } finally {
+            menu.remove();
+        }
+    });
+
+    it("leaves focus alone when the menu is opened with a pointer", () => {
+        const before = document.activeElement;
+        const pointerOpen = new MouseEvent("click", { detail: 1 });
+        Object.defineProperty(pointerOpen, "currentTarget", { value: document.createElement("button") });
+        page.toggleProjectMenu(pointerOpen, project);
+        expect(page.openProjectMenuId).toBe(project.id);
+        expect(document.activeElement).toBe(before);
+    });
 });

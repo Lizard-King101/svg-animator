@@ -1,6 +1,6 @@
 import { ChangeDetectorRef, Component, ElementRef, HostListener, OnInit, QueryList, ViewChild, ViewChildren } from "@angular/core";
 import { NgFor, NgIf, DatePipe } from "@angular/common";
-import { Router } from "@angular/router";
+import { Router, RouterLink } from "@angular/router";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { ProjectRecord, ProjectService } from "../_services/project.service";
 import { ProjectExportService } from "../_services/project-export.service";
@@ -10,7 +10,7 @@ import { EditorService } from "../_services/editor.service";
 
 @Component({
     standalone: true,
-    imports: [NgFor, NgIf, DatePipe, FaIconComponent],
+    imports: [NgFor, NgIf, DatePipe, FaIconComponent, RouterLink],
     templateUrl: 'home.page.html',
     styleUrls: ['home.page.scss'],
     providers: [EditorService, ElementFactory, ProjectFileImportService],
@@ -66,10 +66,6 @@ export class HomePage implements OnInit {
         }
     }
 
-    openProject(project: ProjectRecord) {
-        this.router.navigate(['/editor'], { queryParams: { id: project.id } });
-    }
-
     toggleProjectMenu(event: MouseEvent, project: ProjectRecord): void {
         event.stopPropagation();
         const trigger = event.currentTarget as HTMLElement;
@@ -79,6 +75,34 @@ export class HomePage implements OnInit {
         }
         this.openProjectMenuId = project.id;
         this.projectMenuTrigger = trigger;
+        // Keyboard activation (detail 0) moves into the menu, as menu buttons do; pointer opens leave focus alone.
+        if(event.detail === 0) {
+            this.changes.detectChanges();
+            this.menuItems()[0]?.focus();
+        }
+    }
+
+    /** Arrow keys, Home, and End move between menu items; Tab leaves and closes the menu. */
+    handleMenuKey(event: KeyboardEvent): void {
+        if(event.key === "Tab") {
+            this.closeProjectMenu();
+            return;
+        }
+        const items = this.menuItems();
+        const index = items.indexOf(document.activeElement as HTMLButtonElement);
+        const next = event.key === "ArrowDown" ? index + 1
+            : event.key === "ArrowUp" ? (index < 0 ? -1 : index - 1)
+            : event.key === "Home" ? 0
+            : event.key === "End" ? -1
+            : undefined;
+        if(next === undefined || !items.length) return;
+        event.preventDefault();
+        items[(next + items.length) % items.length].focus();
+    }
+
+    private menuItems(): HTMLButtonElement[] {
+        const menu = this.openProjectMenuId ? document.getElementById(`project-menu-${this.openProjectMenuId}`) : null;
+        return Array.from(menu?.querySelectorAll<HTMLButtonElement>("[role=menuitem]") ?? []);
     }
 
     exportProject(event: MouseEvent, project: ProjectRecord): void {
