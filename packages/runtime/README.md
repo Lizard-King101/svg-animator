@@ -23,3 +23,9 @@ player.play();
 ```
 
 See the repository runtime documentation for external assets, events, compatibility, CSP, and embedding guidance.
+
+## Action composition (runtime 1.1)
+
+Bundle format v1 supports the additive `composition.action-windows-v1` capability. A compiled channel may carry ordered, nonoverlapping `actionWindows`, each with a start, exclusive end and same-channel local track. During a window, the player evaluates its track at scene time minus start; otherwise it evaluates the outer base/direct track at scene time. Windows cannot nest. Older runtimes reject the capability rather than silently dropping actions. Existing bundles without windows retain their evaluation behavior.
+
+Runtime 1.2 supports optional action-window `timing` with `sourceStart`, `sourceEnd` and positive `rate`, guarded by `composition.action-timing-v1`. The finite outer window determines how many trimmed cycles play. Source time wraps within the trimmed range; at the exclusive window end the outer scene track resumes. Interval comparisons use 12-decimal animation precision, shared with the editor.

@@ -1,3 +1,10 @@
+import { IKTargetComponent } from '../_components/rig-editor/ik-target.component';
+import { RigBindingSessionService } from '../_services/rig-binding-session.service';
+import { BoneDrawingService } from '../_services/bone-drawing.service';
+import { BoneDrawingControlsComponent } from '../_components/rig-editor/bone-drawing-controls.component';
+import { RigEditingService } from '../_services/rig-editing.service';
+import { RigOverlayComponent } from '../_components/rig-editor/rig-overlay.component';
+import { ActionCompositionService } from '../_services/action-composition.service';
 import { ShapeBuildingService } from '../_services/shape-building.service';
 import { ProjectColorsService } from '../_services/project-colors.service';
 import { EyedropperService } from '../_services/eyedropper.service';
@@ -44,11 +51,17 @@ import { AnimationTrackCleanupService } from "../_services/animation-track-clean
 import { CanvasSelectionCommandService } from "../_services/canvas-selection-command.service";
 import { ObjectClipboardCommandService } from "../_services/object-clipboard-command.service";
 import { SelectionArrangementService } from "../_services/selection-arrangement.service";
+import { AnimationInspectionService } from '../_services/animation-inspection.service';
+import { AnimationInspectionOverlayComponent } from '../_components/animation-inspection/animation-inspection-overlay.component';
 
 @Component({
     standalone: true,
     imports: [
+        RigOverlayComponent,
+        IKTargetComponent,
+        BoneDrawingControlsComponent,
         NgIf,
+        AnimationInspectionOverlayComponent,
         FaIconComponent,
         SVGDisplay,
         AnimationTimelineComponent,
@@ -71,9 +84,14 @@ import { SelectionArrangementService } from "../_services/selection-arrangement.
         EyedropperSurfaceDirective,
     ],
     providers: [
+        RigEditingService,
+        RigBindingSessionService,
+        BoneDrawingService,
         EditorService,
+        AnimationInspectionService,
         HistoryService,
         AnimationPlaybackService,
+        ActionCompositionService,
         AnimationGestureService,
         DocumentMutationService,
         ProjectColorsService,
@@ -207,6 +225,7 @@ export class EditorPage implements OnInit, AfterViewInit {
     }
 
     constructor(
+        public rigs: RigEditingService,
         public reference: ReferenceImageService,
         public editor: EditorService,
         public animation: AnimationPlaybackService,

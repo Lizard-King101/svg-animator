@@ -1,10 +1,12 @@
 export const RUNTIME_BUNDLE_KIND = "svg-animator/runtime-bundle" as const;
 export const RUNTIME_BUNDLE_FORMAT_VERSION = 1 as const;
-export const RUNTIME_VERSION = "1.0.0" as const;
+export const RUNTIME_VERSION = "1.2.0" as const;
 export const RUNTIME_BROWSER_GLOBAL = "SVGAnimatorRuntime" as const;
 
 export const RUNTIME_CAPABILITIES_V1 = [
     "tracks.numeric-v1",
+    "composition.action-windows-v1",
+    "composition.action-timing-v1",
     "tracks.color-v1",
     "tracks.discrete-v1",
     "render.transforms-v1",
@@ -49,7 +51,10 @@ export interface CompiledDiscreteTrackV1 {
     values: (boolean | string)[];
 }
 
-export type CompiledRuntimeTrackV1 = CompiledNumericTrackV1 | CompiledColorTrackV1 | CompiledDiscreteTrackV1;
+export type CompiledRuntimeTrackV1 = (CompiledNumericTrackV1 | CompiledColorTrackV1 | CompiledDiscreteTrackV1) & {
+    /** Action-local time during [start, end); the outer track supplies the underlying scene value. */
+    actionWindows?: { timing?: { sourceStart: number; sourceEnd: number; rate: number }; start: number; end: number; track: CompiledRuntimeTrackV1 }[];
+};
 
 export interface RuntimePointV1 { id: string; x: number; y: number; cornerRadius?: number; }
 export interface RuntimeLineV1 {

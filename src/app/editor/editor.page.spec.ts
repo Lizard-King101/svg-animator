@@ -27,7 +27,7 @@ describe("editor page keyboard shortcuts", () => {
             deleteLayer: jasmine.createSpy("deleteLayer"),
             deleteSelectedLayers: jasmine.createSpy("deleteSelectedLayers"),
         };
-        const page = new EditorPage(
+        const page = new EditorPage({ hidesArtworkHandles: false } as any,
             {} as any,
             editor as any,
             { mode: "edit" } as any,

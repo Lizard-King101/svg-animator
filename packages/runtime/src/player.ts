@@ -249,7 +249,7 @@ export function validateRuntimeBundle(value: unknown): asserts value is RuntimeB
     if(!bundle.animation || !Number.isFinite(bundle.animation.duration) || !Array.isArray(bundle.animation.tracks)
         || !Array.isArray(bundle.animation.targets) || !Array.isArray(bundle.animation.properties)) throw new RuntimePlayerError("invalid-bundle", "Runtime bundle animation is incomplete.");
     if(bundle.animation.duration < 0 || !Array.isArray(bundle.animation.markers) || !Array.isArray(bundle.animation.variables)) throw new RuntimePlayerError("invalid-bundle", "Runtime bundle timing metadata is invalid.");
-    bundle.animation.tracks.forEach((track, index) => {
+    const validateTrack = (track: RuntimeBundleV1['animation']['tracks'][number], index: number, nested = false) => {
         if(!track || !Number.isInteger(track.target) || track.target < 0 || track.target >= bundle.animation!.targets.length
             || !Number.isInteger(track.property) || track.property < 0 || track.property >= bundle.animation!.properties.length
             || !Array.isArray(track.times) || !Array.isArray(track.values) || track.times.length === 0 || track.times.length !== track.values.length
@@ -261,7 +261,27 @@ export function validateRuntimeBundle(value: unknown): asserts value is RuntimeB
         if(track.kind === "color" && (track.segmentModes.length !== track.times.length - 1 || track.interpolationSpaces.length !== track.times.length - 1
             || track.values.some((item) => !Number.isInteger(item)))) throw new RuntimePlayerError("invalid-bundle", `Color runtime track ${index} is malformed.`);
         if(track.kind !== "number" && track.kind !== "color" && track.kind !== "boolean" && track.kind !== "string") throw new RuntimePlayerError("invalid-bundle", `Runtime track ${index} has an unknown kind.`);
-    });
+        if(track.actionWindows !== undefined) {
+            if(nested || !bundle.requiredCapabilities!.includes('composition.action-windows-v1') || !Array.isArray(track.actionWindows))
+                throw new RuntimePlayerError('invalid-bundle', 'Action windows require the composition capability and cannot nest.');
+            let end = -Infinity;
+            track.actionWindows.forEach(window => {
+                if(window?.timing !== undefined) {
+                    const t = window.timing;
+                    if(!t || !bundle.requiredCapabilities!.includes('composition.action-timing-v1')
+                        || ![t.sourceStart, t.sourceEnd, t.rate].every(Number.isFinite)
+                        || t.sourceStart < 0 || t.sourceEnd <= t.sourceStart || t.rate < .01 || t.rate > 100)
+                        throw new Error('Invalid action time mapping.');
+                }
+                if(!window || !Number.isFinite(window.start) || !Number.isFinite(window.end) || window.start < 0 || window.end <= window.start
+                    || window.start < end || !window.track || window.track.target !== track.target || window.track.property !== track.property || window.track.kind !== track.kind)
+                    throw new RuntimePlayerError('invalid-bundle', 'Action windows must be ordered, nonoverlapping, and address the same channel.');
+                end = window.end;
+                validateTrack(window.track, index, true);
+            });
+        }
+    };
+    bundle.animation.tracks.forEach((track, index) => validateTrack(track, index));
 }
 
 function validateArtwork(root: SVGSVGElement, bundle: RuntimeBundleV1): void {

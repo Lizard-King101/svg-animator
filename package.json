@@ -10,6 +10,8 @@
     "start": "ng serve",
     "build": "npm run build:runtime && npm run build:editor",
     "build:editor": "ng build",
+    "deploy": "npm run build && wrangler deploy",
+    "deploy:check": "npm run build && wrangler deploy --dry-run",
     "build:runtime": "npm --prefix packages/runtime run build && npm run copy:runtime",
     "copy:runtime": "node scripts/copy-runtime-assets.mjs",
     "watch": "ng build --watch --configuration development",
@@ -44,6 +46,7 @@
     "@popperjs/core": "^2.11.8",
     "bootstrap": "^5.3.8",
     "fflate": "^0.8.2",
+    "http-server": "^14.1.1",
     "paper": "^0.12.18",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
@@ -61,6 +64,7 @@
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
     "typedoc": "^0.28.14",
-    "typescript": "~5.9.0"
+    "typescript": "~5.9.0",
+    "wrangler": "4.98.0"
   }
 }

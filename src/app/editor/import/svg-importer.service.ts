@@ -5,7 +5,7 @@ import { PathSave } from "../objects/elements/path.object";
 import { ShapeSave } from "../objects/elements/shape.object";
 import { TextSave } from "../objects/elements/text.object";
 import { ElementSave, ImportedSourceNode, SVGSave } from "../objects/svg.object";
-import { TransformSave, identityMatrix, Matrix, multiplyMatrix, rotationMatrix, scaleMatrix, translationMatrix } from "../objects/transform.object";
+import { decomposeTransform, TransformSave, identityMatrix, Matrix, multiplyMatrix, rotationMatrix, scaleMatrix, translationMatrix } from "../objects/transform.object";
 import { parseSVGPathData, SVGPathParseError } from "./svg-path-parser";
 import { sanitizeSVGText, SVGParseError } from "./svg-sanitizer";
 import { GradientPaintSave, GradientSpreadMethod, GradientUnits, PaintSave } from "../objects/paint.object";
@@ -846,21 +846,4 @@ function parseTransform(source: string): Matrix | undefined {
         lastIndex = (match.index ?? 0) + match[0].length;
     }
     return /^\s*$/.test(source.slice(lastIndex)) ? matrix : undefined;
-}
-
-function decomposeTransform(matrix: Matrix): TransformSave | undefined {
-    const scaleX = Math.hypot(matrix.a, matrix.b);
-    if(scaleX < 0.000001) return undefined;
-    const dot = matrix.a * matrix.c + matrix.b * matrix.d;
-    if(Math.abs(dot) > 0.00001 * Math.max(1, scaleX)) return undefined;
-    const scaleY = (matrix.a * matrix.d - matrix.b * matrix.c) / scaleX;
-    return {
-        translateX: matrix.e,
-        translateY: matrix.f,
-        scaleX,
-        scaleY,
-        rotation: Math.atan2(matrix.b, matrix.a) * 180 / Math.PI,
-        originX: 0,
-        originY: 0,
-    };
 }

@@ -19,6 +19,7 @@ import { pathPointAnimationProperty } from '../../editor/objects/animation-targe
 import { PathAnchorInteraction } from './path-anchor.interaction';
 import { PenTool } from './pen.tool';
 import { SelectTool } from './select.tool';
+import { EditorPage } from '../../editor/editor.page';
 
 function setup() {
     const preferences = new EditorPreferencesService();
@@ -43,6 +44,63 @@ function setup() {
 const mouse = (x: number, y: number, options: MouseEventInit = {}) => new MouseEvent('mousemove', { clientX: x, clientY: y, ...options });
 
 describe('path anchor snapping gestures', () => {
+    for(const mode of ['edit', 'animate'] as const) {
+        it(`keeps modifier keys inside a live ${mode} handle drag and commits only on release`, () => {
+            const { editor, path, control, zone, animation, gestures, mutations, projects } = setup();
+            animation.mode = mode;
+            const property = pathPointAnimationProperty(control.id, 'x');
+            if(mode === 'animate') {
+                animation.seek(1);
+                animation.upsertKeyframe(path, property, 'number', 50, 40);
+                mutations.commit('animation');
+                projects.upsert.calls.reset();
+            }
+            mutations.resetBaseline();
+            const baseline = mutations.captureState();
+            const capture = spyOn(mutations, 'captureState').and.callThrough();
+            const viewport = document.createElement('div'), target = document.createElement('div');
+            target.dataset['pointRole'] = 'control-start'; target.dataset['pointId'] = control.id;
+            target.dataset['lineId'] = path.lines[0].id;
+            viewport.append(target); document.body.append(viewport);
+            editor.selectedTool = new SelectTool(editor);
+            const workspace = new CanvasWorkspaceComponent(editor, mutations, zone, new ElementRef(viewport), gestures);
+            workspace.ngAfterViewInit();
+            const page = new EditorPage({ hidesArtworkHandles: false } as any, {} as any, editor, animation, mutations, projects,
+                { selectedLayers: [path] } as any, {} as any, {} as any, {} as any, { handleKey: () => false } as any);
+            const keyboard = (event: KeyboardEvent) => page.handleKeyDown(event);
+            const keyup = (event: KeyboardEvent) => page.handleKeyUp(event);
+            document.addEventListener('keydown', keyboard);
+            document.addEventListener('keyup', keyup);
+            try {
+                target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: control.x, clientY: control.y }));
+                document.dispatchEvent(mouse(65, 75, { bubbles: true }));
+                expect([control.x, control.y]).toEqual([65, 75]);
+                for(const key of ['Control', 'Shift', 'Meta', 'Alt']) {
+                    document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+                    expect(editor.keysDown[key]).toBeTrue();
+                    expect([control.x, control.y]).withContext(key).toEqual([65, 75]);
+                    document.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true, cancelable: true }));
+                    expect(editor.keysDown[key]).toBeUndefined();
+                }
+                expect(capture).not.toHaveBeenCalled();
+                expect(projects.upsert).not.toHaveBeenCalled();
+                document.dispatchEvent(mouse(75, 85, { bubbles: true }));
+                document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                expect([control.x, control.y]).toEqual([75, 85]);
+                expect(projects.upsert).toHaveBeenCalledTimes(1);
+                if(mode === 'animate') {
+                    expect(editor.selectedSVG!.animation.tracks.find(track => track.property === property)!.keyframes.at(-1)!.value).toBe(75);
+                }
+                mutations.undo();
+                expect(mutations.captureState()).toBe(baseline);
+            } finally {
+                document.removeEventListener('keydown', keyboard);
+                document.removeEventListener('keyup', keyup);
+                workspace.ngOnDestroy(); viewport.remove(); animation.ngOnDestroy(); mutations.ngOnDestroy();
+            }
+        });
+    }
+
     it('moves an anchor onto an interior crossing without modifying reference geometry and undoes once', () => {
         const { editor, svg, path, target, a, mutations, reset } = setup();
         target.lines.push(new Line(editor, { points: [new Point(125, 120), new Point(125, 220)] })); reset();

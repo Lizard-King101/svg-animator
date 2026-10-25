@@ -4,6 +4,8 @@ import { DocumentMutationService } from "../../_services/document-mutation.servi
 import { EditorService } from "../../_services/editor.service";
 import { Point } from "../../editor/objects/point.object";
 
+const gestureModifierKeys = new Set(['Alt', 'Control', 'Meta', 'Shift']);
+
 @Component({
     selector: "app-canvas-workspace",
     standalone: true,
@@ -120,8 +122,9 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
         }), { signal });
         document.addEventListener('keydown', (event) => {
             if(this.activeButton == null) return;
-            if(event.key === 'Alt' && this.activeButton === 0) {
-                // A modifier may refresh the live move, but only mouseup commits it.
+            if(gestureModifierKeys.has(event.key) && this.activeButton === 0) {
+                // Keep modifiers out of page-level mutation snapshots, which
+                // restore base geometry and would discard an animated drag.
                 this.zone.run(() => this.editor.keyPressed(event.key));
                 event.preventDefault();
                 event.stopImmediatePropagation();
@@ -136,7 +139,7 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
             }
         }, { signal, capture: true });
         document.addEventListener('keyup', (event) => {
-            if(this.activeButton !== 0 || event.key !== 'Alt') return;
+            if(this.activeButton !== 0 || !gestureModifierKeys.has(event.key)) return;
             this.zone.run(() => this.editor.keyReleased(event.key));
             event.preventDefault();
             event.stopImmediatePropagation();

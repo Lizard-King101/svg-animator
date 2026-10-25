@@ -1,0 +1,115 @@
+{
+  "kind": "svg-animator/document",
+  "version": 8,
+  "data": {
+    "id": "action-document",
+    "name": "Reusable blink",
+    "width": 120,
+    "height": 80,
+    "elements": [
+      {
+        "type": "shape",
+        "id": "eye",
+        "name": "Eye",
+        "shapeType": "rectangle",
+        "visible": true,
+        "locked": false,
+        "opacity": 1,
+        "position": {
+          "id": "position",
+          "x": 10,
+          "y": 20
+        },
+        "settings": {
+          "width": 30,
+          "height": 10,
+          "fill": "#112233",
+          "stroke": null,
+          "stroke_width": 0,
+          "line_cap": null,
+          "line_join": null,
+          "stroke_alignment": "center",
+          "stroke_dasharray": [],
+          "stroke_dashoffset": 0,
+          "stroke_miterlimit": 4
+        }
+      }
+    ],
+    "animation": {
+      "version": 2,
+      "duration": 3,
+      "fpsHint": 60,
+      "loop": false,
+      "tracks": [],
+      "markers": [],
+      "variables": [],
+      "composition": {
+        "version": 1,
+        "actions": [
+          {
+            "id": "blink",
+            "name": "Blink",
+            "targetIds": [
+              "eye"
+            ],
+            "animation": {
+              "version": 2,
+              "duration": 0.5,
+              "tracks": [
+                {
+                  "id": "close",
+                  "targetId": "eye",
+                  "property": "transform.scaleY",
+                  "valueType": "number",
+                  "keyframes": [
+                    {
+                      "id": "open",
+                      "time": 0,
+                      "value": 1
+                    },
+                    {
+                      "id": "closed",
+                      "time": 0.25,
+                      "value": 0.1
+                    },
+                    {
+                      "id": "reopen",
+                      "time": 0.5,
+                      "value": 1
+                    }
+                  ]
+                }
+              ],
+              "markers": []
+            }
+          }
+        ],
+        "placements": [
+          {
+            "id": "first",
+            "actionId": "blink",
+            "start": 0.5
+          },
+          {
+            "id": "second",
+            "actionId": "blink",
+            "start": 2
+          }
+        ]
+      }
+    },
+    "guides": [],
+    "guidesLocked": false,
+    "importedSourceNodes": [],
+    "projectColors": [
+      {
+        "color": "#12345680",
+        "name": "Shadow",
+        "pinned": true
+      },
+      {
+        "color": "#ffcc00"
+      }
+    ]
+  }
+}

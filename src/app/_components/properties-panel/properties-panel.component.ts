@@ -1,3 +1,5 @@
+import { RigPanelComponent } from '../rig-editor/rig-panel.component';
+import { RigEditingService } from '../../_services/rig-editing.service';
 import { selectionFrame } from "../../editor/selection";
 import { NgFor, NgIf } from "@angular/common";
 import { Component } from "@angular/core";
@@ -32,7 +34,7 @@ import { formatDashArray, parseDashArray, StrokeAlignment } from "../../editor/o
 @Component({
     selector: "app-properties-panel",
     standalone: true,
-    imports: [FormsModule, NgFor, NgIf, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute, PaintFieldComponent, NumberFieldDirective],
+    imports: [RigPanelComponent, FormsModule, NgFor, NgIf, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute, PaintFieldComponent, NumberFieldDirective],
     templateUrl: "properties-panel.component.html",
     styleUrl: "properties-panel.component.scss",
 })
@@ -57,6 +59,7 @@ export class PropertiesPanelComponent {
         public animation: AnimationPlaybackService,
         private mutations: DocumentMutationService,
         private paintEditing: PaintEditingService,
+        public rigs: RigEditingService,
     ) {}
 
     private scheduleAttributeSnapshot(): void { this.mutations.schedule(); }

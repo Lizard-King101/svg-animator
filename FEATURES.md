@@ -65,6 +65,12 @@ SVG Animator is a motion SVG studio: a browser-based drawing, editing, and keyfr
 
 ## Animation
 
+- Reusable named actions with explicit artwork scope, local-time editing, scene/source switching, extraction of selected motion, independent source duplication, rename and atomic source/placement deletion.
+- Linked scene placements with non-destructive source trims, positive playback rates and finite loop counts, numeric start editing, drag/edge snapping, draggable source trim handles, keyboard nudges, repeat, seek, removal, channel conflict feedback, source propagation, undo/redo and Project JSON persistence. Nonconflicting sources can overlap on the same artwork; later conflicting source edits are rejected at the mutation boundary. Action channels replace direct/base values during their blocks; scene values resume at the exclusive end.
+- Runtime 1.2 compiles exact action windows and trim/rate/loop mappings through explicit capabilities, preserving editor/export interpolation and fallback semantics. Placement rows share timeline scrolling and zoom.
+
+- Optional Animate-mode onion skins show two earlier/two later poses with configurable spacing (teal before, amber after), scoped to selected artwork or animated artwork when nothing is selected. Optional origin motion trails show up to eight selected objects over the full duration with time ticks and a current-time marker. Trails use 60 intervals and skip hidden spans; stationary origins produce no trail. Both aids are noninteractive, hidden during playback/Edit mode, session-only, and excluded from saved projects and exports. Sampling uses detached artwork and preserves live previews and gestures.
+
 - Versioned animation document with duration, loop, tracks, markers, and runtime-variable storage.
 - Edit/animate modes, playback, scrubbing, timeline zoom/fit, nested rows, per-property tracks, and non-interactive summary diamonds on collapsed layers.
 - Virtualized fixed-height rows and visible-time key filtering keep timeline DOM proportional to the viewport rather than the document's total key count.
@@ -86,8 +92,36 @@ SVG Animator is a motion SVG studio: a browser-based drawing, editing, and keyfr
 - Tangent/perpendicular construction supports straight pen segments, with native ellipse curve-endpoint and common-line tangency also available; existing-segment constraint editing remains planned. Edge rotation excludes clipped geometry, curved path segments, and motion-driven moving geometry.
 - Region creation uses boolean union; a complete object-level boolean toolset remains planned. Region/trim scopes skip hidden, locked, clipped, motion-driven, and directly animated sources, with a 600-source-curve limit. Construction ellipses use high-precision cubic approximations; analytic tangency remains exact. Gap closing and drag-to-paint region/trim selection remain planned.
 - Patterns, images, masks, filters, reusable symbol semantics, rich text, embedded fonts, and accessibility metadata remain planned.
-- Expressions, physics, constraints, bones, and IK remain planned.
+- Expressions, physics, general constraint types, pole controls and rig keyframes remain planned. Static FK and persistent two-bone IK are available.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for ownership rules and [SVG_COMPATIBILITY.md](SVG_COMPATIBILITY.md) for element-level coverage.
 
 Multi-object scaling is proportional. Rotation across differently scaled parent groups and shared transforms involving motion-path attachments are unavailable; the selection summary explains these limits.
+
+## Armatures, FK and persistent IK
+
+- Multiple armatures with named parent/child bones, parent-local rest joints and Bone setup / Pose / Weights controls.
+- FK rotation fields, canvas tip dragging, keyboard rotation and reset-to-rest; one undo step per completed operation.
+- Normalized point weights with inherited or independent Bézier-handle deformation; explicitly empty weights stay at rest.
+- Nested transformed artwork support, stable point IDs, stale-binding diagnostics, explicit assignment changes, and document v14 / rig schema v5 persistence. Legacy files retain their existing poses, weights and anchor inheritance without inferred target or weight links.
+- Named two-bone IK constraints connect a length-bone pair to an existing point bone or a new point at the tip. Targets remain independent of chain parenting: root-parented feet stay planted while the body moves, and the root moves the whole character.
+- Selecting a chain bone or its target opens the same constraint inspector with name, target, enabled state, bend flip, match-to-tip and removal. Constraints reject invalid references, descendant targets, duplicate writers and dependency cycles; reachable limits clamp without stretching.
+- Edit setup changes suspend solving and preserve visible artwork. Pose resumes solving toward the controls; Match target to tip aligns a control before switching. Reset in Edit returns to the rest setup with constraints suspended; Reset in Pose resets authored offsets and evaluates the enabled constraints.
+- Target dragging previews temporarily and commits once; arrow-key nudges, Escape/focus/context cancellation, undo and reload retain the constraint links. Static poses export as editable SVG geometry. Keyed bone actions and animated rig evaluation remain planned.
+
+### Rig creation and linking UX
+
+- Bone tool: drag diamond bones, automatically continue chains, branch from selected bones, and place circle-crosshair point bones. New armatures have a named point root.
+- Bones appear beside artwork in the existing Layers panel, with expandable hierarchy, keyboard navigation and artwork link badges.
+- **Assign bones / Edit bones** previews unbound, rigid or weighted behavior from zero, one or multiple assigned bones. Native paths retain point bindings; other artwork uses single-bone transform attachments. Weighted group setup preflights every descendant, including clipping paths, and commits once. Unsupported shapes/text require explicit conversion. Existing transform attachments convert to weighted native paths only in the rest pose. Escape cancels picking.
+- Artwork-first scope follows selected artwork layers while bone selection retains the scope. New weighted bindings and rigid-to-weighted transitions receive automatic rest-space weights; later weighted assignment edits preserve manual values, adding bones at zero. Reducing to one bone assigns 100% and disables painting; conflicting locks must be unlocked first. Older intentionally unweighted single-bone bindings remain Custom weights until explicitly reassigned.
+- **Auto weights** previews the selected owners or current scope using inverse-square distance to the two nearest eligible rest bone segments or point bones, with deterministic joint ties. Apply and Cancel are explicit; locks and shared-owner eligibility are respected.
+- Click, Shift-click, marquee, Select all and Clear selection manage canonical weight groups separately from artwork selection. Color-coded sliders and percentage fields support mixed values and multi-point edits. Persistent locks preserve exact percentages while remaining weights normalize; zero-valued alternatives receive equal shares. **Clear weights** explicitly leaves selected points at rest. Temporary numeric/color previews commit once on completion or cancel without saving.
+- Stable influence colors match the sidebar legend, bound bones, anchors and Bézier handles. All scoped anchors and handles are visible with handle lines and mixed-weight pies. Handles inherit by default; **Independent handle weights** starts from the inherited values and can be disabled to restore inheritance.
+- Binding automatically shares weights at exactly coincident rest positions within the scope, including transformed children. **Share overlaps** joins existing sets using the first owner's weights; **Make separate** copies the effective weights before unlinking. Geometry, point IDs, contours and clipping remain separate. Removing a source path transfers weight ownership to a surviving linked point.
+- **Add**, **Subtract**, **Set** and **Smooth** brushes share locked-budget influence editing with numeric controls. Selected owners restrict the brush; an empty selection permits the eligible scope. Radius is measured in screen pixels; strength and Set value are adjustable. Inherited handles paint through their anchor, and shared sets receive one update per stroke. Colors preview temporarily; release commits once. Escape, pointer cancellation, focus/context changes and undo discard an unfinished stroke; unchanged strokes add no history. Space paints a focused point.
+- Bone-first **reverse weights** shows points controlled by the selected bone across its bound artwork. The optional filter can include zero-weight points on paths that already list the bone as an influence. Overlapping independent weight groups remain separate and open a bounded popover for member inspection, additive group selection or lock-aware percentage editing; Alt-click opens it while painting.
+- Existing draw order/grouping/clipping remain unchanged. Removing assignments preserves the current pose. Unsupported skew and overlapping rig ownership are rejected. Rig keyframes/actions and animated rig export remain planned.
+
+- Unlinked connected pairs retain the quick two-bone posing handle; those gestures store ordinary FK poses. Persistent targets are added with **Add IK…**, by clicking a target bone or creating one at the tip.
+- Bone tool automatically distinguishes a point click from a length-bone drag with a five-screen-pixel dead zone.

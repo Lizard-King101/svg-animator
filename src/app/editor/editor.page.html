@@ -12,10 +12,14 @@
     <app-canvas-workspace #workspace class="view-port">
       <ng-container *ngIf="editor.selectedSVG">
         <svg #artwork="svgDisplay" display eyedropperSurface [referenceImage]="reference.display"></svg>
-        <svg editorOverlay [artwork]="artwork.nativeElement" [workspace]="workspace"></svg>
+        <svg animationInspection [artwork]="artwork.nativeElement" [workspace]="workspace"></svg>
+        <svg [style.visibility]="rigs.hidesArtworkHandles ? 'hidden' : null" editorOverlay [artwork]="artwork.nativeElement" [workspace]="workspace"></svg>
         <app-canvas-crop *ngIf="animation.mode == 'edit'" [artwork]="artwork.nativeElement" [workspace]="workspace" />
         <app-reference-overlay *ngIf="animation.mode == 'edit'" [artwork]="artwork.nativeElement" [workspace]="workspace" />
         <app-shape-building-controls [artwork]="artwork.nativeElement" [workspace]="workspace" />
+        <app-bone-drawing-controls [artwork]="artwork.nativeElement" [workspace]="workspace" />
+        <app-rig-overlay *ngIf="animation.mode == 'edit'" [artwork]="artwork.nativeElement" [workspace]="workspace" />
+        <app-ik-target *ngIf="animation.mode == 'edit'" [artwork]="artwork.nativeElement" [workspace]="workspace" />
         <app-construction-controls [artwork]="artwork.nativeElement" [workspace]="workspace" />
         <!-- Keep measured rulers in the artwork view; nested embedded views run before SVG host bindings. -->
         <app-canvas-guides [enabled]="animation.mode == 'edit'" [canvas]="artwork.nativeElement" [workspace]="workspace" />

@@ -1,12 +1,14 @@
-/*! SVG Animator Runtime v1.0.0 | MIT License */
+/*! SVG Animator Runtime v1.2.0 | MIT License */
 
 // src/contracts.ts
 var RUNTIME_BUNDLE_KIND = "svg-animator/runtime-bundle";
 var RUNTIME_BUNDLE_FORMAT_VERSION = 1;
-var RUNTIME_VERSION = "1.0.0";
+var RUNTIME_VERSION = "1.2.0";
 var RUNTIME_BROWSER_GLOBAL = "SVGAnimatorRuntime";
 var RUNTIME_CAPABILITIES_V1 = [
   "tracks.numeric-v1",
+  "composition.action-windows-v1",
+  "composition.action-timing-v1",
   "tracks.color-v1",
   "tracks.discrete-v1",
   "render.transforms-v1",
@@ -27,6 +29,24 @@ var RuntimePlayerError = class extends Error {
     this.name = "RuntimePlayerError";
   }
 };
+
+// src/composition.internal.ts
+function actionTime(value) {
+  return Math.round(value * 1e12) / 1e12;
+}
+function activeActionWindow(windows, time) {
+  const sample = actionTime(time);
+  return windows.find((window) => sample >= actionTime(window.start) && sample < actionTime(window.end));
+}
+function actionLocalTime(window, time) {
+  if (!window.timing) return time - window.start;
+  const { sourceStart, sourceEnd, rate } = window.timing;
+  const span = sourceEnd - sourceStart, elapsed = (time - window.start) * rate;
+  const cycles = elapsed / span;
+  const nearest = Math.round(cycles);
+  const phase = Math.abs(cycles - nearest) < 1e-10 ? 0 : elapsed % span;
+  return sourceStart + phase;
+}
 
 // src/temporal.internal.ts
 function evaluateTemporalCubic(time, timeA, timeB, timeC, timeD, valueA, valueB, valueC, valueD) {
@@ -71,6 +91,8 @@ function evaluateTemporalCubicArray(time, coefficients, offset = 0) {
 
 // src/evaluator.ts
 function evaluateRuntimeTrack(track, time) {
+  const active = activeActionWindow(track.actionWindows ?? [], time);
+  if (active) return evaluateRuntimeTrack(active.track, actionLocalTime(active, time));
   if (track.times.length === 0) return void 0;
   if (time <= track.times[0]) return track.values[0];
   const last = track.times.length - 1;
@@ -969,14 +991,31 @@ function validateRuntimeBundle(value) {
   if (!bundle.artwork || typeof bundle.artwork.signature !== "string" || !Array.isArray(bundle.artwork.targets)) throw new RuntimePlayerError("invalid-bundle", "Runtime bundle artwork is incomplete.");
   if (!bundle.animation || !Number.isFinite(bundle.animation.duration) || !Array.isArray(bundle.animation.tracks) || !Array.isArray(bundle.animation.targets) || !Array.isArray(bundle.animation.properties)) throw new RuntimePlayerError("invalid-bundle", "Runtime bundle animation is incomplete.");
   if (bundle.animation.duration < 0 || !Array.isArray(bundle.animation.markers) || !Array.isArray(bundle.animation.variables)) throw new RuntimePlayerError("invalid-bundle", "Runtime bundle timing metadata is invalid.");
-  bundle.animation.tracks.forEach((track, index) => {
+  const validateTrack = (track, index, nested = false) => {
     if (!track || !Number.isInteger(track.target) || track.target < 0 || track.target >= bundle.animation.targets.length || !Number.isInteger(track.property) || track.property < 0 || track.property >= bundle.animation.properties.length || !Array.isArray(track.times) || !Array.isArray(track.values) || track.times.length === 0 || track.times.length !== track.values.length || track.times.some((time, timeIndex) => !Number.isFinite(time) || timeIndex > 0 && time < track.times[timeIndex - 1])) {
       throw new RuntimePlayerError("invalid-bundle", `Runtime track ${index} has invalid indexes or keyframe arrays.`);
     }
     if (track.kind === "number" && (track.segmentModes.length !== track.times.length - 1 || track.temporalCoefficients.length !== Math.max(0, track.times.length - 1) * 8 || track.values.some((item) => !Number.isFinite(item)))) throw new RuntimePlayerError("invalid-bundle", `Numeric runtime track ${index} is malformed.`);
     if (track.kind === "color" && (track.segmentModes.length !== track.times.length - 1 || track.interpolationSpaces.length !== track.times.length - 1 || track.values.some((item) => !Number.isInteger(item)))) throw new RuntimePlayerError("invalid-bundle", `Color runtime track ${index} is malformed.`);
     if (track.kind !== "number" && track.kind !== "color" && track.kind !== "boolean" && track.kind !== "string") throw new RuntimePlayerError("invalid-bundle", `Runtime track ${index} has an unknown kind.`);
-  });
+    if (track.actionWindows !== void 0) {
+      if (nested || !bundle.requiredCapabilities.includes("composition.action-windows-v1") || !Array.isArray(track.actionWindows))
+        throw new RuntimePlayerError("invalid-bundle", "Action windows require the composition capability and cannot nest.");
+      let end = -Infinity;
+      track.actionWindows.forEach((window) => {
+        if (window?.timing !== void 0) {
+          const t = window.timing;
+          if (!t || !bundle.requiredCapabilities.includes("composition.action-timing-v1") || ![t.sourceStart, t.sourceEnd, t.rate].every(Number.isFinite) || t.sourceStart < 0 || t.sourceEnd <= t.sourceStart || t.rate < 0.01 || t.rate > 100)
+            throw new Error("Invalid action time mapping.");
+        }
+        if (!window || !Number.isFinite(window.start) || !Number.isFinite(window.end) || window.start < 0 || window.end <= window.start || window.start < end || !window.track || window.track.target !== track.target || window.track.property !== track.property || window.track.kind !== track.kind)
+          throw new RuntimePlayerError("invalid-bundle", "Action windows must be ordered, nonoverlapping, and address the same channel.");
+        end = window.end;
+        validateTrack(window.track, index, true);
+      });
+    }
+  };
+  bundle.animation.tracks.forEach((track, index) => validateTrack(track, index));
 }
 function validateArtwork(root, bundle) {
   const actual = root.getAttribute("data-svg-animator-signature");

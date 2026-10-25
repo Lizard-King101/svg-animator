@@ -1,3 +1,4 @@
+import { RigDocument, validRigs } from './armature';
 import { ReferenceImage, restoreReferenceImage } from './reference-image';
 import { ProjectColor, restoreProjectColors } from './project-colors';
 import { EditorService } from "src/app/_services/editor.service";
@@ -27,6 +28,7 @@ export interface ImportedSourceNode {
 }
 
 export interface SVGSave {
+    rigs?: RigDocument;
     projectColors?: ProjectColor[];
     id: string;
     name: string;
@@ -43,6 +45,7 @@ export interface SVGSave {
 }
 
 export class SVG {
+    rigs: RigDocument = { version: 5, armatures: [] };
     projectColors: ProjectColor[] = [];
     id: string;
     name?: string;
@@ -95,6 +98,7 @@ export class SVG {
         svg.viewBoxY = finiteNumber(save.viewBoxY, 0);
         svg.elements = SVG._restoreElements(save.elements, editor);
         svg.animation = restoreAnimation(save.animation);
+        svg.rigs = validRigs(save.rigs) ? structuredClone(save.rigs) : { version: 5, armatures: [] };
         svg.guides = Array.isArray(save.guides)
             ? save.guides.map(restoreGuide).filter((guide): guide is CanvasGuide => !!guide)
             : [];
@@ -111,6 +115,7 @@ export class SVG {
 
     save(): SVGSave {
         return {
+            rigs: this.rigs.armatures.length ? { ...structuredClone(this.rigs), version: 5 } : undefined,
             projectColors: this.projectColors.length ? this.projectColors.map(color => ({ ...color })) : undefined,
             id: this.id,
             name: this.name ?? '',
@@ -151,6 +156,7 @@ export class SVG {
         this.viewBoxY = finiteNumber(snap.viewBoxY, 0);
         this.elements = SVG._restoreElements(snap.elements, this.editor);
         this.animation = restoreAnimation(snap.animation);
+        this.rigs = validRigs(snap.rigs) ? structuredClone(snap.rigs) : { version: 5, armatures: [] };
         this.guides = Array.isArray(snap.guides)
             ? snap.guides.map(restoreGuide).filter((guide): guide is CanvasGuide => !!guide)
             : [];
@@ -188,6 +194,7 @@ export class SVG {
 
 interface SharedSection<T> { value: T; serialized: string; bytes: number; }
 interface SharedHistorySnapshot {
+    rigs: SharedSection<SVGSave["rigs"]>;
     projectColors: SharedSection<SVGSave['projectColors']>;
     referenceSource: SharedSection<string | undefined>;
     referencePlacement: SharedSection<Omit<ReferenceImage, "source"> | undefined>;
@@ -200,6 +207,7 @@ interface SharedHistorySnapshot {
 function sharedSnapshot(save: SVGSave, previous?: SharedHistorySnapshot): SharedHistorySnapshot {
     const { source, ...placement } = save.referenceImage ?? {} as ReferenceImage;
     return {
+        rigs: shareSection(save.rigs, previous?.rigs),
         projectColors: shareSection(save.projectColors, previous?.projectColors),
         referenceSource: shareSection(source, previous?.referenceSource),
         referencePlacement: shareSection(save.referenceImage ? placement : undefined, previous?.referencePlacement),
@@ -217,16 +225,17 @@ function shareSection<T>(value: T, previous?: SharedSection<T>): SharedSection<T
 }
 
 function sameSnapshot(a: SharedHistorySnapshot, b: SharedHistorySnapshot): boolean {
-    return a.projectColors === b.projectColors && a.referenceSource === b.referenceSource && a.referencePlacement === b.referencePlacement && a.identity === b.identity && a.artwork === b.artwork && a.animation === b.animation && a.guides === b.guides;
+    return a.rigs === b.rigs && a.projectColors === b.projectColors && a.referenceSource === b.referenceSource && a.referencePlacement === b.referencePlacement && a.identity === b.identity && a.artwork === b.artwork && a.animation === b.animation && a.guides === b.guides;
 }
 
 function snapshotSave(snapshot: SharedHistorySnapshot): SVGSave {
-    return { projectColors: snapshot.projectColors.value, referenceImage: snapshot.referencePlacement.value && snapshot.referenceSource.value ? { ...snapshot.referencePlacement.value, source: snapshot.referenceSource.value } : undefined, ...snapshot.identity.value, ...snapshot.artwork.value, animation: snapshot.animation.value, ...snapshot.guides.value };
+    return { rigs: snapshot.rigs.value, projectColors: snapshot.projectColors.value, referenceImage: snapshot.referencePlacement.value && snapshot.referenceSource.value ? { ...snapshot.referencePlacement.value, source: snapshot.referenceSource.value } : undefined, ...snapshot.identity.value, ...snapshot.artwork.value, animation: snapshot.animation.value, ...snapshot.guides.value };
 }
 
 function uniqueSectionBytes(snapshots: readonly SharedHistorySnapshot[]): number {
     const sections = new Set<SharedSection<unknown>>();
     snapshots.forEach((snapshot) => {
+        sections.add(snapshot.rigs);
         sections.add(snapshot.projectColors);
         sections.add(snapshot.referenceSource);
         sections.add(snapshot.referencePlacement);

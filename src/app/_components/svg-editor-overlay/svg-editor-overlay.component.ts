@@ -120,6 +120,12 @@ export class SVGEditorOverlayComponent {
         return anchors.map((point) => ({ point, ...applyMatrix(matrix, point.x, point.y) }));
     }
 
+    // Projection objects are recreated each check. Keep their DOM targets alive
+    // so pointerdown's target still receives the browser's following mousedown.
+    trackAnchor(_index: number, anchor: ProjectedPoint): string { return anchor.point.id; }
+    trackBezierSegment(_index: number, segment: ProjectedBezierSegment): string { return segment.line.id; }
+    trackTransformHandle(_index: number, handle: SelectionBox['handles'][number]): string { return handle.role; }
+
     bezierSegments(path: Path): ProjectedBezierSegment[] {
         const matrix = this.elementToWorkspaceMatrix(path);
         if(!matrix) return [];

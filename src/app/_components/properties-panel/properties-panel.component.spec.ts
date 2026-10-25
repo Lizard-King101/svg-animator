@@ -1,3 +1,5 @@
+import { RigEditingService } from '../../_services/rig-editing.service';
+import { RigBindingSessionService } from '../../_services/rig-binding-session.service';
 import { TestBed } from "@angular/core/testing";
 import { AnimationPlaybackService } from "../../_services/animation-playback.service";
 import { DocumentMutationService } from "../../_services/document-mutation.service";
@@ -35,7 +37,7 @@ describe("PropertiesPanelComponent", () => {
         const schedule = jasmine.createSpy('schedule');
         await TestBed.configureTestingModule({
             imports: [PropertiesPanelComponent],
-            providers: [
+            providers: [RigEditingService, RigBindingSessionService,
                 { provide: EditorService, useValue: editor },
                 { provide: AnimationPlaybackService, useValue: { mode: 'edit' } },
                 { provide: DocumentMutationService, useValue: { schedule } },
@@ -82,7 +84,7 @@ describe("PropertiesPanelComponent", () => {
 
         await TestBed.configureTestingModule({
             imports: [PropertiesPanelComponent],
-            providers: [
+            providers: [RigEditingService, RigBindingSessionService,
                 { provide: EditorService, useValue: editor },
                 { provide: AnimationPlaybackService, useValue: { mode: "edit" } },
                 { provide: DocumentMutationService, useValue: { schedule: () => undefined } },
@@ -124,7 +126,7 @@ describe("PropertiesPanelComponent", () => {
         const schedule = jasmine.createSpy("schedule");
         await TestBed.configureTestingModule({
             imports: [PropertiesPanelComponent],
-            providers: [
+            providers: [RigEditingService, RigBindingSessionService,
                 { provide: EditorService, useValue: editor },
                 { provide: AnimationPlaybackService, useValue: { mode: "edit" } },
                 { provide: DocumentMutationService, useValue: { schedule } },

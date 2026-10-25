@@ -133,11 +133,11 @@ describe('Project colors', () => {
             t.mutations.undo(); t.mutations.redo(); expect(t.svg.projectColors).toEqual(restored.projectColors);
         } finally { t.destroy(); }
     });
-    it('migrates v6, keeps v7 idempotent and rejects malformed project palettes', () => {
+    it('migrates v6 and v7 and rejects malformed project palettes', () => {
         const current = migrateDocument(fixture); expect(current.status).toBe('ok');
-        if(current.status === 'ok') expect(current.migrated).toBeFalse();
+        if(current.status === 'ok') expect(current.migrated).toBeTrue();
         const previous = migrateDocument({ ...fixture, version: 6, data: { ...fixture.data, projectColors: undefined } });
-        expect(previous.status).toBe('ok'); if(previous.status === 'ok') { expect(previous.migrated).toBeTrue(); expect(previous.value.version).toBe(7); }
+        expect(previous.status).toBe('ok'); if(previous.status === 'ok') { expect(previous.migrated).toBeTrue(); expect(previous.value.version).toBe(14); }
         for(const projectColors of [[{ color: 'not a color' }], [{ color: '#123456', pinned: 'yes' }], [{ color: '#123456', name: 'x'.repeat(81) }]]) {
             expect(() => parseProjectJSON(JSON.stringify({ ...fixture, data: { ...fixture.data, projectColors } }))).toThrow();
         }

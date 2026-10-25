@@ -14,6 +14,19 @@ import { Point } from "../editor/objects/point.object";
 import { SVG } from "../editor/objects/svg.object";
 
 describe("TimelineEditorService scale and viewport policy", () => {
+    it('reserves placement row height in the shared grid and virtual layer viewport', () => {
+        const { timeline } = setup();
+        timeline.editor.selectedSVG!.animation.composition = { version: 1, actions: [], placements: [
+            { id: 'one', actionId: 'source', start: 0 }, { id: 'two', actionId: 'source', start: 2 },
+        ] };
+        expect(timeline.placementGridRows).toBe('30px repeat(2, 64px)');
+        const window = spyOn(timeline as any, 'updateLayerWindow');
+        timeline.updateTimelineViewport({ currentTarget: { scrollTop: 218, clientHeight: 300, scrollLeft: 0, clientWidth: 900 } } as unknown as Event);
+        expect(window).toHaveBeenCalledWith(60, 300);
+        timeline.updateTimelineViewport({ currentTarget: { scrollTop: 0, clientHeight: 300, scrollLeft: 0, clientWidth: 900 } } as unknown as Event);
+        expect(window).toHaveBeenCalledWith(0, 142);
+    });
+
     it("reserves keyframe clipboard shortcuts for Animate mode and respects consumed events", () => {
         const { timeline } = setup();
         const copy = spyOn(timeline, 'copySelectedKeyframes').and.returnValue(true);

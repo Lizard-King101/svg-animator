@@ -1,3 +1,4 @@
+import { RowPointerDrag, rowDropPosition } from '../editor/row-pointer-drag';
 import { Injectable, Optional } from "@angular/core";
 import { DocumentMutationService } from "./document-mutation.service";
 import { contextMenuSections, EditorContextMenuItem, EditorService } from "./editor.service";
@@ -19,7 +20,7 @@ export class LayerCommandService {
     renamingLayer?: AnyElement;
     get selectedLayers(): AnyElement[] { return this.editor.selectedElements; }
     set selectedLayers(elements: AnyElement[]) { this.editor.selectedElements = elements; }
-    private pendingLayerDrag?: { element: AnyElement; pointerId: number; startX: number; startY: number; row: HTMLElement };
+    private layerPointer = new RowPointerDrag<AnyElement>();
     private suppressLayerClick = false;
     private lastSelectedLayer?: AnyElement;
     private collapsedGroupIds = new Set<string>();
@@ -471,32 +472,17 @@ export class LayerCommandService {
             return;
         }
 
-        this.pendingLayerDrag = {
-            element,
-            pointerId: event.pointerId,
-            startX: event.clientX,
-            startY: event.clientY,
-            row,
-        };
-        row.setPointerCapture(event.pointerId);
+        this.layerPointer.begin(event,row,element);
     }
 
     updateLayerPointerDrag(event: PointerEvent) {
-        const pending = this.pendingLayerDrag;
+        const pending = this.layerPointer.pending;
         if(!pending || pending.pointerId !== event.pointerId) {
             return;
         }
 
-        const distance = Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY);
-        if(!this.draggingLayer && distance < 4) {
-            return;
-        }
-
-        if(!this.draggingLayer) {
-            this.draggingLayer = pending.element;
-        }
-
-        event.preventDefault();
+        const dragging = this.layerPointer.move(event); if(!dragging) return;
+        this.draggingLayer = dragging;
         const target = this.layerDropTargetFromPoint(event.clientX, event.clientY);
         if(!target || target.element === this.draggingLayer || this.elementContains(this.draggingLayer, target.element)) {
             this.dragTargetLayer = undefined;
@@ -508,14 +494,12 @@ export class LayerCommandService {
     }
 
     finishLayerPointerDrag(event: PointerEvent) {
-        const pending = this.pendingLayerDrag;
+        const pending = this.layerPointer.pending;
         if(!pending || pending.pointerId !== event.pointerId) {
             return;
         }
 
-        if(pending.row.hasPointerCapture(event.pointerId)) {
-            pending.row.releasePointerCapture(event.pointerId);
-        }
+        this.layerPointer.cancel();
 
         if(this.draggingLayer) {
             event.preventDefault();
@@ -526,13 +510,13 @@ export class LayerCommandService {
             });
         }
 
-        this.pendingLayerDrag = undefined;
+        this.layerPointer.cancel();
     }
 
     cancelLayerPointerDrag(event: PointerEvent) {
-        const pending = this.pendingLayerDrag;
+        const pending = this.layerPointer.pending;
         if(pending?.pointerId === event.pointerId) {
-            this.pendingLayerDrag = undefined;
+            this.layerPointer.cancel();
             this.endLayerDrag();
         }
     }
@@ -550,14 +534,8 @@ export class LayerCommandService {
     }
 
     private updateLayerDropTarget(element: AnyElement, row: HTMLElement, clientY: number) {
-        const bounds = row.getBoundingClientRect();
-        const offsetY = clientY - bounds.top;
         this.dragTargetLayer = element;
-        if(element instanceof Group && offsetY > bounds.height / 3 && offsetY < (bounds.height * 2 / 3)) {
-            this.dragTargetPosition = 'inside';
-        } else {
-            this.dragTargetPosition = offsetY < (bounds.height / 2) ? 'before' : 'after';
-        }
+        this.dragTargetPosition = rowDropPosition(row.getBoundingClientRect(),clientY,element instanceof Group);
     }
 
     endLayerDrag() {

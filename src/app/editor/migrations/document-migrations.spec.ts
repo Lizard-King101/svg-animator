@@ -4,6 +4,8 @@ import futureProjects from "./fixtures/future-projects.json";
 import invalidProjects from "./fixtures/invalid-projects.json";
 import documentV3AnimationV1 from "./fixtures/document-v3-animation-v1.json";
 import documentEnvelopeVersions from "./fixtures/document-envelope-versions.json";
+import documentV11Attachments from './fixtures/document-v11-attachments.json';
+import documentV12IK from './fixtures/document-v12-ik.json';
 import {
     CURRENT_DOCUMENT_VERSION,
     CURRENT_PROJECT_DATABASE_VERSION,
@@ -17,6 +19,42 @@ import {
 import { ProjectService, PROJECT_STORAGE_KEY } from "../../_services/project.service";
 
 describe("document migrations", () => {
+    it('upgrades v11 rigs without inventing targets or changing posed artwork', () => {
+        const before = JSON.stringify(documentV11Attachments);
+        const result = migrateDocument(documentV11Attachments);
+        expect(result.status).toBe('ok');
+        if(result.status !== 'ok') return;
+        expect(result.value.version).toBe(14);
+        expect(result.value.data.rigs?.version).toBe(5);
+        expect(result.value.data.rigs?.armatures).toEqual(documentV11Attachments.data.rigs.armatures as any);
+        expect(result.value.data.elements).toEqual(documentV11Attachments.data.elements as any);
+        expect(result.value.data.rigs?.armatures[0].constraints).toBeUndefined();
+        expect(JSON.stringify(documentV11Attachments)).toBe(before);
+        const again = migrateDocument(result.value);
+        expect(again.status).toBe('ok');
+        if(again.status === 'ok') expect(again.migrated).toBeFalse();
+    });
+
+    it('round-trips persistent target references and rejects invalid or future constraints', () => {
+        const result = migrateDocument(documentV12IK);
+        expect(result.status).toBe('ok');
+        if(result.status !== 'ok') return;
+        expect(result.migrated).toBeTrue();
+        expect(result.value.data.rigs?.armatures).toEqual(documentV12IK.data.rigs.armatures as any);
+        const again = migrateDocument(result.value);
+        expect(again.status).toBe('ok');
+        if(again.status === 'ok') expect(again.migrated).toBeFalse();
+        const invalid = structuredClone(documentV12IK);
+        invalid.data.rigs.armatures[0].constraints[0].targetBoneId = 'lower';
+        expect(migrateDocument(invalid).status).toBe('invalid');
+        const future = structuredClone(documentV12IK); future.data.rigs.version = 6;
+        expect(migrateDocument(future).status).toBe('unsupported');
+        const disconnected = structuredClone(documentV12IK); disconnected.data.rigs.armatures[0].bones[2].x = 20;
+        expect(migrateDocument(disconnected).status).toBe('invalid');
+        disconnected.data.rigs.armatures[0].constraintsActive = false;
+        expect(migrateDocument(disconnected).status).toBe('ok');
+    });
+
     it("wraps an unversioned SVG save without changing its payload", () => {
         const legacyDocument = legacyProjects[0].svgData;
         const result = migrateDocument(legacyDocument);
@@ -47,8 +85,8 @@ describe("document migrations", () => {
 
         expect(result.status).toBe("ok");
         if(result.status !== "ok") return;
-        expect(result.migrated).toBeFalse();
-        expect(result.value).toEqual(currentProjects as any);
+        expect(result.migrated).toBeTrue();
+        expect(migrateProjectDatabase(result.value)).toEqual({ status: "ok", value: result.value, migrated: false, warnings: [] });
         expect(storeRuntimeProjects(runtimeProjects(result.value))).toEqual(result.value);
     });
 
@@ -62,7 +100,7 @@ describe("document migrations", () => {
         expect(result.status).toBe("ok");
         if(result.status !== "ok") return;
         expect(result.migrated).toBeTrue();
-        expect(result.value.version).toBe(7);
+        expect(result.value.version).toBe(CURRENT_DOCUMENT_VERSION);
         expect(result.value.data.importedSourceNodes).toEqual([]);
     });
 
@@ -81,7 +119,7 @@ describe("document migrations", () => {
 
         expect(result.status).toBe("ok");
         if(result.status !== "ok") return;
-        expect(result.value.version).toBe(7);
+        expect(result.value.version).toBe(CURRENT_DOCUMENT_VERSION);
         expect(result.value.data.animation?.version).toBe(2);
         expect(result.value.data.animation?.tracks).toEqual(data.animation.tracks as any);
     });
@@ -90,7 +128,7 @@ describe("document migrations", () => {
         const result = migrateDocument(documentV3AnimationV1);
         expect(result.status).toBe("ok");
         if(result.status !== "ok") return;
-        expect(result.value.version).toBe(7);
+        expect(result.value.version).toBe(CURRENT_DOCUMENT_VERSION);
         expect(result.value.data.animation?.version).toBe(2);
         expect(result.value.data.animation?.tracks[0].keyframes).toEqual((documentV3AnimationV1.data.animation.tracks[0].keyframes as any));
     });

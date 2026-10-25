@@ -175,6 +175,36 @@ describe("viewport SVG editor overlay", () => {
 describe("overlay segment interaction", () => {
     afterEach(() => TestBed.resetTestingModule());
 
+    it('retains pointer targets between pointerdown and mousedown while refreshing projected positions', () => {
+        const { editor, svg, overlay } = setup();
+        const path = new Path(editor);
+        const anchor = new Point(10, 20);
+        path.lines = [new Line(editor, { type: 'bezier', points: [anchor, new Point(80, 60)],
+            controlStart: new Point(30, 10), controlEnd: new Point(60, 70) })];
+        svg.elements = [path]; editor.selectedElement = path;
+        TestBed.configureTestingModule({ imports: [OverlayTestHost], providers: [{ provide: EditorService, useValue: editor }] });
+        const fixture = TestBed.createComponent(OverlayTestHost);
+        fixture.componentInstance.artwork = overlay.artwork;
+        fixture.componentInstance.workspace = overlay.workspace;
+        fixture.detectChanges();
+        const root: HTMLElement = fixture.nativeElement;
+        const targets = Array.from(root.querySelectorAll('[data-point-id], [data-transform-handle]'));
+        expect(targets.length).toBe(15);
+        for(const target of targets) {
+            target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            // Document pointer listeners can trigger Angular before the browser
+            // emits mousedown. Removing the target retargets that event to the SVG.
+            fixture.detectChanges();
+            expect(root.contains(target)).withContext(target.outerHTML).toBeTrue();
+        }
+        const anchorNode = root.querySelector(`[data-point-id="${anchor.id}"]`)!;
+        anchor.x += 5;
+        fixture.detectChanges();
+        expect(root.querySelector(`[data-point-id="${anchor.id}"]`)).toBe(anchorNode);
+        expect(anchorNode.getAttribute('cx')).toBe('130');
+        fixture.destroy();
+    });
+
     it("keeps the full hit area across zoom and selection changes, including outside the artboard", () => {
         const { editor, svg, overlay } = setup();
         editor.keysDown = {};

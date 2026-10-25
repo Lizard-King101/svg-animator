@@ -6,10 +6,12 @@ import { TimelineGraphComponent } from "../timeline-graph/timeline-graph.compone
 import { TimelineRowComponent } from "../timeline-row/timeline-row.component";
 import { TimelineRulerComponent } from "../timeline-ruler/timeline-ruler.component";
 
+import { ActionPlacementRowsComponent } from '../action-composition/action-placement-rows.component';
+
 @Component({
     selector: "app-timeline-dope-sheet",
     standalone: true,
-    imports: [NgClass, NgFor, NgIf, NgStyle, FaIconComponent, TimelineGraphComponent, TimelineRowComponent, TimelineRulerComponent],
+    imports: [ActionPlacementRowsComponent, NgClass, NgFor, NgIf, NgStyle, FaIconComponent, TimelineGraphComponent, TimelineRowComponent, TimelineRulerComponent],
     templateUrl: "timeline-dope-sheet.component.html",
     styles: [":host { display: contents; }"],
 })

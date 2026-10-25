@@ -1,3 +1,4 @@
+import { compositionChannels } from './action-composition';
 import packageInfo from "../../../../package.json";
 import {
     CompiledColorTrackV1,
@@ -15,7 +16,7 @@ import {
     RuntimeSceneTargetV1,
     RuntimeSegmentMode,
 } from "../../../../packages/runtime/src/index";
-import { AnimationTrack, Keyframe, normalizedKeyframes, temporalSegmentCoefficients } from "../objects/animation.object";
+import { AnimationTrack, Keyframe, normalizedKeyframes, temporalSegmentCoefficients, validComposition } from "../objects/animation.object";
 import { GroupSave } from "../objects/elements/group.object";
 import { PathSave } from "../objects/elements/path.object";
 import { ShapeSave } from "../objects/elements/shape.object";
@@ -36,7 +37,10 @@ export type {
 export function compileRuntimeAnimation(document: SVGSave, options: { bakeRoundedCorners?: boolean } = {}): RuntimeCompileResultV1 {
     const diagnostics: RuntimeCompileDiagnostic[] = [];
     const animation = document.animation;
-    const animatedOrigins = animatedOriginTargets(animation?.tracks ?? []);
+    if(!validComposition(animation?.composition)) diagnostics.push({ code: 'unsupported-property', trackId: 'composition', targetId: '', property: 'composition',
+        message: 'Action composition contains invalid references, overlapping placements, or an unsupported version.', correction: 'Repair the action sources and placements before exporting.' });
+    const placedIds = new Set(animation?.composition?.placements.map(placement => placement.actionId));
+    const animatedOrigins = animatedOriginTargets([...(animation?.tracks ?? []), ...(animation?.composition?.actions.filter(action => placedIds.has(action.id)).flatMap(action => action.animation.tracks) ?? [])]);
     const sceneTargets = compileScene(document.elements, options.bakeRoundedCorners ?? true, animatedOrigins);
     const sceneById = new Map(sceneTargets.map((target) => [target.id, target]));
     const targetNames = collectElementNames(document.elements);
@@ -55,10 +59,11 @@ export function compileRuntimeAnimation(document: SVGSave, options: { bakeRounde
         return index;
     };
 
-    [...(animation?.tracks ?? [])]
-        .filter((track) => track.enabled !== false)
-        .sort((a, b) => compareStrings(a.targetId, b.targetId) || compareStrings(a.property, b.property) || compareStrings(a.id, b.id))
-        .forEach((track) => {
+    const channels = animation ? compositionChannels(animation, track => sceneBaseValue(sceneById.get(track.targetId), track.property)) : [];
+    channels
+        .filter((channel) => channel.base.enabled !== false)
+        .sort((a, b) => compareStrings(a.base.targetId, b.base.targetId) || compareStrings(a.base.property, b.base.property) || compareStrings(a.base.id, b.base.id))
+        .forEach(({ base: track, windows }) => {
             const target = sceneById.get(track.targetId);
             if(!target) {
                 addDiagnostic(diagnostics, track, targetNames, "orphaned-target", `Target “${track.targetId}” does not exist.`, "Choose an existing layer or remove this track.");
@@ -83,7 +88,13 @@ export function compileRuntimeAnimation(document: SVGSave, options: { bakeRounde
                 diagnostics,
                 targetNames,
             );
-            if(compiled) tracks.push(compiled);
+            if(compiled) {
+                if(windows.length) compiled.actionWindows = windows.flatMap(window => {
+                    const child = compileTrack(window.track, normalizedKeyframes(window.track.keyframes), compiled.target, compiled.property, diagnostics, targetNames);
+                    return child ? [{ ...window, track: child }] : [];
+                });
+                tracks.push(compiled);
+            }
         });
 
     const width = normalizedNumber(document.width);
@@ -95,7 +106,7 @@ export function compileRuntimeAnimation(document: SVGSave, options: { bakeRounde
         kind: RUNTIME_BUNDLE_KIND,
         formatVersion: RUNTIME_BUNDLE_FORMAT_VERSION,
         generator: { name: "SVG Animator" as const, version: packageInfo.version },
-        requiredCapabilities: requiredCapabilities(normalizedTargets, tracks),
+        requiredCapabilities: [...requiredCapabilities(normalizedTargets, tracks), ...(tracks.some(track => track.actionWindows?.some(window => window.timing)) ? ["composition.action-timing-v1" as const] : []), ...(tracks.some(track => track.actionWindows?.length) ? ["composition.action-windows-v1" as const] : [])],
         artwork: { id: document.id, signature, width, height, viewBox, targets: normalizedTargets },
         animation: {
             duration: animation?.duration ?? 0,
@@ -112,6 +123,35 @@ export function compileRuntimeAnimation(document: SVGSave, options: { bakeRounde
 
 /** Evaluates one compiler payload track for authoring/runtime equivalence tests. */
 export const evaluateCompiledRuntimeTrack = evaluateRuntimeTrack;
+
+/** Read the serialized base scene, before any action contribution. */
+function sceneBaseValue(target: RuntimeSceneTargetV1 | undefined, property: string): unknown {
+    if(!target) return undefined;
+    const point = /^path\.points\.([^.]+)\.(x|y)$/.exec(property);
+    if(point) {
+        const points = target.path?.contours.flatMap(contour => contour.lines.flatMap(line => [...line.points, line.controlStart, line.controlEnd]));
+        const found = points?.find(value => value?.id === point[1]);
+        return found?.[point[2] as 'x' | 'y'];
+    }
+    const paint = /^settings\.(fill|stroke|color)(?:\.gradient\.(.*))?$/.exec(property);
+    if(paint) {
+        const value = target.paints[paint[1] as 'fill' | 'stroke' | 'color'];
+        if(!paint[2]) return value?.kind === 'solid' ? { hex: value.color, alpha: value.opacity } : undefined;
+        if(value?.kind !== 'gradient') return undefined;
+        const stop = /^stops\.(.+)\.(offset|color|opacity)$/.exec(paint[2]);
+        if(stop) {
+            const found = value.stops.find(item => item.id === stop[1]);
+            return stop[2] === 'color' && found ? { hex: found.color, alpha: found.opacity } : found?.[stop[2] as 'offset' | 'opacity'];
+        }
+        if(paint[2].startsWith('transform.')) return value.transform['abcdef'.indexOf(paint[2].slice(-1))];
+        return value.coordinates[paint[2] as keyof typeof value.coordinates];
+    }
+    if(property === 'settings.stroke_width') return target.stroke?.width;
+    if(property === 'settings.stroke_dashoffset') return target.stroke?.dashoffset;
+    const [owner, field] = property.split('.');
+    if(!field) return (target as unknown as Record<string, unknown>)[owner];
+    return (target as unknown as Record<string, Record<string, unknown>>)[owner]?.[field];
+}
 
 function compileTrack(
     track: AnimationTrack,
@@ -399,7 +439,7 @@ function normalizeValue(value: unknown, precision = 1e6): unknown {
     if(value && typeof value === "object") return Object.fromEntries(Object.entries(value)
         .filter(([, item]) => item !== undefined)
         .sort(([a], [b]) => compareStrings(a, b))
-        .map(([key, item]) => [key, normalizeValue(item, key === "times" || key === "values" || key === "temporalCoefficients" ? 1e12 : precision)]));
+        .map(([key, item]) => [key, normalizeValue(item, key === "actionWindows" || key === "times" || key === "values" || key === "temporalCoefficients" ? 1e12 : precision)]));
     return value;
 }
 function artworkSignature(value: unknown): string {

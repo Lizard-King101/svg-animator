@@ -1,0 +1,20 @@
+{
+  "kind": "svg-animator/document",
+  "version": 12,
+  "data": {
+    "id": "persistent-ik-fixture", "name": "Planted foot", "width": 200, "height": 200, "elements": [],
+    "rigs": {
+      "version": 3,
+      "armatures": [{
+        "id": "character", "name": "Character", "bindings": [], "constraintsActive": true,
+        "bones": [
+          {"id":"root","name":"Root","kind":"point","parentId":null,"x":0,"y":0,"angle":0,"length":0,"pose":0},
+          {"id":"upper","name":"Upper leg","parentId":"root","x":0,"y":0,"angle":0,"length":40,"pose":0},
+          {"id":"lower","name":"Lower leg","parentId":"upper","x":40,"y":0,"angle":0,"length":30,"pose":0},
+          {"id":"foot","name":"Foot L","kind":"point","parentId":"root","x":40,"y":30,"angle":0,"length":0,"pose":0}
+        ],
+        "constraints": [{"id":"leg-ik","name":"Left leg","type":"two-bone-ik","enabled":true,"upperBoneId":"upper","lowerBoneId":"lower","targetBoneId":"foot","bend":-1}]
+      }]
+    }
+  }
+}

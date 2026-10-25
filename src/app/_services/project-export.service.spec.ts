@@ -25,7 +25,7 @@ describe("ProjectExportService", () => {
         expect(first.mimeType).toBe("application/json");
         const envelope = JSON.parse(first.content as string);
         expect(envelope.kind).toBe("svg-animator/document");
-        expect(envelope.version).toBe(7);
+        expect(envelope.version).toBe(14);
         expect(envelope.data.animation.tracks[0].targetId).toBe("deleted-layer");
         expect(migrateDocument(envelope).status).toBe("ok");
     });

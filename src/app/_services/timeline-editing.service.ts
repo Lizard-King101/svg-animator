@@ -66,9 +66,11 @@ export class TimelineEditingService {
         currentTime: number,
         destination?: AnyElement,
         mapProperty: (element: AnyElement, property: string, sourceTargetId: string) => string | undefined = (_element, property) => property,
+        allowsTarget: (id: string) => boolean = () => true,
     ): boolean {
         if(this.clipboard.length === 0) return false;
         const entries = this.clipboard.flatMap((copied) => {
+            if(!allowsTarget(destination?.id ?? copied.targetId)) return [];
             const property = destination ? mapProperty(destination, copied.property, copied.targetId) : copied.property;
             return property ? [{ copied, property }] : [];
         });

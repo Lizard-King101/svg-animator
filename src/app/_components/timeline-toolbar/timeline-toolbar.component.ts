@@ -3,11 +3,12 @@ import { Component } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { TimelineEditorService } from "../../_services/timeline-editor.service";
+import { AnimationInspectionControlsComponent } from '../animation-inspection/animation-inspection-controls.component';
 
 @Component({
     selector: "app-timeline-toolbar",
     standalone: true,
-    imports: [FormsModule, NgClass, NgFor, NgIf, FaIconComponent],
+    imports: [FormsModule, NgClass, NgFor, NgIf, FaIconComponent, AnimationInspectionControlsComponent],
     templateUrl: "timeline-toolbar.component.html",
     styles: [":host { display: contents; }"],
 })

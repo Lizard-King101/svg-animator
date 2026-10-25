@@ -1,3 +1,6 @@
+import { compositionHasOverlap, restoreAnimation, placementTiming } from '../editor/objects/animation.object';
+import { Subject } from 'rxjs';
+import { AnimationAction, AnimationDocument } from '../editor/objects/animation.object';
 import { Injectable, NgZone, OnDestroy } from "@angular/core";
 import {
     AppliedAnimationValue,
@@ -20,8 +23,52 @@ export class AnimationPlaybackService implements OnDestroy {
     mode: EditorMode = "edit";
     currentTime = 0;
     speed = 1;
+    contextMessage = '';
     playing = false;
     revision = 0;
+
+    readonly contextChanging = new Subject<void>();
+    private actionId?: string;
+    private contextDocumentId?: string;
+    private sceneTime = 0;
+    private actionTimes = new Map<string, number>();
+
+    get activeAction(): AnimationAction | undefined {
+        const svg = this.editor.selectedSVG;
+        return svg && svg.id === this.contextDocumentId ? svg.animation.composition?.actions.find(action => action.id === this.actionId) : undefined;
+    }
+    get activeAnimation(): AnimationDocument | undefined { return this.activeAction?.animation ?? this.editor.selectedSVG?.animation; }
+    get contextKey(): string { return this.activeAction?.id ?? 'scene'; }
+    allowsTarget(id: string): boolean { return !this.activeAction || this.activeAction.targetIds.includes(id); }
+
+    /** Mutation boundary guard covers every source authoring path, including paste and paint restoration. */
+    rejectConflictingComposition(previous: AnimationDocument): boolean {
+        const svg = this.editor.selectedSVG;
+        if(!svg?.animation.composition || !compositionHasOverlap(svg.animation.composition)) return false;
+        this.contextChanging.next();
+        this.pause();
+        this.restorePreview();
+        svg.animation = restoreAnimation(previous);
+        this.invalidate();
+        if(this.mode === 'animate') this.previewAt(this.currentTime);
+        this.contextMessage = 'This edit would invalidate placement timing or make overlapping actions write the same channel. Adjust the placements before changing this motion.';
+        return true;
+    }
+
+    editAction(id?: string): void {
+        if(id === this.activeAction?.id) return;
+        this.contextChanging.next();
+        this.contextMessage = '';
+        this.pause();
+        this.restorePreview();
+        if(this.activeAction) this.actionTimes.set(this.activeAction.id, this.currentTime);
+        else this.sceneTime = this.currentTime;
+        this.contextDocumentId = this.editor.selectedSVG?.id;
+        this.actionId = id;
+        this.currentTime = this.clampTime(id ? this.actionTimes.get(id) ?? 0 : this.sceneTime);
+        this.invalidate();
+        if(this.mode === 'animate') this.previewAt(this.currentTime);
+    }
 
     private frameId?: number;
     private lastFrameTime?: number;
@@ -41,18 +88,19 @@ export class AnimationPlaybackService implements OnDestroy {
     ngOnDestroy() {
         this.pause();
         this.restorePreview();
+        this.contextChanging.complete();
     }
 
     get duration(): number {
-        return this.editor.selectedSVG?.animation.duration ?? 0;
+        return this.activeAnimation?.duration ?? 0;
     }
 
     get loop(): boolean {
-        return this.editor.selectedSVG?.animation.loop ?? false;
+        return this.activeAnimation?.loop ?? false;
     }
 
     get workArea(): TimelineWorkArea {
-        const animation = this.editor.selectedSVG?.animation;
+        const animation = this.activeAnimation;
         return normalizeWorkArea(animation?.workArea, animation?.duration ?? 0.1);
     }
 
@@ -77,18 +125,31 @@ export class AnimationPlaybackService implements OnDestroy {
             return;
         }
 
-        const oldDuration = svg.animation.duration;
-        const oldArea = normalizeWorkArea(svg.animation.workArea, oldDuration);
+        this.contextMessage = '';
+        const action = this.activeAction;
+        const composition = svg.animation.composition;
+        if(action && composition && compositionHasOverlap(composition, { id: action.id, duration: Math.max(0.1, duration) })) {
+            this.contextMessage = 'This duration would overlap placements or cut off their trimmed source range. Adjust the placements first.';
+            return;
+        }
+        const oldDuration = this.activeAnimation!.duration;
+        const oldArea = normalizeWorkArea(this.activeAnimation!.workArea, oldDuration);
         const followsDuration = Math.abs(oldArea.start) < 0.0005 && Math.abs(oldArea.end - oldDuration) < 0.0005;
-        svg.animation.duration = Math.max(0.1, duration);
-        svg.animation.workArea = followsDuration
-            ? { start: 0, end: svg.animation.duration }
-            : normalizeWorkArea(oldArea, svg.animation.duration);
+        this.activeAnimation!.duration = Math.max(0.1, duration);
+        this.activeAnimation!.workArea = followsDuration
+            ? { start: 0, end: this.activeAnimation!.duration }
+            : normalizeWorkArea(oldArea, this.activeAnimation!.duration);
+        if(action && composition) {
+            const end = Math.max(svg.animation.duration, ...composition.placements.filter(value => value.actionId === action.id).map(value => value.start + placementTiming(value, action.animation.duration).duration));
+            if(svg.animation.workArea?.end === svg.animation.duration) svg.animation.workArea.end = end;
+            svg.animation.duration = end;
+        }
+        this.invalidate();
         this.seek(this.currentTime);
     }
 
     setWorkArea(start: number, end: number): void {
-        const animation = this.editor.selectedSVG?.animation;
+        const animation = this.activeAnimation;
         if(!animation || !Number.isFinite(start) || !Number.isFinite(end)) return;
         const minimum = Math.min(0.01, animation.duration);
         const safeStart = Math.max(0, Math.min(animation.duration - minimum, start));
@@ -97,25 +158,29 @@ export class AnimationPlaybackService implements OnDestroy {
     }
 
     resetWorkArea(): void {
-        const animation = this.editor.selectedSVG?.animation;
+        const animation = this.activeAnimation;
         if(animation) animation.workArea = { start: 0, end: animation.duration };
     }
 
     trimToWorkArea(): boolean {
         const svg = this.editor.selectedSVG;
         if(!svg) return false;
+        if(this.activeAction || this.activeAnimation?.composition?.placements.length) {
+            this.contextMessage = 'Trim-to-work-area is available for direct animation. Edit action duration or placement start times instead.';
+            return false;
+        }
         const range = this.workArea;
         const offset = range.start;
         const duration = Math.max(0.1, range.end - range.start);
-        if(Math.abs(offset) < 0.0005 && Math.abs(duration - svg.animation.duration) < 0.0005) return false;
+        if(Math.abs(offset) < 0.0005 && Math.abs(duration - this.activeAnimation!.duration) < 0.0005) return false;
         this.pause();
         this.restorePreview();
-        svg.animation.tracks.forEach((track) => track.keyframes.forEach((keyframe) => {
+        this.activeAnimation!.tracks.forEach((track) => track.keyframes.forEach((keyframe) => {
             keyframe.time = roundTime(keyframe.time - offset);
         }));
-        svg.animation.markers.forEach((marker) => marker.time = roundTime(marker.time - offset));
-        svg.animation.duration = duration;
-        svg.animation.workArea = { start: 0, end: duration };
+        this.activeAnimation!.markers.forEach((marker) => marker.time = roundTime(marker.time - offset));
+        this.activeAnimation!.duration = duration;
+        this.activeAnimation!.workArea = { start: 0, end: duration };
         this.currentTime = this.clampTime(this.currentTime - offset);
         this.invalidate();
         if(this.mode === "animate") this.previewAt(this.currentTime);
@@ -124,7 +189,7 @@ export class AnimationPlaybackService implements OnDestroy {
 
     setLoop(loop: boolean) {
         if(this.editor.selectedSVG) {
-            this.editor.selectedSVG.animation.loop = loop;
+            this.activeAnimation!.loop = loop;
         }
     }
 
@@ -134,7 +199,7 @@ export class AnimationPlaybackService implements OnDestroy {
             return [];
         }
 
-        return svg.animation.tracks.filter((track) => track.targetId === element.id);
+        return this.activeAnimation!.tracks.filter((track) => track.targetId === element.id);
     }
 
     trackFor(element: AnyElement | undefined, property: string): AnimationTrack | undefined {
@@ -142,7 +207,7 @@ export class AnimationPlaybackService implements OnDestroy {
             return undefined;
         }
 
-        return this.editor.selectedSVG.animation.tracks.find((track) => {
+        return this.activeAnimation!.tracks.find((track) => {
             return track.targetId === element.id && track.property === property;
         });
     }
@@ -161,6 +226,10 @@ export class AnimationPlaybackService implements OnDestroy {
             return;
         }
 
+        if(!this.allowsTarget(element.id)) {
+            if(baselineValue !== undefined) writeAnimationProperty(element, property, baselineValue);
+            return;
+        }
         const keyValue = valueType === "color"
             ? createAnimationColorValue(value, colorValueSpace(value))
             : value;
@@ -215,7 +284,7 @@ export class AnimationPlaybackService implements OnDestroy {
         track.keyframes = track.keyframes.filter((keyframe) => !this.timesMatch(keyframe.time, this.currentTime));
 
         if(track.keyframes.length === 0 && this.editor.selectedSVG) {
-            this.editor.selectedSVG.animation.tracks = this.editor.selectedSVG.animation.tracks.filter((candidate) => candidate !== track);
+            this.activeAnimation!.tracks = this.activeAnimation!.tracks.filter((candidate) => candidate !== track);
         }
         this.invalidate([track.id]);
 
@@ -343,6 +412,18 @@ export class AnimationPlaybackService implements OnDestroy {
         }
     }
 
+    /** Restore only a detached sampling copy; never interrupt a live preview or gesture. */
+    restoreSamplingBase(snapshot: SVG): void {
+        if(snapshot === this.editor.selectedSVG || snapshot === this.previewSVG) {
+            throw new Error('Animation sampling requires a detached document.');
+        }
+        if(snapshot.id !== this.previewSVG?.id) return;
+        this.previewBaseValues.forEach(value => {
+            const target = findAnimationTarget(snapshot.elements, value.targetId);
+            if(target) writeAnimationProperty(target, value.property, value.value);
+        });
+    }
+
     evaluate(svg: SVG, time: number): AppliedAnimationValue[] {
         if(this.editor.selectedSVG === svg) return this.ensureEvaluationPlan().evaluate(time);
         return new AnimationEvaluationPlan(svg.animation, svg.elements).evaluate(time);
@@ -352,7 +433,7 @@ export class AnimationPlaybackService implements OnDestroy {
         this.revision++;
         const svg = this.editor.selectedSVG;
         this.restorePreview();
-        if(trackIds && this.evaluationPlan && this.evaluationPlan.animation === svg?.animation) {
+        if(trackIds && this.evaluationPlan && this.evaluationPlan.animation === this.activeAnimation) {
             this.evaluationPlan.invalidateTracks(trackIds);
         } else {
             this.evaluationPlan = undefined;
@@ -371,7 +452,7 @@ export class AnimationPlaybackService implements OnDestroy {
                 keyframes: [],
                 enabled: true,
             };
-            svg.animation.tracks.push(track);
+            this.activeAnimation!.tracks.push(track);
         }
 
         return track;
@@ -438,8 +519,8 @@ export class AnimationPlaybackService implements OnDestroy {
     private ensureEvaluationPlan(force = false): AnimationEvaluationPlan {
         const svg = this.editor.selectedSVG;
         if(!svg) throw new Error("Cannot compile animation without an active document.");
-        if(force || !this.evaluationPlan || this.evaluationPlan.animation !== svg.animation) {
-            this.evaluationPlan = new AnimationEvaluationPlan(svg.animation, svg.elements);
+        if(force || !this.evaluationPlan || this.evaluationPlan.animation !== this.activeAnimation) {
+            this.evaluationPlan = new AnimationEvaluationPlan(this.activeAnimation!, svg.elements);
             this.renderer = new ImperativeSvgRenderer(svg);
         }
         return this.evaluationPlan;

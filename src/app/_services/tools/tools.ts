@@ -1,3 +1,4 @@
+import { BoneTool } from './bone.tool';
 import { Paths } from "./paths.tool";
 import { SelectTool } from "./select.tool";
 import { Shapes } from "./shape.tool";
@@ -11,4 +12,5 @@ export const Tools: Array<typeof Tool> = [
     Shapes,
     TextTool,
     CropTool,
+    BoneTool,
 ]

@@ -1,10 +1,12 @@
-<div class="timeline-table" *ngIf="timeline.surfaceMode == 'timeline'"
+<div [style.grid-template-rows]="timeline.placementGridRows" class="timeline-table" *ngIf="timeline.surfaceMode == 'timeline'"
      (scroll)="timeline.updateTimelineViewport($event); timeline.closeColorEditor()" (wheel)="timeline.timelineWheel($event)"
      (pointerdown)="timeline.beginViewportPan($event)">
   <div class="timeline-head-left">Layers</div>
   <div class="timeline-time-cell timeline-ruler-cell">
     <app-timeline-ruler />
   </div>
+
+  <app-action-placement-rows />
 
   <ng-container *ngIf="timeline.virtualTopHeight">
     <div class="timeline-virtual-spacer" [style.height.px]="timeline.virtualTopHeight"></div>

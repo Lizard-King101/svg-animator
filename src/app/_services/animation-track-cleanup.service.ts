@@ -1,3 +1,4 @@
+import { allAnimationDocuments } from '../editor/objects/animation.object';
 import { Injectable } from "@angular/core";
 import { AnimationTrack } from "../editor/objects/animation.object";
 import { findAnimationTarget } from "../editor/objects/animation-targets";
@@ -27,7 +28,7 @@ export class AnimationTrackCleanupService {
         const removed = new Set(orphaned);
 
         this.mutations.mutate(() => {
-            svg.animation.tracks = svg.animation.tracks.filter((track) => !removed.has(track));
+            allAnimationDocuments(svg.animation).forEach(animation => animation.tracks = animation.tracks.filter(track => !removed.has(track)));
             this.animation.invalidate();
             if(this.animation.mode === "animate") this.animation.previewAt(this.animation.currentTime);
         }, "animation");
@@ -36,5 +37,5 @@ export class AnimationTrackCleanupService {
 }
 
 export function findOrphanedAnimationTracks(svg: SVG): AnimationTrack[] {
-    return svg.animation.tracks.filter((track) => !findAnimationTarget(svg.elements, track.targetId));
+    return allAnimationDocuments(svg.animation).flatMap(animation => animation.tracks).filter((track) => !findAnimationTarget(svg.elements, track.targetId));
 }

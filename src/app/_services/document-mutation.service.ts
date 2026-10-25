@@ -53,6 +53,11 @@ export class DocumentMutationService implements OnDestroy {
     }
 
     commit(domain: MutationDomain = "artwork"): boolean {
+        if(this.baseline && this.editor.selectedSVG?.animation.composition) {
+            const previous = JSON.parse(this.baseline) as SVGSave;
+            if(previous.id === this.editor.selectedSVG.id && previous.animation
+                && this.animation.rejectConflictingComposition(previous.animation)) this._revision.update(value => value + 1);
+        }
         const save = this.captureSave();
         let after = save ? serializeMutationState(save) : undefined;
         if(after == null || after === this.baseline) return false;
@@ -139,6 +144,7 @@ export class DocumentMutationService implements OnDestroy {
 
 function serializeMutationState(save: SVGSave): string {
     return JSON.stringify({
+        rigs: save.rigs,
         projectColors: save.projectColors,
         id: save.id,
         name: save.name,

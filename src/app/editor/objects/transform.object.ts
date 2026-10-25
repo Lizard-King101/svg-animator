@@ -186,3 +186,20 @@ function close(a: number, b: number): boolean {
 function round(value: number): number {
     return Math.round(value * 10000) / 10000;
 }
+
+export function decomposeTransform(matrix: Matrix): TransformState | undefined {
+    const scaleX = Math.hypot(matrix.a, matrix.b);
+    if(scaleX < 0.000001) return undefined;
+    const dot = matrix.a * matrix.c + matrix.b * matrix.d;
+    if(Math.abs(dot) > 0.00001 * Math.max(1, scaleX)) return undefined;
+    const scaleY = (matrix.a * matrix.d - matrix.b * matrix.c) / scaleX;
+    return {
+        translateX: matrix.e,
+        translateY: matrix.f,
+        scaleX,
+        scaleY,
+        rotation: Math.atan2(matrix.b, matrix.a) * 180 / Math.PI,
+        originX: 0,
+        originY: 0,
+    };
+}

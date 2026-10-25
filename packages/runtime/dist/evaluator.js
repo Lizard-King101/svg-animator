@@ -1,5 +1,9 @@
+import { activeActionWindow, actionLocalTime } from './composition.internal';
 import { evaluateTemporalCubicArray } from "./temporal.internal";
 export function evaluateRuntimeTrack(track, time) {
+    const active = activeActionWindow(track.actionWindows ?? [], time);
+    if (active)
+        return evaluateRuntimeTrack(active.track, actionLocalTime(active, time));
     if (track.times.length === 0)
         return undefined;
     if (time <= track.times[0])

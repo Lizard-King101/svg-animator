@@ -1,3 +1,5 @@
+import { RigLayersComponent } from '../rig-editor/rig-layers.component';
+import { RigLayerBadgeComponent } from '../rig-editor/rig-layer-badge.component';
 import { NgClass, NgFor, NgIf } from "@angular/common";
 import { ChangeDetectorRef, Component, DoCheck, ElementRef } from "@angular/core";
 import { FormsModule } from "@angular/forms";
@@ -8,7 +10,7 @@ import { AnyElement } from "../../editor/objects/svg.object";
 @Component({
     selector: "app-layers-panel",
     standalone: true,
-    imports: [FormsModule, NgClass, NgFor, NgIf, FaIconComponent],
+    imports: [RigLayersComponent, RigLayerBadgeComponent, FormsModule, NgClass, NgFor, NgIf, FaIconComponent],
     templateUrl: "layers-panel.component.html",
     styles: [`
         :host { display: contents; }

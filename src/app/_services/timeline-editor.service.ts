@@ -119,6 +119,8 @@ export class TimelineEditorService implements OnDestroy {
     private scaleLinkOverrides = new Map<string, boolean>();
     private timeDomainCache?: { documentId: string; revision: number; duration: number; start: number; end: number };
     private historyRestoreSubscription: Subscription;
+    private contextSubscription?: Subscription;
+    get activeAnimation() { return this.animation.activeAnimation ?? this.editor.selectedSVG?.animation; }
 
     constructor(
         public editor: EditorService,
@@ -131,6 +133,14 @@ export class TimelineEditorService implements OnDestroy {
         private changeDetector: ChangeDetectorRef,
         private paintEditing: PaintEditingService,
     ) {
+        this.contextSubscription = this.animation.contextChanging?.subscribe(() => {
+            this.cancelContextGestures();
+            this.cancelKeyframeDrag(); this.cancelGraphDrag(); this.closeColorEditor();
+            this.activeGraphHandle = undefined;
+            this.selectedKeyframeIds = new Set(); this.selectedGraphTargetId = undefined;
+            this.rowCacheKey = ''; this.layerSummaryCache.clear(); this.speedCurveCache.clear(); this.colorCache.clear();
+            this.changeDetector.markForCheck();
+        });
         this.timelineHeight = this.clampTimelineHeight(this.preferences.timelineHeight);
         this.historyRestoreSubscription = this.mutations.historyRestored.subscribe(() => {
             this.rowCacheKey = "";
@@ -144,12 +154,38 @@ export class TimelineEditorService implements OnDestroy {
 
     ngOnDestroy(): void {
         this.historyRestoreSubscription.unsubscribe();
+        this.contextSubscription?.unsubscribe();
         this.clearGlobalPointerTracking();
         if(this.graphFrame != null) cancelAnimationFrame(this.graphFrame);
         if(this.keyframeFrame != null) cancelAnimationFrame(this.keyframeFrame);
         if(this.viewportPanFrame != null) cancelAnimationFrame(this.viewportPanFrame);
         if(this.numberDragFrame != null) cancelAnimationFrame(this.numberDragFrame);
         if(this.scrubFrame != null) cancelAnimationFrame(this.scrubFrame);
+    }
+
+    private cancelContextGestures(): void {
+        if(this.numberDragFrame != null) cancelAnimationFrame(this.numberDragFrame);
+        this.numberDragFrame = undefined;
+        const number = this.numberDrag;
+        if(number) {
+            this.animation.restorePreview();
+            if(this.activeAnimation) this.activeAnimation.tracks = number.startTracks;
+            try { number.capture.releasePointerCapture(number.pointerId); } catch {}
+            this.numberDrag = undefined;
+            this.animation.invalidate();
+        }
+        const area = this.workAreaDrag;
+        if(area) {
+            this.animation.setWorkArea(area.start, area.end);
+            try { area.capture.releasePointerCapture(area.pointerId); } catch {}
+            this.workAreaDrag = undefined;
+        }
+        if(this.scrubFrame != null) cancelAnimationFrame(this.scrubFrame);
+        this.scrubFrame = undefined;
+        if(this.scrubPointerId != null) { try { this.scrubCapture?.releasePointerCapture(this.scrubPointerId); } catch {} }
+        this.scrubbing = false; this.scrubPointerId = undefined; this.scrubCapture = undefined;
+        this.marquee = undefined;
+        this.clearGlobalPointerTracking();
     }
 
     get rows(): TimelineRow[] {
@@ -163,7 +199,7 @@ export class TimelineEditorService implements OnDestroy {
             this.properties,
             (element, property) => this.propertySupported(element, property),
             PATH_SHAPE_PROPERTY,
-        );
+        ).filter(row => row.type === 'layer' || !this.animation.allowsTarget || this.animation.allowsTarget(row.element.id));
         return this.rowCache;
     }
 
@@ -316,9 +352,16 @@ export class TimelineEditorService implements OnDestroy {
             : 0;
     }
 
+    readonly placementRowHeight = 64;
+    get placementGridRows(): string {
+        const count = this.animation.activeAction ? 0 : this.editor.selectedSVG?.animation.composition?.placements.length ?? 0;
+        return count ? '30px repeat(' + count + ', ' + this.placementRowHeight + 'px)' : '30px';
+    }
+
     updateTimelineViewport(event: Event): void {
         const viewport = event.currentTarget as HTMLElement;
-        this.updateLayerWindow(Math.max(0, viewport.scrollTop - 30), viewport.clientHeight - 30);
+        const header = 30 + (this.animation.activeAction ? 0 : (this.editor.selectedSVG?.animation.composition?.placements.length ?? 0) * this.placementRowHeight);
+        this.updateLayerWindow(Math.max(0, viewport.scrollTop - header), Math.max(0, viewport.clientHeight - Math.max(0, header - viewport.scrollTop)));
         this.updateVisibleTime(viewport.scrollLeft, viewport.clientWidth, 360);
     }
 
@@ -370,7 +413,7 @@ export class TimelineEditorService implements OnDestroy {
                     this.selectedGraphTargetId = first.element.id;
                     this.selectedGraphProperty = first.property.property;
                 } else {
-                    const track = this.editor.selectedSVG?.animation.tracks.find((candidate) => candidate.valueType === "number");
+                    const track = this.activeAnimation?.tracks.find((candidate) => candidate.valueType === "number");
                     if(track) {
                         this.selectedGraphTargetId = track.targetId;
                         const element = findAnimationTarget(this.editor.selectedSVG?.elements ?? [], track.targetId);
@@ -390,7 +433,7 @@ export class TimelineEditorService implements OnDestroy {
             && row.property.property === this.selectedGraphProperty);
         if(direct) return direct;
         const element = findAnimationTarget(this.editor.selectedSVG?.elements ?? [], this.selectedGraphTargetId ?? "");
-        const track = this.editor.selectedSVG?.animation.tracks.find((candidate) => candidate.targetId === this.selectedGraphTargetId
+        const track = this.activeAnimation?.tracks.find((candidate) => candidate.targetId === this.selectedGraphTargetId
             && candidate.property === this.selectedGraphProperty && candidate.valueType === "number");
         if(element && this.selectedGraphProperty === UNIFORM_SCALE_PROPERTY.property && this.elementScaleLinked(element)) {
             return { type: "property", element, depth: 1, property: UNIFORM_SCALE_PROPERTY };
@@ -422,7 +465,7 @@ export class TimelineEditorService implements OnDestroy {
     graphTrackOptions(): { property: string; label: string }[] {
         const targetId = this.selectedGraphTargetId ?? this.editor.selectedElement?.id;
         const seen = new Set<string>();
-        return (this.editor.selectedSVG?.animation.tracks ?? []).flatMap((track) => {
+        return (this.activeAnimation?.tracks ?? []).flatMap((track) => {
             if(track.targetId !== targetId || track.valueType !== "number" || seen.has(track.property)) return [];
             const target = findAnimationTarget(this.editor.selectedSVG?.elements ?? [], track.targetId);
             if(target && (track.property === "transform.scaleX" || track.property === "transform.scaleY") && this.elementScaleLinked(target)) {
@@ -1126,19 +1169,20 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     copySelectedKeyframes(): boolean {
-        return this.editing.copy(this.editor.selectedSVG?.animation.tracks ?? []);
+        return this.editing.copy(this.activeAnimation?.tracks ?? []);
     }
 
     pasteKeyframes(): boolean {
         const svg = this.editor.selectedSVG;
         if(!svg || !this.editing.paste(
-            svg.animation,
+            this.activeAnimation!,
             this.animation.currentTime,
             this.editor.selectedElement,
             (element, property, sourceTargetId) => {
                 const source = findAnimationTarget(svg.elements, sourceTargetId);
                 return source ? matchingAnimationProperty(source, element, property) : undefined;
             },
+            id => !this.animation.allowsTarget || this.animation.allowsTarget(id),
         )) {
             return false;
         }
@@ -1150,7 +1194,7 @@ export class TimelineEditorService implements OnDestroy {
 
     deleteSelectedKeyframes(): boolean {
         const svg = this.editor.selectedSVG;
-        if(!svg || !this.editing.delete(svg.animation)) {
+        if(!svg || !this.editing.delete(this.activeAnimation!)) {
             return false;
         }
         this.animation.invalidate();
@@ -1345,6 +1389,7 @@ export class TimelineEditorService implements OnDestroy {
         event.stopPropagation();
         const capture = event.currentTarget as HTMLInputElement;
         this.numberDrag = {
+            startTracks: this.cloneValue(this.activeAnimation?.tracks ?? []),
             row,
             pointerId: event.pointerId,
             startX: event.clientX,
@@ -1869,6 +1914,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private propertySupported(element: AnyElement, property: AnimatablePropertyDefinition): boolean {
+        if(this.animation.allowsTarget && !this.animation.allowsTarget(element.id)) return false;
         if(property.property === UNIFORM_SCALE_PROPERTY.property) return this.elementScaleLinked(element);
         if(property.property === "transform.scaleX" || property.property === "transform.scaleY") {
             return !this.elementScaleLinked(element);
@@ -1978,7 +2024,7 @@ export class TimelineEditorService implements OnDestroy {
     private scalePartnerKeyframe(track: AnimationTrack, keyframe: Keyframe): Keyframe | undefined {
         if(track.property !== "transform.scaleX" && track.property !== "transform.scaleY") return undefined;
         const partnerProperty = track.property === "transform.scaleX" ? "transform.scaleY" : "transform.scaleX";
-        const partner = this.editor.selectedSVG?.animation.tracks.find((candidate) => candidate.targetId === track.targetId
+        const partner = this.activeAnimation?.tracks.find((candidate) => candidate.targetId === track.targetId
             && candidate.property === partnerProperty);
         const index = track.keyframes.indexOf(keyframe);
         if(!partner || index < 0) return undefined;
@@ -2144,7 +2190,7 @@ export class TimelineEditorService implements OnDestroy {
     private snapUnclamped(time: number): number { return snapTimelineTime(time); }
 
     private timeDomainBounds(): { start: number; end: number } {
-        const animation = this.editor.selectedSVG?.animation;
+        const animation = this.activeAnimation;
         const documentId = this.editor.selectedSVG?.id ?? "";
         const cached = this.timeDomainCache;
         if(this.keyframeDrag && cached?.documentId === documentId) return cached;
@@ -2166,14 +2212,14 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private selectedKeyframeEntries(): KeyframeEntry[] {
-        return this.editing.entries(this.editor.selectedSVG?.animation.tracks ?? []);
+        return this.editing.entries(this.activeAnimation?.tracks ?? []);
     }
 
     private timelineKeyframeEasingType(keyframe: TimelineKeyframe): EasingType | "mixed" {
         const svg = this.editor.selectedSVG;
         if(!svg) return "linear";
         const ids = new Set(keyframe.groupedKeyframeIds?.length ? keyframe.groupedKeyframeIds : [keyframe.id]);
-        const entries = svg.animation.tracks.flatMap((track) => track.keyframes
+        const entries = this.activeAnimation!.tracks.flatMap((track) => track.keyframes
             .filter((candidate) => ids.has(candidate.id))
             .map((candidate) => ({ track, keyframe: candidate })));
         return entries.length ? this.boundaryEasingType(entries) : "linear";
@@ -2301,7 +2347,7 @@ export class TimelineEditorService implements OnDestroy {
 
     private gradientGroupTracks(row: PropertyTimelineRow): AnimationTrack[] {
         const properties = new Set(this.gradientPropertiesForRow(row).map((property) => property.property));
-        return this.editor.selectedSVG?.animation.tracks.filter((track) => track.targetId === row.element.id && properties.has(track.property)) ?? [];
+        return this.activeAnimation?.tracks.filter((track) => track.targetId === row.element.id && properties.has(track.property)) ?? [];
     }
 
     private gradientGroupKeyframes(row: PropertyTimelineRow): TimelineKeyframe[] {
@@ -2322,7 +2368,7 @@ export class TimelineEditorService implements OnDestroy {
         tracks.forEach((track) => {
             track.keyframes = track.keyframes.filter((keyframe) => !this.timesMatch(keyframe.time, this.animation.currentTime));
         });
-        if(this.editor.selectedSVG) this.editor.selectedSVG.animation.tracks = this.editor.selectedSVG.animation.tracks.filter((track) => track.keyframes.length > 0);
+        if(this.editor.selectedSVG) this.activeAnimation!.tracks = this.activeAnimation!.tracks.filter((track) => track.keyframes.length > 0);
         this.animation.invalidate(new Set(tracks.map((track) => track.id)));
         this.animation.previewAt(this.animation.currentTime);
     }
@@ -2340,7 +2386,7 @@ export class TimelineEditorService implements OnDestroy {
             return [];
         }
 
-        return svg.animation.tracks.filter((track) => {
+        return this.activeAnimation!.tracks.filter((track) => {
             return track.targetId === path.id && !!parsePathPointProperty(track.property);
         });
     }
@@ -2393,7 +2439,7 @@ export class TimelineEditorService implements OnDestroy {
         });
 
         if(this.editor.selectedSVG) {
-            this.editor.selectedSVG.animation.tracks = this.editor.selectedSVG.animation.tracks.filter((track) => track.keyframes.length > 0);
+            this.activeAnimation!.tracks = this.activeAnimation!.tracks.filter((track) => track.keyframes.length > 0);
         }
 
         this.animation.invalidate(new Set(tracks.map((track) => track.id)));
@@ -2417,7 +2463,7 @@ export class TimelineEditorService implements OnDestroy {
             throw new Error("Cannot create animation track without an active SVG");
         }
 
-        let track = svg.animation.tracks.find((candidate) => {
+        let track = this.activeAnimation!.tracks.find((candidate) => {
             return candidate.targetId === targetId && candidate.property === property;
         });
         if(!track) {
@@ -2429,7 +2475,7 @@ export class TimelineEditorService implements OnDestroy {
                 keyframes: [],
                 enabled: true,
             };
-            svg.animation.tracks.push(track);
+            this.activeAnimation!.tracks.push(track);
         }
         return track;
     }
@@ -2457,7 +2503,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private pruneKeyframeSelection() {
-        this.editing.prune(this.editor.selectedSVG?.animation.tracks ?? []);
+        this.editing.prune(this.activeAnimation?.tracks ?? []);
     }
 
     private rulerInterval(): number {
@@ -2505,6 +2551,7 @@ interface KeyframeDrag {
 }
 
 interface NumberDrag {
+    startTracks: AnimationTrack[];
     row: PropertyTimelineRow;
     pointerId: number;
     startX: number;

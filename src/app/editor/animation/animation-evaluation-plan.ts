@@ -1,3 +1,5 @@
+import { compositionChannels, ActionWindow } from './action-composition';
+import { activeActionWindow, actionLocalTime } from '../../../../packages/runtime/src/composition.internal';
 import {
     AnimationDocument,
     AnimationTrack,
@@ -33,6 +35,7 @@ export interface CompiledAnimationTrack {
     readonly values: readonly unknown[];
     readonly easings: Uint8Array;
     readonly temporal: readonly (TemporalSegmentCoefficients | undefined)[];
+    windows?: ActionWindow<CompiledAnimationTrack>[];
     cursor: number;
     lastTime: number;
 }
@@ -57,9 +60,11 @@ export class AnimationEvaluationPlan {
         this.animation = animation;
         this.trackMap.clear();
         this.tracksByTargetProperty.clear();
-        this.tracks = animation.tracks
-            .filter((track) => track.enabled !== false)
-            .map((track) => this.compileTrack(track));
+        this.tracks = compositionChannels(animation, track => {
+            const target = this.targetMap.get(track.targetId);
+            return target ? readAnimationProperty(target, track.property) : undefined;
+        }).map(channel => ({ ...this.compileTrack(channel.base),
+            windows: channel.windows.map(window => ({ ...window, track: this.compileTrack(window.track) })) }));
         this.tracks.forEach((track) => {
             this.trackMap.set(track.id, track);
             this.tracksByTargetProperty.set(animationPropertyKey(track.targetId, track.property), track);
@@ -83,6 +88,7 @@ export class AnimationEvaluationPlan {
 
     /** Recompiles only the tracks named by id, preserving all other arrays. */
     invalidateTracks(trackIds: Iterable<string>): void {
+        if(this.animation.composition) { this.rebuild(this.animation); return; }
         const invalid = new Set(trackIds);
         if(invalid.size === 0) return;
         const source = new Map(this.animation.tracks.map((track) => [track.id, track]));
@@ -171,6 +177,8 @@ export class AnimationEvaluationPlan {
 }
 
 export function evaluateCompiledTrack(track: CompiledAnimationTrack, time: number): unknown {
+    const active = activeActionWindow(track.windows ?? [], time);
+    if(active) return evaluateCompiledTrack(active.track, actionLocalTime(active, time));
     const count = track.times.length;
     if(count === 0) return undefined;
     if(time <= track.times[0]) {
