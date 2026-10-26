@@ -1,7 +1,19 @@
-import { canvasToWorkspaceProjection } from "./canvas-workspace-projection";
+import { canvasToWorkspaceProjection, canvasViewProjection } from "./canvas-workspace-projection";
 import { applyMatrix } from "./objects/transform.object";
 
 describe("canvas-to-workspace projection", () => {
+    it('projects current view state immediately, including centered zoom and non-origin viewBoxes', () => {
+        const view = { pos: { x: 80, y: 40 }, width: 400, height: 200, zoom: 2,
+            canvasBounds: { x: -100, y: 50, width: 200, height: 100 } };
+        const before = canvasViewProjection(view);
+        expect(before.canvasFrame).toEqual({ x: -120, y: -60, width: 800, height: 400 });
+        expect(applyMatrix(before.canvasToWorkspace, -100, 50)).toEqual({ x: -120, y: -60 });
+        view.pos.x += 37; view.pos.y -= 14;
+        const after = canvasViewProjection(view);
+        expect(applyMatrix(after.canvasToWorkspace, -100, 50)).toEqual({ x: -83, y: -74 });
+        const point = applyMatrix(after.canvasToWorkspace, 15, 65);
+        expect(applyMatrix(after.workspaceToCanvas, point.x, point.y)).toEqual({ x: 15, y: 65 });
+    });
     it("projects a panned and zoomed canvas into workspace-local pixels", () => {
         const projection = canvasToWorkspaceProjection(
             { left: 230, top: 140, width: 800, height: 600 },

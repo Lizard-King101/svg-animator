@@ -9,10 +9,10 @@ import { AnimationInspectionService } from '../../_services/animation-inspection
     template: `<label class="timeline-check" title="Selected artwork, or animated artwork when nothing is selected. Teal before, amber after. Hidden during playback.">
         <input type="checkbox" [(ngModel)]="inspection.onions" /><span>Onion skins</span></label>
         <label class="timeline-field"><span>Spacing (s)</span><input aria-label="Onion skin spacing in seconds" type="number"
-            min="0.01" max="10" step="0.05" [disabled]="!inspection.onions" [ngModel]="inspection.step" (ngModelChange)="inspection.setStep($event)" /></label>
+            min="0.01" max="10" step="0.05" [disabled]="!inspection.onions && !inspection.loopGhosts" [ngModel]="inspection.step" (ngModelChange)="inspection.setStep($event)" /></label>
         <label class="timeline-check" title="Origin trails for up to eight selected objects; 60 intervals over the full duration. Hidden during playback.">
         <input type="checkbox" [(ngModel)]="inspection.motionTrails" /><span>Motion trails</span></label>
-        <span class="hint" *ngIf="inspection.onions">Teal: before · Amber: after</span>
+        <span class="hint" *ngIf="inspection.onions || inspection.loopGhosts">Teal: before · Amber: after</span>
         <span class="hint" *ngIf="inspection.motionTrails">Select objects to trace their origins · paused preview only</span>`,
 })
 export class AnimationInspectionControlsComponent {

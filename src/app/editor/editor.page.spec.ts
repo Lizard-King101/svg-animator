@@ -152,7 +152,7 @@ describe('new project canvas lifecycle', () => {
         expect(root.querySelector('app-rig-overlay [aria-label="Armature bones"]')).not.toBeNull();
         expect(root.querySelector('app-ik-target')).not.toBeNull();
         expect(root.querySelector('input[aria-label="Pose offset X"]')).not.toBeNull();
-        expect(root.textContent).toContain('Key pose at playhead');
+        expect(root.textContent).toContain('Key selected control');
         expect(() => fixture.checkNoChanges()).not.toThrow();
         fixture.componentInstance.animation.setMode('edit'); fixture.detectChanges();
         expect(root.querySelector('app-editor-side-panel')).toBe(panel);

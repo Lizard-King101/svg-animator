@@ -1,3 +1,4 @@
+import { remapLoopSeam } from '../editor/animation/loop-seam';
 import { AnimationTrack, makeAnimationId } from '../editor/objects/animation.object';
 import { matchingAnimationProperty, parsePathPointProperty, pathPointAnimationProperty } from '../editor/objects/animation-targets';
 import { Armature, BoundPoint, PathBinding, RigidAttachment, WeightPointRef, weightOwner } from '../editor/objects/armature';
@@ -13,14 +14,16 @@ export function duplicateArtworkTracks(tracks: readonly AnimationTrack[], copies
         const property = point && pointId ? pathPointAnimationProperty(pointId, point.axis)
             : matchingAnimationProperty(pair.original, pair.duplicate, track.property);
         if(!property) return [];
-        return [{
+        const copy: AnimationTrack = {
             ...structuredClone(track), id: makeAnimationId('track'), targetId: pair.duplicate.id, property,
             keyframes: track.keyframes.map(key => ({
                 ...structuredClone(key), id: makeAnimationId('key'),
                 value: track.property === 'motion.pathId' && typeof key.value === 'string'
                     ? copies.ids.get(key.value) ?? key.value : structuredClone(key.value),
             })),
-        }];
+        };
+        remapLoopSeam(copy, new Map(track.keyframes.map((key, index) => [key.id, copy.keyframes[index].id])));
+        return [copy];
     });
 }
 

@@ -5,6 +5,15 @@
   <button class="timeline-icon" (click)="timeline.animation.stop()" title="Stop">
     <fa-icon icon="stop"></fa-icon>
   </button>
+  <button class="timeline-icon" (click)="timeline.jumpToPose(-1)" [disabled]="timeline.adjacentPoseTime(-1) == null"
+    title="Previous pose (Alt+Left): selected key channels, else selected artwork/bone branch, else scene/action" aria-label="Previous pose"><fa-icon icon="chevron-left"></fa-icon></button>
+  <button class="timeline-icon" (click)="timeline.jumpToPose(1)" [disabled]="timeline.adjacentPoseTime(1) == null"
+    title="Next pose (Alt+Right): selected key channels, else selected artwork/bone branch, else scene/action" aria-label="Next pose"><fa-icon icon="chevron-right"></fa-icon></button>
+  <label class="timeline-field"><span>Preview</span>
+    <select class="graph-track-select" aria-label="Preview speed" [ngModel]="timeline.animation.speed" (ngModelChange)="timeline.animation.setPreviewSpeed($event)">
+      <option *ngFor="let speed of timeline.animation.previewSpeeds" [ngValue]="speed">{{speed}}×</option>
+    </select>
+  </label>
   <label class="timeline-field">
     <span>Time</span>
     <input class="timeline-current-time" type="number" min="0" step="0.01"
@@ -52,8 +61,8 @@
     <button class="timeline-icon" (click)="timeline.zoomSpeed(0.8)" title="Zoom speed in"><fa-icon icon="plus"></fa-icon></button>
     <ng-container *ngIf="timeline.activeGraphHandle">
       <span class="active-axis-badge" [attr.data-axis]="timeline.graphAxis(timeline.activeGraphHandle.track.property)">{{ timeline.activeHandleAxisLabel() }}</span>
-      <label class="timeline-field graph-field"><span>Speed</span><input type="number" step="0.01" [ngModel]="timeline.activeHandleSpeed()" (ngModelChange)="timeline.setActiveHandleValue('speed', $event)" /></label>
-      <label class="timeline-field graph-field"><span>Influence</span><input type="number" min="0" max="1" step="0.01" [ngModel]="timeline.activeHandleInfluence()" (ngModelChange)="timeline.setActiveHandleValue('influence', $event)" /></label>
+      <label class="timeline-field graph-field"><span>Speed</span><input type="number" step="0.01" [ngModel]="timeline.activeHandleSpeed()" (blur)="commitHandle('speed', $event)" (keydown)="handleKey('speed', $event)" /></label>
+      <label class="timeline-field graph-field"><span>Influence</span><input type="number" min="0" max="1" step="0.01" [ngModel]="timeline.activeHandleInfluence()" (blur)="commitHandle('influence', $event)" (keydown)="handleKey('influence', $event)" /></label>
       <button class="surface-button" [class.active]="timeline.activeHandleLinked()" (click)="timeline.relinkActiveHandle()">Link</button>
     </ng-container>
   </ng-container>
@@ -69,4 +78,7 @@
     </button>
   </div>
 </div>
+<app-timeline-navigation />
 <app-animation-inspection-controls />
+
+<app-loop-seam-controls />

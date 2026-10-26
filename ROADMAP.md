@@ -6,6 +6,115 @@ The October 24, 2026 scene-composition direction adds reusable actions, animated
 
 This is the source of truth for planned work and delivery order. [FEATURES.md](FEATURES.md) records shipped behavior, [ARCHITECTURE.md](ARCHITECTURE.md) defines ownership, and [SVG_COMPATIBILITY.md](SVG_COMPATIBILITY.md) tracks SVG coverage. Novelty modes and the earlier silly-feature category are excluded. Useful techniques such as springs, squash/stretch, stagger, and follow constraints remain ordinary animation tools.
 
+## Selected-key retiming — October 26, 2026
+
+- **Retime keys** stretches/compresses a selected range around Start, Center, End or Playhead, or reverses the range. Percentage/anchor fields are staged; Enter/Apply commits once and Escape/Cancel discards. Selection/context/revision changes invalidate drafts.
+- Pure planning validates all channels before writes: continuous blocks, at least two distinct selected times, 0.01s grid, no collisions or crossing unselected keys. Linked boundaries and edits breaking matched seam speeds require unlinking. Duration/work area remain unchanged; source keys may extend beyond them.
+- Speed handles scale with segment duration. Reverse swaps and negates handles and transfers inverted easing to the correct segment. Exterior transitions stay attached to range edges; differing linked handle speeds unlink. Holds and discrete values remain stepped in reversed key order.
+- Action placement stretching remains the next retiming slice; whole-cycle retiming and rotation winding links remain separate follow-ups.
+- Validation: 89 focused retiming, component, timeline, loop, rig and action tests pass, plus production build and diff checks. Browser checks covered Enter/Apply, Escape cancellation, one-step undo/redo, reverse, save/reopen, wrapping controls and the resulting signed speed in Graph view.
+
+## Pose blocking — October 26, 2026
+
+- The Pose panel distinguishes **Key selected control** from **Key armature pose**, shows the receiving scene/action and time, and makes whole-armature commands available even with an IK-driven bone selected.
+- Whole-armature keying captures rotation and both offsets for authored FK and target controls. Enabled IK-driven bones remain excluded; pose validation and channel-conflict checks run before writes. A command commits once through the existing animation mutation boundary.
+- **Copy armature pose / Paste armature pose** captures the current sampled control values and keys them at another time or in an action scoped to the same rig. Stable bone IDs and rest/IK structure validation prevent silent retargeting or partial paste. Clipboard data is session-only, independent of subsequent pose edits and history replacement. Saved files and exports continue to use ordinary keys.
+- Named control sets, named/mirrored pose libraries and keyed-field indicators remain follow-ups. Retiming is the next planned feature slice.
+- Validation: 102 focused rig authoring, timeline, inspector, action and editor integration checks pass, plus production build and diff checks. Browser checks covered whole-pose keying, copy/paste, save/reopen, one-step undo/redo and keyboard access to the command group.
+
+## Timeline navigation and visibility — October 26, 2026
+
+- Search object, rig, bone and channel names, with combinable Selected only and Animated only filters. Matches inside collapsed branches retain their hierarchy; clearing filters restores the user's previous expansion state. Selection includes group descendants or the selected bone branch. Reveal selection clears filters, expands the branch and scrolls it below the ruler.
+- Fit keys frames the selected key range (including a single key); Fit work area frames the preview range. Fit duration also resets stale horizontal scroll. These commands work in both timeline and graph views.
+- Previous/Next pose buttons and Alt+Left/Right navigate selected key channels first, then selected artwork/bone branches, otherwise the active scene/action. Editable fields retain their keyboard behavior. Navigation pauses playback and stays within playable document time.
+- Preview speeds of 0.25×, 0.5×, 1×, 1.5× and 2× are exposed. Filters, navigation and speed do not alter saved animation or export timing. Changing filters clears key selection; keys hidden by a later selection-scope change cannot be deleted through the timeline selection commands.
+- Validation: 62 focused navigation, filtering, rig, loop-control and playback tests pass, along with production build and diff checks. Browser checks covered search, filtering, reveal positioning, key/work-area fitting, pose stepping, preview speed and wrapped graph-toolbar layout. Pose blocking is next; authored retiming and ping-pong remain separate work.
+
+## Speed-graph reliability and linked loops — October 26, 2026
+
+- Repaired graph selection/no-op/cancellation rollback, stale numeric targets after property/history changes, Alt-unlink, pointer interruption, Hold speed rendering and domain-dependent curve caching. Numeric Speed/Influence commit on blur/Enter and cancel with Escape. Seeking/playing preserves the graph selection; true context changes clear it. Playhead dragging survives its own seek notifications, pauses playback, and releases cleanly on interruption. The graph fits its actual available pane height as toolbar rows wrap.
+- **Loop seam** links existing animated channels at work-area boundaries in the active scene or action. Select keys/graph channels or selected artwork/rig, choose the starting or ending pose as authority, then Link endpoints. Missing boundary keys are sampled/created; interior keys remain. Property, canvas and rig edits synchronize either endpoint with one undo step. An optional speed link matches the start's outgoing and end's incoming speed, retaining independent influences; Hold remains a deliberate discontinuity.
+- Linked rows show their range and speed state. Unlink preserves current motion. Boundary retiming and shortening the duration past a linked end are protected with an explanation; moving/resizing a whole linked cycle and rotation winding offsets remain follow-ups. Links concern already animated channels, not an implicit whole-rig snapshot or a new actor/pose library.
+- **Loop ghosts** adds wrapped canvas onion skins and a dashed speed-graph continuation across the work-area edges. Past/future tint uses displayed time across the seam. Ghosts are session-only, noninteractive and absent from exported animation. A placement whose trims differ from its source's linked range shows a warning; its source and finite-end behavior remain unchanged.
+- Document v18 stores authoring links on tracks; old files retain their motion. Action/source and artwork duplication remap link references, while removing a boundary key removes the link. Publishing uses ordinary synchronized keys and the existing runtime, including repeated action parity.
+- Validation: 153 focused and adjacent ChromeHeadless checks pass, plus production build, runtime API/fixture checks and `git diff --check`. Browser checks covered linked endpoint edits, reload persistence, seam-speed dragging, numeric Escape, wrapped previews and ruler dragging in both timeline and graph views. The full suite remains the final overhaul/release gate.
+
+## Animation workflow review — October 26, 2026
+
+This source/UI audit reconciles the earlier plan with the delivered rigging work. The items below are proposals, not newly shipped features. Historical implementation gates further down describe their original milestones; this checkpoint and the completed slices take precedence when assessing remaining work.
+
+### Already delivered
+
+- Direct artwork and bone/control animation share key selection, marquee, copy/paste, relative-time moves, nudging, numeric values, easing and the speed graph. Property rows already have previous/next-key buttons.
+- Onion skins, selected-artwork origin trails, draggable playback work areas, timeline pan/zoom and duration fitting are available.
+- Reusable action sources have local-time editing, explicit target scope and linked scene placements. Blocks already support moving, pointer trimming, numeric rate, finite loops and overlap diagnostics. Trimming the source interval is distinct from stretching the block's playback duration.
+- FK and persistent two-bone IK controls can be keyed, reused in rig actions and published through the shared runtime evaluator. Animate-mode pose edits create keys automatically; **Key selected control** records one control; **Key armature pose** records all authored controls.
+
+### Remaining work from the previous plan
+
+| Mechanic area | Genuine remaining work | Existing foundation / boundary |
+|---|---|---|
+| Keyframe timing | Stretch/compress and reverse a selected key range | Moving/offsetting selected keys is already supported; temporal handles must retain the intended motion under scaling/reversal |
+| Playback and loops | Ping-pong preview, explicit seam comparison and whole-cycle retiming | Preview-speed controls, endpoint links, wrapped ghosts, ordinary looping and work-area playback are shipped |
+| Timeline precision | Optional frames/FPS display, frame stepping and frame snapping; editable markers | Seconds remain the underlying time model; `fpsHint` and marker storage exist without a complete authoring UI |
+| Graph editing | Value graph alongside the speed graph | Reuse numeric channels, selection and temporal interpolation rather than introducing separate animation data |
+| Action timing | Pointer stretch handles, authored reverse/ping-pong placements, composition-aware trim-to-work-area | Positive rates, finite repeats and pointer source trims are shipped; authored timing changes require editor/runtime parity |
+| Animated drawing | Trim-path start/end/offset, keyed outline/taper controls, assisted morph correspondence | Draw Progress and static outline editing exist; topology and bound-path protections must remain explicit |
+| Motion recipes | Presets, stagger, spring/settling, squash/stretch and reversible baking | Generate editable existing tracks/actions before considering new procedural evaluators |
+| Reuse and advanced rigs | Actor instances/binding remaps, pose blending, broader constraints and keyed constraint settings | Actions currently address the original targets; independent actor instances and cross-rig reuse remain separate scope |
+
+### Additional workflow improvements worth prioritizing
+
+| Feature set | Proposed additions | Why it helps |
+|---|---|---|
+| Find the controls | Delivered in the navigation/visibility slice above | Search, filters, reveal and fit commands reduce unrelated channel clutter |
+| Block poses | Initial whole-armature keying and pose copy/paste delivered; explicit named control sets remain | Establish anticipation, contact and recovery poses without repeatedly opening every bone's channels |
+| Read keying state | Visible Animate-mode keying/context feedback and keyed-at-playhead indicators in Pose fields | Make it obvious which scene/action receives the edit and whether a value has a key here |
+| Navigate time | Delivered in the navigation/visibility slice above | Scoped previous/next pose navigation supplements existing per-row buttons |
+| Refine holds and cycles | Discoverable hold/step timing, linked loop endpoints, optional seam-speed matching, wrapped ghost previews | Keep boundary poses synchronized while editing and inspect continuity across the repeated cycle |
+| Sequence actions | Multi-select/move/duplicate placements, an explicit hold-last-pose option, and clearer source-versus-placement feedback | Arrange several coordinated actions and avoid surprising returns to base/scene motion at a block's end |
+| Reuse poses | Named pose snapshots, then mirrored poses using explicit left/right control mappings | Reuse expressions and contact poses without pretending names alone are a safe retargeting contract |
+
+### Recommended next slices
+
+0. **Delivered:** speed-graph reliability and the initial linked-loop/ghost workflow; see the completed slice above.
+1. **Delivered:** timeline navigation and visibility; see the completed slice above.
+2. **Delivered:** selected-control/whole-armature keying and same-rig pose copy/paste. Named control sets remain a follow-up; see the completed slice above.
+3. **Retiming (selected-key scale/reverse delivered):** next stretch action placements through placement rate, with edge anchors, rate limits, collision checks and pointer/keyboard cancellation. Scaling source keys and changing placement rate remain distinct commands.
+4. **Loop refinement and precision:** whole-cycle move/resize, rotation winding offsets, preview ping-pong, seam comparison, frame controls and markers. Initial endpoint links and wrapped ghosts are delivered. Separate preview-only direction from authored reverse/ping-pong placements, which need versioned runtime semantics. Composition-aware range trimming belongs with this timing work.
+5. **Expressive tools:** value graph, editable motion recipes/stagger, then animated outline controls. Schedule actor instances and pose blending as larger projects after these everyday workflows are comfortable.
+
+Use focused interaction tests and adjacent animation/rig/context/export tests for each slice, with a production build and diff check at handoff. Run the full suite at the final overhaul/release check. This review changes the plan only; it does not claim new runtime or browser verification.
+
+### Linked loop endpoints and wrapped ghosts — requested October 26, 2026
+
+Add an explicit **Link loop endpoints** command for action sources and direct animation. The first delivery links compatible boundary keys within a chosen cycle, with a visible link badge and an **Unlink** command. Equal values alone must never create a link automatically. The initial value/speed links and wrapped previews are delivered above; whole-cycle move/resize remains planned.
+
+- **Edit either end:** synchronize the value of each linked start/end pair when editing a property, moving artwork or posing a rig at either boundary. Both keys remain one cycle apart in time; they represent one boundary pose. Apply through the existing animation mutation boundary so preview, cancellation and one-step undo include both ends. Whole-pose linking groups compatible channel pairs, excluding IK-driven channels and unsupported topology changes.
+- **Establish the seam deliberately:** if boundary keys are missing or values differ, show which selected endpoint supplies the shared value and which keys will be created/updated. Preserve interior keys. Existing animations remain unchanged until linking is applied.
+- **Distinguish pose movement from retiming:** canvas movement synchronizes keyed values. Boundary time edits must keep the pair attached to the declared loop range, rather than collapse both keys onto one timestamp. Provide deliberate cycle move/resize behavior with endpoint keys following its boundaries; handle collisions atomically. Retiming one boundary away from the range requires an explicit unlink or range adjustment. Changing a preview work area alone must not silently rewrite authored keys.
+- **Optional smooth seam:** equal values prevent a positional jump but can still produce a velocity jump. For numeric channels, optionally link the end key's incoming speed to the start key's outgoing speed. Preserve their independent influences and account for adjacent segment durations. Allow a deliberate stop/corner; do not force smoothness on Hold/discrete channels. Rotation winding such as 0° to 360° needs separate offset-aware semantics and must not be silently flattened by an equality link.
+- **Ghost the neighboring cycle:** show a faint, noninteractive continuation of graph curves/key markers just beyond the cycle end (and before its start). Wrapped canvas onion skins show the next cycle's opening poses while inspecting the end, and the previous cycle's closing poses while inspecting the start. Mark the seam and keep past/future tint based on the displayed cycle offset, not the wrapped source time. Reuse detached inspection sampling; ghosts create no keys, add no duration and do not appear in exports.
+- **Respect action scope:** a source link affects all linked placements through their existing source. Placement trims may introduce a different seam, so show a mismatch diagnostic/preview instead of rewriting the shared source automatically. A finite placement still returns to underlying scene/base values at its final end; this feature smooths cycle repeats and does not imply hold-last-pose or blending.
+- **Persistence and validation:** store explicit stable key/channel references with the loop range through a compatible document migration. Ordinary synchronized endpoint keys retain current runtime evaluation; authoring links and ghosts do not require a separate playback engine. Define link behavior for key deletion, duplication, paste, action extraction, duration changes and unlinking. Verify bidirectional edits, keyboard/pointer cancellation, undo/reload, uniform scale, rig controls and exact/random/backward seeks at cycle boundaries, plus editor/export parity.
+
+Deliver value/pose links first, then seam-speed linking and wrapped graph/canvas inspection using the repaired handle lifecycle. Frame-based timing remains optional and is not a dependency.
+
+### Speed-graph investigation — October 26, 2026
+
+Historical audit (the reported defects are repaired in the delivery above): nine temporary diagnostic probes reproduced the following defects through `TimelineEditorService` in ChromeHeadless. The probes asserted the observed faulty behavior; their passing results do **not** mean the defects are fixed. All 43 existing tests in the selected timeline editing, timeline editor, rig timeline and animation-model specs also passed (52 checks total). This was a service/event and evaluation audit, not a manual browser interaction or performance review. No production code was changed.
+
+| Priority | Confirmed issue and reproduction | Repair boundary |
+|---|---|---|
+| High | **Selection/cancellation changes motion.** On a preset-only ease-in segment, click its outgoing handle without dragging, or drag and press Escape. The neighboring key retains a newly initialized incoming tangent, changing the evaluated motion without an animation commit. These are two reproduced paths. | `initializeGraphHandle` writes both segment endpoints, while snapshots restore only selected keys. Snapshot every affected key, including linked neighbors and uniform-scale partners; selection/no-op/cancel must preserve the complete starting animation. |
+| High | **Editing can target an old curve.** Select a handle, switch the displayed property to an unrelated channel, then type Speed. The hidden previous curve changes. After history replaces the tracks, the same field edits a detached old key instead of the restored animation. These are two reproduced paths. | Resolve active handles by stable IDs against the current context, clear or deliberately remap them on selection/history changes, and reject stale edits. Cover deletion, context changes and interrupted gestures too. |
+| High | **Interrupted gestures do not reliably cancel.** A `pointercancel` after movement emits an animation commit; window blur leaves the graph drag active. These are two reproduced paths. | Graph gestures currently use the shared pointer helper's completion handler for pointer cancellation and supply no blur callback. Separate completion from cancellation without regressing numeric fields, work-area controls or key drags. |
+| Medium | **Alt/Option unlink does not survive dragging.** At an interior linked key, Alt-drag initially sets `linked=false`, but the first update restores the original linked state and moves the opposite tangent as well. | Preserve the gesture's unlink intent when rebuilding each preview from its original snapshot. Test both incoming/outgoing sides and multi-selection. |
+| Medium | **Hold speed disagrees with playback.** Apply Hold to a segment with differing endpoint values: evaluated values stay constant inside the segment, but its graph reports positive speed. | `segmentSpeed` evaluates temporal handles before checking Hold, while value evaluation checks Hold first. Render the held interval consistently and treat the endpoint jump explicitly. |
+| Medium | **Cached curves can detach from their handles.** Render a curve, then introduce a negative-time key on another track. The timeline domain shifts and the root positions move, but the cached curve retains its old X coordinates. | Include the time-domain origin in the speed-path cache key or invalidate it when the domain changes. Cover retiming, paste and history. |
+
+Implementation should turn these reproductions into permanent tests asserting the corrected behavior. Additional browser checks should verify live redraw during handle drags, paired/uniform-scale channels, numeric input undo/cancellation, keyboard access and long-track responsiveness; these remain checks to perform, not confirmed defects from this audit.
+
 ## Visible clipping artwork — October 25, 2026
 
 - Reused the clipping layer's normal eye toggle: new clip sources start hidden, and showing the source paints its fill behind clipped details and its outline above them. Clipping geometry stays active in both states; surrounding clips still apply. Geometry, rig weights and outline sections remain on one source.
@@ -92,7 +201,7 @@ Character rigging is a required C3 workflow, including bones, point binding/weig
 - Diamond bone drawing and circle-crosshair point bones; automatic chain parenting and named point roots for new armatures.
 - Bone hierarchy in the existing Layers panel; artwork rows retain draw order and expose relationship badges.
 - Rigid layer/group attachments and cancellable artwork-first multi-bone point binding, initialized with equal weights.
-- v11 persistence, atomic pose/attachment changes, detach preserving transforms and guards against double transformation or unsupported skew. Persistent IK follows in the later slice above; keyed rig actions remain planned.
+- v11 persistence, atomic pose/attachment changes, detach preserving transforms and guards against double transformation or unsupported skew. Persistent IK and keyed rig actions followed in the later slices above.
 
 
 ### Armature creation, static FK and manual weights — October 24, 2026
@@ -101,7 +210,7 @@ Character rigging is a required C3 workflow, including bones, point binding/weig
 - Native path binding with stable anchor IDs, manual normalized weights, influence visualization and inherited handle weights. Zero-weight points stay at rest; unbind retains current artwork.
 - Canvas-space linear deformation supports nested/reflected/nonuniform transforms and fixed pivots. Stale geometry/topology/transform bindings block posing rather than overwrite edits.
 - Document v10 stores rigs, rest geometry and weights; pose plus geometry commit together through history/autosave. Static exports reproduce the current pose.
-- Subsequent slices add non-stretching two-bone IK, persistent targets, painting and automatic weighting. Remaining C3 work includes keyed bone/control channels in actions, deterministic animation/runtime export parity, and broader rest-edit/rebind ergonomics.
+- Subsequent slices added non-stretching two-bone IK, persistent targets, painting, automatic weighting, keyed bone/control channels in actions and deterministic animation/runtime export parity. Broader rest-edit/rebind ergonomics remain a follow-up.
 
 
 ### Shared scene timeline and placement timing — October 24, 2026
@@ -112,7 +221,7 @@ Character rigging is a required C3 workflow, including bones, point binding/weig
 - Document envelope v9 preserves optional timing fields and migrates v8 without changing older motion. Runtime 1.2 declares composition.action-timing-v1, so older players reject timing they cannot interpret rather than silently rendering incorrectly.
 - Verified 92 focused/adjacent timing, input, timeline, migration, inspection and runtime tests, plus production build, runtime API/size checks and browser checks for scrolling, zoom, field validation and one-step undo.
 - Draggable trim handles now use the existing move gesture lifecycle, snapping and mutation boundary. Opposite scene edges stay fixed; source bounds and a nonempty interval clamp trims. Keyboard nudges, Escape/blur/pointer cancellation, no-op completion and compound start/trim undo are covered. The trim follow-up passed 49 focused/adjacent tests, production build and browser checks.
-- Remaining: pointer stretch handles, reverse/ping-pong, blending, actor binding remaps and character rigging.
+- Remaining: pointer stretch handles, reverse/ping-pong, blending and actor binding remaps. Character rigging followed in the later slices above.
 
 
 ### Action editing contexts and reusable placements — October 24, 2026
@@ -433,7 +542,7 @@ Initial action scope is an explicit set of elements/properties in one document, 
 
 ### Pre-composition implementation audit and reuse boundaries
 
-The following assessment is based on the current source, not just earlier roadmap goals:
+The following is the historical pre-composition assessment from October 24, before action sources, placements and rig animation shipped. Its references to then-current schemas and missing capabilities are retained as implementation context, not an outstanding-work checklist:
 
 | Existing implementation | Reuse | Required extension |
 |---|---|---|

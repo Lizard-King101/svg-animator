@@ -81,7 +81,7 @@
     </div>
   </section>
 
-  <section class="graph-time-pane timeline-time-cell"
+  <section #graphPane class="graph-time-pane timeline-time-cell"
            (scroll)="timeline.updateGraphViewport($event); timeline.closeColorEditor()"
            (wheel)="timeline.timelineWheel($event)"
            (pointerdown)="timeline.beginViewportPan($event)">

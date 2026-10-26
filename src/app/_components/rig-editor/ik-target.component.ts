@@ -4,7 +4,7 @@ import { NgIf } from '@angular/common';
 import { RigEditingService } from '../../_services/rig-editing.service';
 import { DocumentMutationService } from '../../_services/document-mutation.service';
 import { CanvasWorkspaceComponent } from '../canvas-workspace/canvas-workspace.component';
-import { canvasToWorkspaceProjection } from '../../editor/canvas-workspace-projection';
+import { canvasViewProjection } from '../../editor/canvas-workspace-projection';
 import { applyMatrix, invertMatrix, Matrix } from '../../editor/objects/transform.object';
 import { boneMatrices } from '../../editor/objects/armature';
 
@@ -29,7 +29,7 @@ export class IKTargetComponent implements DoCheck, OnDestroy {
     }
     private get projection() {
         const svg=this.rig.editor.selectedSVG;
-        return svg && this.artwork && this.workspace ? canvasToWorkspaceProjection(this.artwork.getBoundingClientRect(),this.workspace.element.getBoundingClientRect(),svg.canvasBounds).canvasToWorkspace : undefined;
+        return svg && this.artwork && this.workspace ? canvasViewProjection(svg).canvasToWorkspace : undefined;
     }
     get target() {
         const projection=this.projection, point=this.drag?.target ?? this.rig.ikTargetPosition, chain=this.rig.ikChain;

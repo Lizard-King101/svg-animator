@@ -14,7 +14,7 @@ describe('weight overlay gestures', () => {
         const host = document.createElement('div');
         const source = {id:'rig',bones:[],bindings:[]};
         const rig = { visible:true,canEdit:true,workspace:'weights',activeId:'rig',boneId:'a',bone:{name:'Thigh'},problem:undefined,
-            editor:{selectedSVG:{id:'document',canvasBounds:{x:0,y:0,width:100,height:100}},activeTool:{}},
+            editor:{selectedSVG:{id:'document',width:100,height:100,zoom:2,pos:{x:50,y:50},canvasBounds:{x:0,y:0,width:100,height:100}},activeTool:{}},
             applyWeightUpdates:jasmine.createSpy('applyWeightUpdates').and.returnValue(true), setPointWeight:jasmine.createSpy('setPointWeight').and.returnValue(true) };
         const session = { weightRig:source,pending:undefined as object|undefined,scopeKey:'document:rig:scope:a',paintMode:'add',weightDisplay:'mix' as 'mix'|'heat',color:(_id:string)=>'hsl(0 0% 50%)',setPaintMode:jasmine.createSpy('setPaintMode'),stepBrushSize:jasmine.createSpy('stepBrushSize'),stepBrushStrength:jasmine.createSpy('stepBrushStrength'),brushRadius:20,brushStrength:.25,brushValue:1,pointRef:undefined,
             selectedRefs:[] as WeightPointRef[], selectionKey:'', previewUpdates:[] as readonly WeightUpdate[], previewKind:undefined as string|undefined,
@@ -32,7 +32,7 @@ describe('weight overlay gestures', () => {
         const capture=document.createElement('button'); host.append(capture);
         spyOn(capture,'setPointerCapture'); spyOn(capture,'hasPointerCapture').and.returnValue(false);
         const event=(x=150,y=200,pointerId=1)=>({button:0,pointerId,clientX:x,clientY:y,currentTarget:capture,preventDefault:()=>{},stopPropagation:()=>{}} as unknown as PointerEvent);
-        return {component,rig,session,mutations,event,projected,pointGetter,capture,host,zoom:()=>width=300};
+        return {component,rig,session,mutations,event,projected,pointGetter,capture,host,zoom:()=>{width=300;rig.editor.selectedSVG.zoom=3;}};
     }
     it('routes 1–5 and bracket shortcuts to the brush before artwork shortcuts, outside text fields', () => {
         const t=setup(), later=jasmine.createSpy('later'), input=document.createElement('input'); document.addEventListener('keydown',later); document.body.append(input, t.host);

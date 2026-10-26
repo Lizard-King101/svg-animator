@@ -1,3 +1,4 @@
+import { linkLoopSeam, loopEndpoints } from '../editor/animation/loop-seam';
 import { NgZone } from '@angular/core';
 import { AnimationPlaybackService } from './animation-playback.service';
 import { ActionCompositionService } from './action-composition.service';
@@ -40,6 +41,87 @@ describe('rig timeline authoring and reversible playback', () => {
         cleanups.push(() => { playback.ngOnDestroy(); mutations.ngOnDestroy(); });
         return {editor,svg,path,playback,projects,mutations,rigs,actions};
     }
+    it('updates both linked rig poses in one mutation while leaving the rest setup unchanged', () => {
+        const t=setup(); t.playback.seek(1); t.rigs.setPose(40);
+        const channel=t.svg.animation.tracks[0];
+        t.mutations.mutate(()=>linkLoopSeam(channel,0,1,'start',false),'animation');
+        const saves=t.projects.upsert.calls.count(); t.rigs.setPose(25);
+        expect(loopEndpoints(channel)!.start.value).toBe(25); expect(loopEndpoints(channel)!.end.value).toBe(25);
+        expect(t.projects.upsert.calls.count()).toBe(saves+1);
+        expect(t.mutations.captureSave()!.rigs!.armatures[0].bones[1].pose).toBe(0);
+        t.mutations.undo(); expect(loopEndpoints(t.playback.activeAnimation!.tracks[0])!.start.value).toBe(0);
+    });
+    it('keys the complete authored IK pose once, preserves setup, and supports undo/redo', () => {
+        const t = setup(true);
+        t.rigs.boneId = 'foot'; t.playback.seek(1); t.rigs.setIKTarget({x:40,y:40});
+        const setupRig = JSON.stringify(t.mutations.captureSave()!.rigs);
+        const count = t.projects.upsert.calls.count();
+        // Selecting a driven bone does not prevent the whole-armature command.
+        t.rigs.boneId = 'upper';
+        expect(t.rigs.canKeySelectedPose).toBeFalse(); expect(t.rigs.canKeyArmaturePose).toBeTrue();
+        t.rigs.keyArmaturePose();
+        expect(t.projects.upsert.calls.count()).toBe(count + 1);
+        expect(t.svg.animation.tracks.map(track=>track.property).sort()).toEqual([
+            'bones.foot.pose','bones.foot.poseX','bones.foot.poseY','bones.root.pose','bones.root.poseX','bones.root.poseY',
+        ]);
+        expect(JSON.stringify(t.mutations.captureSave()!.rigs)).toBe(setupRig);
+        t.rigs.keyArmaturePose(); expect(t.projects.upsert.calls.count()).toBe(count + 1);
+        t.mutations.undo(); expect(t.svg.animation.tracks.length).toBe(2);
+        t.mutations.redo(); expect(t.svg.animation.tracks.length).toBe(6);
+        const restoredPath = t.svg.elements[0] as Path;
+        expect(restoredPath.findPointById('tip')!.x).toBeCloseTo(40);
+        expect(restoredPath.findPointById('tip')!.y).toBeCloseTo(40);
+    });
+    it('copies sampled FK controls without saving and pastes a complete independent pose at the playhead', () => {
+        const t = setup(); t.playback.seek(1); t.rigs.setPose(60);
+        t.playback.seek(.5); const count = t.projects.upsert.calls.count();
+        t.rigs.copyPose(); expect(t.projects.upsert.calls.count()).toBe(count);
+        t.playback.seek(2); t.rigs.setPose(10);
+        const beforePaste = t.projects.upsert.calls.count();
+        t.rigs.pastePose();
+        expect(t.rigs.bone!.pose).toBeCloseTo(30);
+        expect(t.svg.animation.tracks.length).toBe(12);
+        expect(t.svg.animation.tracks.every(track => track.keyframes.some(key => key.time === 2))).toBeTrue();
+        expect(t.projects.upsert.calls.count()).toBe(beforePaste + 1);
+        t.mutations.undo(); expect(t.rigs.bone!.pose).toBe(10);
+        t.mutations.redo(); expect(t.rigs.bone!.pose).toBeCloseTo(30);
+        // Clipboard values survive later edits and history replacement.
+        t.playback.seek(3); t.rigs.pastePose(); expect(t.rigs.bone!.pose).toBeCloseTo(30);
+    });
+    it('pastes into a rig action without writing scene keys and rejects an unrelated action', () => {
+        const t = setup(true); t.rigs.boneId = 'foot'; t.playback.seek(1); t.rigs.setPosePosition(-20,30); t.rigs.copyPose();
+        const scene = JSON.stringify(t.svg.animation.tracks);
+        const action = t.actions.create('Contact',false,'rig')!; t.playback.seek(.5); t.rigs.pastePose();
+        expect(action.animation.tracks.length).toBe(6);
+        expect(JSON.stringify(t.svg.animation.tracks)).toBe(scene);
+        expect(t.rigs.active!.bones.find(bone=>bone.id==='foot')!.poseY).toBe(30);
+        t.playback.editAction();
+        const unrelated = t.actions.create('Artwork',false,'selection')!;
+        const count = t.projects.upsert.calls.count(); t.rigs.pastePose(); t.rigs.keyArmaturePose();
+        expect(unrelated.animation.tracks).toEqual([]);
+        expect(t.projects.upsert.calls.count()).toBe(count);
+        expect(t.rigs.pastePoseProblem).toContain('includes this rig');
+    });
+    it('rejects stale or foreign pose clipboards and playback without a partial write', () => {
+        const t = setup(); t.rigs.copyPose(); const count = t.projects.upsert.calls.count();
+        t.rigs.active!.bones[1].parentId = null;
+        t.rigs.pastePose(); expect(t.rigs.message).toContain('skeleton');
+        t.rigs.active!.bones[1].parentId = 'root';
+        t.svg.id = 'other-document'; t.rigs.pastePose(); expect(t.rigs.message).toContain('same armature and project');
+        expect(t.svg.animation.tracks).toEqual([]); expect(t.projects.upsert.calls.count()).toBe(count);
+        t.playback.playing = true; t.rigs.keyArmaturePose(); t.rigs.copyPose();
+        expect(t.svg.animation.tracks).toEqual([]); t.playback.playing = false;
+    });
+    it('preflights every control before keying and preserves the copied pose after a rejected paste', () => {
+        const t = setup(); t.rigs.copyPose();
+        t.playback.upsertKeyframe(t.path,'transform.translateX','number',10); t.mutations.commit('animation');
+        const before = JSON.stringify(t.mutations.captureSave()), count = t.projects.upsert.calls.count();
+        t.rigs.keyArmaturePose(); t.rigs.pastePose();
+        expect(JSON.stringify(t.mutations.captureSave())).toBe(before);
+        expect(t.projects.upsert.calls.count()).toBe(count);
+        expect(t.rigs.message).toContain('bound path transform changed');
+        expect(t.rigs.copiedPoseLabel).toContain('4 controls');
+    });
     it('keys FK in one undo step while saving setup geometry and absent offsets exactly', () => {
         const t = setup(), base = JSON.stringify(t.mutations.captureSave());
         t.playback.seek(1); t.rigs.setPose(90);

@@ -3,7 +3,7 @@ import { NgIf } from '@angular/common';
 import { BoneDrawingService } from '../../_services/bone-drawing.service';
 import { BoneTool } from '../../_services/tools/bone.tool';
 import { CanvasWorkspaceComponent } from '../canvas-workspace/canvas-workspace.component';
-import { canvasToWorkspaceProjection } from '../../editor/canvas-workspace-projection';
+import { canvasViewProjection } from '../../editor/canvas-workspace-projection';
 import { applyMatrix } from '../../editor/objects/transform.object';
 import { boneDiamond } from '../../editor/bone-glyph';
 import { bindToolKeyboard } from '../../editor/tool-keyboard';
@@ -34,7 +34,7 @@ export class BoneDrawingControlsComponent implements DoCheck, OnDestroy {
     }
     get guide() {
         const draft = this.drawing.draft, svg = this.drawing.rigs.editor.selectedSVG; if(!draft || !svg) return undefined;
-        const matrix = canvasToWorkspaceProjection(this.artwork.getBoundingClientRect(), this.workspace.element.getBoundingClientRect(), svg.canvasBounds).canvasToWorkspace;
+        const matrix = canvasViewProjection(svg).canvasToWorkspace;
         const start = applyMatrix(matrix, draft.start.x, draft.start.y), end = applyMatrix(matrix, draft.end.x, draft.end.y);
         return { ...start, diamond: boneDiamond(start, end), cross: `M${start.x - 13} ${start.y}h26 M${start.x} ${start.y - 13}v26` };
     }

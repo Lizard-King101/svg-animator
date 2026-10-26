@@ -11,7 +11,7 @@ import { captureRigAnimationPreview, restoreRigAnimationPreview } from '../rig-a
 
 export interface InspectionPoint { x: number; y: number; time: number; }
 export interface MotionTrail { id: string; segments: InspectionPoint[][]; ticks: InspectionPoint[]; }
-export interface OnionSkin { time: number; direction: 'past' | 'future'; image: string; opacity: number; }
+export interface OnionSkin { time: number; displayTime?: number; direction: 'past' | 'future'; image: string; opacity: number; }
 
 /** Bounded samples in document time; do not wrap at loop boundaries. */
 export function onionTimes(time: number, duration: number, step: number): number[] {
@@ -48,7 +48,7 @@ export class AnimationInspectionSnapshot {
         applyDocumentRigAnimation(this.document, this.animatedRigIds);
     }
 
-    skins(time: number, step: number, selectedIds: readonly string[] = []): OnionSkin[] {
+    skins(time: number, step: number, selectedIds: readonly string[] = [], loopRange?: {start: number; end: number}): OnionSkin[] {
         const subjects = new Set(selectedIds.length ? selectedIds : this.plan.tracks.map(track => track.targetId));
         this.document.rigs.armatures.filter(rig => subjects.has(rig.id)).forEach(rig => rigArtworkIds(rig).forEach(id => subjects.add(id)));
         const kept = new Set<string>();
@@ -56,7 +56,13 @@ export class AnimationInspectionSnapshot {
             const chain = findElementChain(this.document.elements, target) ?? [];
             if(chain.some(element => subjects.has(element.id))) chain.forEach(element => kept.add(element.id));
         });
-        return onionTimes(time, this.document.animation.duration, step).map(sampleTime => {
+        const samples = loopRange && time >= loopRange.start && time <= loopRange.end && loopRange.end > loopRange.start
+            ? [-2,-1,1,2].map(offset => time + offset * step)
+            : onionTimes(time, this.document.animation.duration, step);
+        return samples.map(displayTime => {
+            const sampleTime = loopRange && (displayTime < loopRange.start || displayTime > loopRange.end)
+                ? loopRange.start + ((displayTime - loopRange.start) % (loopRange.end - loopRange.start) + (loopRange.end - loopRange.start)) % (loopRange.end - loopRange.start)
+                : displayTime;
             this.at(sampleTime);
             // Compute transforms with the full scene first, retaining automatic origins,
             // clipping and motion references; hide unrelated artwork only in the image.
@@ -65,8 +71,8 @@ export class AnimationInspectionSnapshot {
                 const id = node.getAttribute('data-render-target') || node.getAttribute('id')!;
                 if(this.plan.targetMap.has(id) && !kept.has(id) && !node.closest('defs')) node.remove();
             });
-            return { time: sampleTime, direction: sampleTime < time ? 'past' : 'future',
-                opacity: Math.abs(sampleTime - time) > step * 1.5 ? 0.10 : 0.20,
+            return { time: sampleTime, displayTime, direction: displayTime < time ? 'past' : 'future',
+                opacity: Math.abs(displayTime - time) > step * 1.5 ? 0.10 : 0.20,
                 // An isolated SVG image keeps sampled IDs/gradients/clips out of the live DOM.
                 image: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(root))}` };
         });

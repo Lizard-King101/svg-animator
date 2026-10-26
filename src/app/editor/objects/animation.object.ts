@@ -45,6 +45,13 @@ export interface TimelineWorkArea {
     end: number;
 }
 
+/** Authoring relationship; runtime evaluates the ordinary endpoint keys. */
+export interface LoopSeam {
+    startKeyId: string;
+    endKeyId: string;
+    smooth: boolean;
+}
+
 export interface AnimationTrack {
     id: string;
     targetId: string;
@@ -52,6 +59,7 @@ export interface AnimationTrack {
     valueType: AnimationValueType;
     keyframes: Keyframe[];
     enabled?: boolean;
+    loopSeam?: LoopSeam;
 }
 
 export interface Keyframe {
@@ -548,12 +556,18 @@ function restoreTrack(track: Partial<AnimationTrack>): AnimationTrack | undefine
         return undefined;
     }
 
+    const keys = normalizedKeyframes(Array.isArray(track.keyframes) ? track.keyframes.map(restoreKeyframe).filter((keyframe): keyframe is Keyframe => !!keyframe) : []);
+    const seam = track.loopSeam;
+    const start = keys.find(key => key.id === seam?.startKeyId), end = keys.find(key => key.id === seam?.endKeyId);
     return {
         id: typeof track.id === "string" ? track.id : makeAnimationId("track"),
         targetId: track.targetId,
         property: track.property,
         valueType,
-        keyframes: normalizedKeyframes(Array.isArray(track.keyframes) ? track.keyframes.map(restoreKeyframe).filter((keyframe): keyframe is Keyframe => !!keyframe) : []),
+        keyframes: keys,
+        ...(seam && start && end && start.time < end.time ? { loopSeam: {
+            startKeyId: start.id, endKeyId: end.id, smooth: seam.smooth === true && valueType === 'number',
+        } } : {}),
         enabled: track.enabled ?? true,
     };
 }

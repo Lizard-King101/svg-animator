@@ -23,7 +23,8 @@ import { allAnimationDocuments } from '../editor/objects/animation.object';
 import { EditorService } from './editor.service';
 import { AnimationPlaybackService } from './animation-playback.service';
 import { DocumentMutationService, MutationDomain } from './document-mutation.service';
-import { RigAnimationField, rigAnimationProperty } from '../editor/rig-animation';
+import { rigAnimationBaseProblem, rigAnimationProperty } from '../editor/rig-animation';
+import { applyRigPoseSnapshot, captureRigPose, POSE_FIELDS, poseControls, poseStructure, RigPoseSnapshot } from '../editor/animation/rig-pose';
 import { documentRigChannelProblem } from '../editor/rig-animation-conflicts';
 
 /** Owns rig commands; selection and the rest/pose workspace are session-only. */
@@ -97,6 +98,23 @@ export class RigEditingService {
     }
     visible = false;
     message = '';
+    private poseClipboard?: { documentId: string; name: string; pose: RigPoseSnapshot };
+    get poseControlCount(): number { return this.active ? poseControls(this.active).length : 0; }
+    get poseKeyingContext(): string { return `${this.playback.activeAction?.name ?? 'Scene'} · ${Number(this.playback.currentTime.toFixed(3))}s`; }
+    get canKeyArmaturePose(): boolean { return this.isAnimating && this.canPose && this.poseControlCount > 0 && !this.posePreview; }
+    get canKeySelectedPose(): boolean { return this.canKeyArmaturePose && !!this.bone && !this.drivingConstraint(this.bone.id); }
+    get copiedPoseLabel(): string {
+        const count = this.poseClipboard?.pose.controls.length ?? 0;
+        return this.poseClipboard ? `${this.poseClipboard.name} · ${count} control${count === 1 ? '' : 's'}` : '';
+    }
+    get pastePoseProblem(): string {
+        if(!this.poseClipboard) return 'Copy an armature pose first.';
+        if(!this.isAnimating) return 'Switch to Animate to paste pose keys.';
+        if(!this.canPose || this.posePreview) return 'Pause playback and finish the pose gesture in an action that includes this rig.';
+        if(this.poseClipboard.documentId !== this.editor.selectedSVG?.id || this.poseClipboard.pose.rigId !== this.activeId) return 'Select the same armature and project that the pose was copied from.';
+        if(!this.active || this.poseClipboard.pose.structure !== poseStructure(this.active)) return 'The rest skeleton or IK routing changed. Copy a new pose before pasting.';
+        return '';
+    }
     pathName(id: string) { return findAnimationTarget(this.editor.selectedSVG?.elements ?? [], id)?.name ?? 'Missing path'; }
     get armatures() { return this.editor.selectedSVG?.rigs.armatures ?? []; }
     get active() { return this.armatures.find(rig => rig.id === this.activeId); }
@@ -367,16 +385,17 @@ export class RigEditingService {
     }
     private mutate<T>(change: () => T, domain?: MutationDomain): T { this.clearPosePreview(); return this.mutations.mutate(change, domain); }
     /** Canvas pose gestures key authored offsets; the setup and solved IK angles stay untouched. */
-    private commitAuthoredPose(candidate: Armature, forceBoneId?: string): boolean {
+    private commitAuthoredPose(candidate: Armature, forceBoneIds?: ReadonlySet<string>): boolean {
         if(!this.isAnimating) return this.commitPose(candidate);
         this.clearPosePreview();
         const rig = this.active;
-        if(!rig || !this.canPose || !this.evaluatePose(candidate)) return false;
-        const fields: RigAnimationField[] = ['pose', 'poseX', 'poseY'];
+        if(!rig || !this.canPose || !this.readyToPose() || !this.evaluatePose({...candidate, constraintsActive: true})) return false;
+        const baseProblem = this.playback.withBaseState(() => rigAnimationBaseProblem(this.editor.selectedSVG!, new Set([rig.id])));
+        if(baseProblem) { this.message = baseProblem; return false; }
         const updates = candidate.bones.flatMap(bone => {
             if(this.drivingConstraint(bone.id)) return [];
             const original = rig.bones.find(item => item.id === bone.id);
-            return fields.filter(field => original && (bone.id === forceBoneId || (bone[field] ?? 0) !== (original[field] ?? 0)))
+            return POSE_FIELDS.filter(field => original && (forceBoneIds?.has(bone.id) || (bone[field] ?? 0) !== (original[field] ?? 0)))
                 .map(field => ({property:rigAnimationProperty(bone.id,field),value:bone[field] ?? 0}));
         });
         if(!updates.length) return false;
@@ -387,7 +406,25 @@ export class RigEditingService {
         return !this.message;
     }
     keyPose(): void {
-        if(this.active && this.boneId && this.isAnimating) this.commitAuthoredPose(structuredClone(this.active),this.boneId);
+        if(this.active && this.boneId && this.canKeySelectedPose) this.commitAuthoredPose(structuredClone(this.active), new Set([this.boneId]));
+    }
+    keyArmaturePose(): void {
+        if(!this.active || !this.canKeyArmaturePose) return;
+        const candidate = structuredClone(this.active);
+        if(this.commitAuthoredPose(candidate, new Set(poseControls(candidate).map(bone => bone.id)))) this.message = `Keyed armature pose in ${this.poseKeyingContext}.`;
+    }
+    copyPose(): void {
+        if(!this.active || !this.canKeyArmaturePose || !this.readyToPose()) return;
+        this.poseClipboard = { documentId: this.editor.selectedSVG!.id, name: this.active.name, pose: captureRigPose(this.active) };
+        this.message = 'Copied armature pose. Paste onto this armature at another playhead time or in its action.';
+    }
+    pastePose(): void {
+        const problem = this.pastePoseProblem;
+        if(problem) { this.message = problem; return; }
+        const snapshot = this.poseClipboard!.pose;
+        const candidate = applyRigPoseSnapshot(this.active!, snapshot);
+        if(!candidate) return;
+        if(this.commitAuthoredPose(candidate, new Set(snapshot.controls.map(bone => bone.id)))) this.message = `Pasted armature pose in ${this.poseKeyingContext}.`;
     }
     private commitPose(candidate: Armature, pinOrigins: AnyElement[] = []): boolean {
         this.clearPosePreview();

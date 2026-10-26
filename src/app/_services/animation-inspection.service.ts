@@ -10,6 +10,7 @@ import { ElementFactory } from './element-factory.service';
 @Injectable()
 export class AnimationInspectionService {
     onions = false;
+    loopGhosts = false;
     motionTrails = false;
     step = 0.1;
     private source?: SVG;
@@ -31,7 +32,7 @@ export class AnimationInspectionService {
 
     get display() {
         const source = this.editor.selectedSVG;
-        if(!source || this.animation.mode !== 'animate' || this.animation.playing || (!this.onions && !this.motionTrails)) return undefined;
+        if(!source || this.animation.mode !== 'animate' || this.animation.playing || (!this.onions && !this.loopGhosts && !this.motionTrails)) return undefined;
         const revision = `${this.mutations.revision}:${this.animation.revision}`;
         if(source !== this.source || revision !== this.revision) {
             const copy = this.factory.restoreDocument(source.save());
@@ -43,9 +44,10 @@ export class AnimationInspectionService {
         }
         const time = this.animation.currentTime;
         const selectedIds = this.editor.selectedElements.map(element => element.id);
-        const skinKey = `${time}:${this.step}:${JSON.stringify(selectedIds)}`;
-        if(this.onions && skinKey !== this.skinKey) {
-            this.cachedSkins = this.snapshot!.skins(time, this.step, selectedIds); this.skinKey = skinKey;
+        const range = this.loopGhosts ? this.animation.workArea : undefined;
+        const skinKey = `${time}:${this.step}:${JSON.stringify(selectedIds)}:${JSON.stringify(range)}`;
+        if((this.onions || this.loopGhosts) && skinKey !== this.skinKey) {
+            this.cachedSkins = this.snapshot!.skins(time, this.step, selectedIds, range); this.skinKey = skinKey;
         }
         const ids = selectedIds.slice(0, 8);
         const trailKey = JSON.stringify(ids);
@@ -56,7 +58,7 @@ export class AnimationInspectionService {
         if(this.motionTrails && currentKey !== this.currentKey) {
             this.cachedCurrent = this.snapshot!.origins(time, ids); this.currentKey = currentKey;
         }
-        return { skins: this.onions ? this.cachedSkins : [], trails: this.motionTrails ? this.cachedTrails : [],
+        return { skins: this.onions || this.loopGhosts ? this.cachedSkins : [], trails: this.motionTrails ? this.cachedTrails : [],
             current: this.cachedCurrent };
     }
 }

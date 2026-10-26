@@ -1,3 +1,4 @@
+import { remapLoopSeam, loopEndpoints } from '../editor/animation/loop-seam';
 import { Injectable, Optional } from '@angular/core';
 import { AnimationAction, ActionPlacement, cloneAnimation, compositionHasOverlap, createDefaultAnimation, makeAnimationId, placementTiming, validPlacementTiming } from '../editor/objects/animation.object';
 import { AnyElement } from '../editor/objects/svg.object';
@@ -54,7 +55,12 @@ export class ActionCompositionService {
     }
     duplicate(action: AnimationAction): void {
         const animation = cloneAnimation(action.animation);
-        animation.tracks.forEach(track => { track.id = makeAnimationId('track'); track.keyframes.forEach(key => key.id = makeAnimationId('key')); });
+        animation.tracks.forEach(track => {
+            track.id = makeAnimationId('track');
+            const ids = new Map<string, string>();
+            track.keyframes.forEach(key => { const id = makeAnimationId('key'); ids.set(key.id, id); key.id = id; });
+            remapLoopSeam(track, ids);
+        });
         animation.markers.forEach(marker => marker.id = makeAnimationId('marker'));
         const copy = { ...action, id: makeAnimationId('action'), name: `${action.name} Copy`, targetIds: [...action.targetIds], animation };
         this.change(() => this.editor.selectedSVG!.animation.composition!.actions.push(copy));
@@ -109,6 +115,15 @@ export class ActionCompositionService {
     removePlacement(placement: ActionPlacement): void {
         const composition = this.editor.selectedSVG?.animation.composition;
         if(composition) this.change(() => composition.placements = composition.placements.filter(value => value.id !== placement.id));
+    }
+    loopWarning(placement: ActionPlacement): string {
+        const action = this.action(placement.actionId);
+        if(!action) return '';
+        const timing = placementTiming(placement, action.animation.duration);
+        return action.animation.tracks.some(track => {
+            const seam = loopEndpoints(track);
+            return seam && (Math.abs(seam.start.time - timing.sourceStart) > .0005 || Math.abs(seam.end.time - timing.sourceEnd) > .0005);
+        }) ? 'This source range differs from its linked loop endpoints; the trimmed seam may jump.' : '';
     }
     private validStart(action: AnimationAction, start: number, ignore?: string, timing?: ActionPlacement): boolean {
         if(!Number.isFinite(start) || start < 0) { this.message = 'Start time must be zero or greater.'; return false; }

@@ -1,3 +1,7 @@
+import { adjacentKeyTime, filterTimelineHierarchy } from '../editor/animation/timeline-navigation';
+import { planKeyframeRetime, RetimeOperation, RetimePlan } from '../editor/animation/keyframe-retiming';
+import { loopEndpoints, syncLoopSeam } from '../editor/animation/loop-seam';
+import { AnimationInspectionService } from './animation-inspection.service';
 import { ChangeDetectorRef, ElementRef, EventEmitter, Injectable, NgZone, OnDestroy, Optional } from "@angular/core";
 import { AnimationPlaybackService } from "src/app/_services/animation-playback.service";
 import { EditorService } from "src/app/_services/editor.service";
@@ -29,6 +33,7 @@ import {
     timelineRowTargetId,
     timelineRowId,
     rigTimelineProperties,
+    rigBoneBranchIds,
     snapKeyframeTimeDelta,
     snapTimelineTime,
     TimelineEditingService,
@@ -89,11 +94,26 @@ export class TimelineEditorService implements OnDestroy {
     set selectedKeyframeIds(value: Set<string>) { this.editing.selectedKeyframeIds = value; }
     openColorEditorKey?: string;
     paintPopoverPosition?: FloatingPopoverPosition;
+    rowSearch = '';
+    selectedRowsOnly = false;
+    animatedRowsOnly = false;
+    private navigationFrame?: number;
+    get filteringRows(): boolean { return !!this.rowSearch.trim() || this.selectedRowsOnly || this.animatedRowsOnly; }
     pixelsPerSecond = 120;
     surfaceMode: "timeline" | "graph" = "timeline";
     graphSpeedMin = -1;
     graphSpeedMax = 1;
-    activeGraphHandle?: GraphHandle;
+    private activeHandleRef?: { animation: AnimationDocument; trackId: string; keyId: string; side: 'in' | 'out' };
+    get activeGraphHandle(): GraphHandle | undefined {
+        const ref = this.activeHandleRef;
+        if(!ref || ref.animation !== this.activeAnimation) return undefined;
+        const track = this.graphTracks().find(item => item.track.id === ref.trackId)?.track;
+        return track && this.graphHandles(track).find(handle => handle.keyframe.id === ref.keyId && handle.side === ref.side);
+    }
+    set activeGraphHandle(handle: GraphHandle | undefined) {
+        this.activeHandleRef = handle && this.activeAnimation ? { animation: this.activeAnimation,
+            trackId: handle.track.id, keyId: handle.keyframe.id, side: handle.side } : undefined;
+    }
     selectedGraphHandleKeys = new Set<string>();
     virtualStart = 0;
     virtualCount = 80;
@@ -140,18 +160,26 @@ export class TimelineEditorService implements OnDestroy {
         private changeDetector: ChangeDetectorRef,
         private paintEditing: PaintEditingService,
         @Optional() public rig?: RigEditingService,
+        @Optional() public inspection?: AnimationInspectionService,
     ) {
-        this.contextSubscription = this.animation.contextChanging?.subscribe(() => {
-            this.cancelContextGestures();
+        this.contextSubscription = this.animation.contextChanging?.subscribe(reason => {
+            if(reason !== 'seek') this.cancelContextGestures(); else this.cancelNumberDrag();
             this.cancelKeyframeDrag(); this.cancelGraphDrag(); this.closeColorEditor();
-            this.activeGraphHandle = undefined;
-            this.selectedKeyframeIds = new Set(); this.selectedGraphTargetId = undefined;
-            this.rowCacheKey = ''; this.layerSummaryCache.clear(); this.speedCurveCache.clear(); this.colorCache.clear();
+            if(!reason) {
+                this.activeGraphHandle = undefined;
+                this.selectedGraphHandleKeys.clear();
+                this.selectedKeyframeIds = new Set(); this.selectedGraphTargetId = undefined;
+                this.rowCacheKey = ''; this.layerSummaryCache.clear(); this.speedCurveCache.clear(); this.colorCache.clear();
+            }
             this.changeDetector.markForCheck();
         });
         this.timelineHeight = this.clampTimelineHeight(this.preferences.timelineHeight);
         this.historyRestoreSubscription = this.mutations.historyRestored.subscribe(() => {
             this.cancelNumberDrag(false);
+            this.cancelGraphDrag(false);
+            this.cancelKeyframeDrag();
+            this.activeGraphHandle = undefined;
+            this.selectedGraphHandleKeys.clear();
             this.rowCacheKey = "";
             this.layerSummaryCache.clear();
             this.speedCurveCache.clear();
@@ -162,6 +190,9 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     ngOnDestroy(): void {
+        if(this.navigationFrame != null) cancelAnimationFrame(this.navigationFrame);
+        this.cancelGraphDrag();
+        this.cancelKeyframeDrag();
         this.cancelNumberDrag();
         this.historyRestoreSubscription.unsubscribe();
         this.contextSubscription?.unsubscribe();
@@ -181,10 +212,7 @@ export class TimelineEditorService implements OnDestroy {
             try { area.capture.releasePointerCapture(area.pointerId); } catch {}
             this.workAreaDrag = undefined;
         }
-        if(this.scrubFrame != null) cancelAnimationFrame(this.scrubFrame);
-        this.scrubFrame = undefined;
-        if(this.scrubPointerId != null) { try { this.scrubCapture?.releasePointerCapture(this.scrubPointerId); } catch {} }
-        this.scrubbing = false; this.scrubPointerId = undefined; this.scrubCapture = undefined;
+        this.cancelScrub();
         this.marquee = undefined;
         this.clearGlobalPointerTracking();
     }
@@ -193,17 +221,159 @@ export class TimelineEditorService implements OnDestroy {
         const elements = this.editor.selectedSVG?.elements ?? [];
         const rigs = this.editor.selectedSVG?.rigs.armatures ?? [];
         const rigKey = rigs.map(rig => `${rig.id}:${rig.name}:${rig.bones.map(bone => `${bone.id}:${bone.parentId}:${bone.name}`).join(',')}`).join('|');
-        const cacheKey = `${this.editor.selectedSVG?.id ?? ""}|${this.animation.revision}|${[...this.expandedLayerIds].sort().join(",")}|${this.rowStructureKey(elements)}|${rigKey}`;
+        const scope = this.selectionScope();
+        const filterKey = JSON.stringify([this.rowSearch, this.selectedRowsOnly, this.animatedRowsOnly, [...scope.targets], [...scope.bones]]);
+        const expanded = this.filteringRows ? this.allExpandedIds() : this.expandedLayerIds;
+        const cacheKey = `${this.editor.selectedSVG?.id ?? ""}|${this.animation.revision}|${[...expanded].sort().join(",")}|${this.rowStructureKey(elements)}|${rigKey}|${filterKey}`;
         if(cacheKey === this.rowCacheKey) return this.rowCache;
         this.rowCacheKey = cacheKey;
-        this.rowCache = [...this.editing.projectRigRows(rigs.filter(rig => !this.animation.allowsTarget || this.animation.allowsTarget(rig.id)), this.expandedLayerIds), ...this.editing.projectRows(
+        this.rowCache = [...this.editing.projectRigRows(rigs.filter(rig => !this.animation.allowsTarget || this.animation.allowsTarget(rig.id)), expanded), ...this.editing.projectRows(
             elements,
-            this.expandedLayerIds,
+            expanded,
             this.properties,
             (element, property) => this.propertySupported(element, property),
             PATH_SHAPE_PROPERTY,
         ).filter(row => row.type === 'layer' || !this.animation.allowsTarget || this.animation.allowsTarget(row.element.id))];
+        if(this.filteringRows) {
+            const query = this.rowSearch.trim().toLocaleLowerCase();
+            this.rowCache = filterTimelineHierarchy(this.rowCache, (row, ancestors) => {
+                if(this.selectedRowsOnly && !this.rowInScope(row, scope)) return false;
+                if(this.animatedRowsOnly && (!('property' in row) || !this.keyframes(row).length)) return false;
+                return !query || [...ancestors, row].some(item => this.rowLabel(item).toLocaleLowerCase().includes(query));
+            });
+        }
+        this.virtualStart = Math.min(this.virtualStart, Math.max(0, this.rowCache.length - this.virtualCount));
         return this.rowCache;
+    }
+
+    setRowFilters(search: string, selected: boolean, animated: boolean): void {
+        this.cancelContextGestures(); this.cancelGraphDrag(); this.cancelKeyframeDrag();
+        this.closeColorEditor(); this.activeGraphHandle = undefined; this.selectedGraphHandleKeys.clear();
+        this.selectedKeyframeIds.clear();
+        this.rowSearch = search; this.selectedRowsOnly = selected; this.animatedRowsOnly = animated;
+        this.virtualStart = 0; this.rowCacheKey = '';
+        this.host.nativeElement.querySelectorAll<HTMLElement>('.timeline-table, .graph-layer-scroll').forEach(view => view.scrollTop = 0);
+    }
+
+    private allExpandedIds(): Set<string> {
+        const ids = new Set<string>();
+        for(const element of this.editor.selectedSVG?.elements ?? []) this.summaryElements(element).forEach(item => ids.add(item.id));
+        for(const rig of this.editor.selectedSVG?.rigs.armatures ?? []) {
+            ids.add(rig.id); rig.bones.forEach(bone => ids.add(`${rig.id}:${bone.id}`));
+        }
+        return ids;
+    }
+
+    private selectionScope(): { targets: Set<string>; bones: Set<string> } {
+        const targets = new Set((this.editor.selectedElements ?? []).flatMap(element => this.summaryElements(element).map(item => item.id)));
+        const bones = new Set<string>();
+        if(!targets.size && this.rig?.active) {
+            targets.add(this.rig.active.id);
+            if(this.rig.boneId) {
+                rigBoneBranchIds(this.rig.active, this.rig.boneId).forEach(id => bones.add(id));
+            }
+        }
+        return { targets, bones };
+    }
+
+    private rowInScope(row: TimelineRow, scope = this.selectionScope()): boolean {
+        return scope.targets.has(timelineRowTargetId(row)) && (!('bone' in row) || !scope.bones.size || scope.bones.has(row.bone.id));
+    }
+
+    revealSelection(): void {
+        const scope = this.selectionScope();
+        if(!scope.targets.size) return;
+        this.setRowFilters('', false, false);
+        const fullyExpanded = this.allExpandedIds();
+        // Expand only the selected branches and their ancestors; preserve unrelated expansion.
+        const rows = [...this.editing.projectRigRows(this.editor.selectedSVG?.rigs.armatures ?? [], fullyExpanded),
+            ...this.editing.projectRows(this.editor.selectedSVG?.elements ?? [], fullyExpanded, [], () => false, PATH_SHAPE_PROPERTY)];
+        filterTimelineHierarchy(rows, row => this.rowInScope(row, scope)).forEach(row => this.expandedLayerIds.add(timelineRowId(row)));
+        this.rowCacheKey = '';
+        const index = this.rows.findIndex(row => this.rowInScope(row, scope) && (!scope.bones.size || 'bone' in row));
+        if(index < 0) return;
+        const viewport = this.host.nativeElement.querySelector<HTMLElement>(this.surfaceMode === 'graph' ? '.graph-layer-scroll' : '.timeline-table');
+        if(!viewport) return;
+        const header = this.surfaceMode === 'graph' || this.animation.activeAction ? 0
+            : (this.editor.selectedSVG?.animation.composition?.placements.length ?? 0) * this.placementRowHeight;
+        this.updateLayerWindow(index * TIMELINE_ROW_HEIGHT, viewport.clientHeight);
+        this.afterNavigationLayout(() => viewport.scrollTop = header + index * TIMELINE_ROW_HEIGHT);
+    }
+
+    private navigationTracks(): AnimationTrack[] {
+        this.pruneFilteredKeySelection();
+        const tracks = (this.activeAnimation?.tracks ?? []).filter(track => track.enabled !== false && (!this.animation.allowsTarget || this.animation.allowsTarget(track.targetId)));
+        const selected = tracks.filter(track => track.keyframes.some(key => this.selectedKeyframeIds.has(key.id)));
+        if(selected.length) return selected;
+        const scope = this.selectionScope();
+        return scope.targets.size ? tracks.filter(track => scope.targets.has(track.targetId)
+            && (!scope.bones.size || scope.bones.has(parseRigAnimationProperty(track.property)?.boneId ?? ''))) : tracks;
+    }
+
+    adjacentPoseTime(direction: -1 | 1): number | undefined {
+        return adjacentKeyTime(this.navigationTracks().flatMap(track => track.keyframes.map(key => key.time))
+            .filter(time => time >= 0 && time <= this.animation.duration), this.animation.currentTime, direction);
+    }
+
+    jumpToPose(direction: -1 | 1): void {
+        const time = this.adjacentPoseTime(direction);
+        if(time == null) return;
+        this.animation.pause?.(); this.animation.seek(time);
+    }
+
+    get canFitSelectedKeys(): boolean { return this.selectedKeyframeEntries().length > 0; }
+
+    get retimeSelection(): { count: number; start: number; end: number; signature: string } {
+        const entries = this.selectedKeyframeEntries();
+        const times = entries.map(entry => entry.keyframe.time);
+        return { count: entries.length, start: times.length ? Math.min(...times) : 0, end: times.length ? Math.max(...times) : 0,
+            signature: JSON.stringify(entries.map(({ track, keyframe }) => [track.id, keyframe.id, keyframe.time])) };
+    }
+
+    planSelectedKeyRetime(operation: RetimeOperation): RetimePlan {
+        this.pruneFilteredKeySelection();
+        return planKeyframeRetime(this.activeAnimation?.tracks ?? [], this.selectedKeyframeIds, operation);
+    }
+
+    retimeSelectedKeys(operation: RetimeOperation): boolean {
+        this.cancelContextGestures(); this.cancelGraphDrag(); this.cancelKeyframeDrag();
+        const plan = this.planSelectedKeyRetime(operation);
+        if(plan.problem) { this.animation.contextMessage = plan.problem; return false; }
+        if(!plan.updates.length) return false;
+        this.animation.pause?.();
+        // Preserve key identities and route the single completion through the timeline's mutation boundary.
+        plan.updates.forEach(({ track, keyframes }) => {
+            const byId = new Map(track.keyframes.map(key => [key.id, key]));
+            track.keyframes = keyframes.map(key => Object.assign(byId.get(key.id)!, key));
+        });
+        this.activeGraphHandle = undefined; this.selectedGraphHandleKeys.clear();
+        this.speedCurveCache.clear(); this.layerSummaryCache.clear();
+        this.animation.invalidate(plan.updates.map(update => update.track.id));
+        this.animation.previewAt(this.animation.currentTime);
+        this.animationChange.emit();
+        this.changeDetector.markForCheck();
+        return true;
+    }
+    fitSelectedKeys(): void {
+        const times = this.selectedKeyframeEntries().map(entry => entry.keyframe.time);
+        if(times.length) this.fitTimeRange(Math.min(...times), Math.max(...times));
+    }
+    fitWorkArea(): void { this.fitTimeRange(this.animation.workArea.start, this.animation.workArea.end); }
+
+    private fitTimeRange(start: number, end: number): void {
+        const viewport = this.host.nativeElement.querySelector<HTMLElement>('.timeline-table, .graph-time-pane');
+        const layerWidth = viewport?.classList.contains('timeline-table') ? 360 : 0;
+        const width = Math.max(100, (viewport?.clientWidth ?? 600) - layerWidth);
+        const span = Math.max(.5, end - start);
+        this.pixelsPerSecond = this.clampTimelineScale((width - this.timePadding * 2) / span);
+        if(viewport) this.afterNavigationLayout(() => {
+            viewport.scrollLeft = Math.max(0, this.timeToX((start + end) / 2) - width / 2);
+            this.updateVisibleTime(viewport.scrollLeft, viewport.clientWidth, layerWidth);
+        });
+    }
+    private afterNavigationLayout(callback: () => void): void {
+        if(this.navigationFrame != null) cancelAnimationFrame(this.navigationFrame);
+        this.navigationFrame = requestAnimationFrame(() => { this.navigationFrame = undefined; callback(); this.changeDetector.markForCheck(); });
     }
 
     trackRow(_index: number, row: TimelineRow): string {
@@ -211,8 +381,9 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     isPropertyRow(row: TimelineRow): row is NumericTimelineRow { return 'property' in row; }
-    rowExpanded(row: TimelineRow): boolean { return this.expandedLayerIds.has(timelineRowId(row)); }
+    rowExpanded(row: TimelineRow): boolean { return this.filteringRows || this.expandedLayerIds.has(timelineRowId(row)); }
     toggleRow(row: TimelineRow): void {
+        if(this.filteringRows) return;
         const id = timelineRowId(row);
         if(this.expandedLayerIds.has(id)) this.expandedLayerIds.delete(id); else this.expandedLayerIds.add(id);
     }
@@ -224,6 +395,14 @@ export class TimelineEditorService implements OnDestroy {
         const constraint = row.rig.constraints?.find(item => item.enabled && [item.upperBoneId, item.lowerBoneId].includes(row.bone.id));
         return constraint ? `Posed by IK. Animate ${row.rig.bones.find(bone => bone.id === constraint.targetBoneId)?.name ?? 'the target'} instead.` : '';
     }
+    rowLoopLabel(row: TimelineRow): string {
+        if(!('property' in row)) return '';
+        const property = row.property.property === 'transform.scale' ? 'transform.scaleX' : row.property.property;
+        const track = this.activeAnimation?.tracks.find(track => track.targetId === timelineRowTargetId(row) && track.property === property);
+        const seam = track && loopEndpoints(track);
+        return seam ? `Linked loop endpoints: ${seam.start.time}–${seam.end.time}s${track!.loopSeam?.smooth ? ', matching seam speed' : ''}` : '';
+    }
+
     private rowTrack(row: NumericTimelineRow, property = row.property.property): AnimationTrack | undefined {
         return this.activeAnimation?.tracks.find(track => track.targetId === timelineRowTargetId(row) && track.property === property);
     }
@@ -244,6 +423,9 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     selectTimelineRow(row: TimelineRow) {
+        this.cancelGraphDrag();
+        this.activeGraphHandle = undefined;
+        this.selectedGraphHandleKeys.clear();
         if('rig' in row) {
             this.editor.selectedElements = [];
             if(row.type === 'rig') this.rig?.select(row.rig.id); else this.rig?.selectBone(row.rig.id, row.bone.id);
@@ -348,7 +530,7 @@ export class TimelineEditorService implements OnDestroy {
             return this.animation.trackFor(row.element, row.property.property)?.keyframes ?? [];
         }
 
-        if(this.expandedLayerIds.has(row.element.id)) return [];
+        if(this.rowExpanded(row)) return [];
         const cacheKey = `${this.editor.selectedSVG?.id ?? ""}:${row.element.id}`;
         const cached = this.layerSummaryCache.get(cacheKey);
         if(cached?.revision === this.animation.revision) return cached.keyframes;
@@ -375,13 +557,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private rigRowTracks(row: Extract<TimelineRow, {type: 'rig' | 'bone'}>): AnimationTrack[] {
-        const ids = new Set(row.type === 'rig' ? row.rig.bones.map(bone => bone.id) : [row.bone.id]);
-        if(row.type === 'bone') {
-            for(let changed = true; changed;) {
-                changed = false;
-                row.rig.bones.forEach(bone => { if(bone.parentId && ids.has(bone.parentId) && !ids.has(bone.id)) { ids.add(bone.id); changed = true; } });
-            }
-        }
+        const ids = rigBoneBranchIds(row.rig, row.type === 'bone' ? row.bone.id : undefined);
         return this.activeAnimation?.tracks.filter(track => track.targetId === row.rig.id && ids.has(parseRigAnimationProperty(track.property)?.boneId ?? '')) ?? [];
     }
 
@@ -543,20 +719,24 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     selectGraphProperty(property: string): void {
+        this.cancelGraphDrag();
+        this.activeGraphHandle = undefined;
+        this.selectedGraphHandleKeys.clear();
         const target = findAnimationTarget(this.editor.selectedSVG?.elements ?? [], this.selectedGraphTargetId ?? "");
         this.selectedGraphProperty = target && (property === "transform.scaleX" || property === "transform.scaleY")
             && this.elementScaleLinked(target) ? UNIFORM_SCALE_PROPERTY.property : property;
         this.fitSpeed();
     }
 
-    graphHeight(): number { return Math.max(120, this.timelineHeight - 82); }
+    graphViewportHeight?: number;
+    graphHeight(): number { return Math.max(60, (this.graphViewportHeight ?? this.timelineHeight - 150) - 30); }
     graphZeroY(): number { return this.graphSpeedY(0); }
     graphPlayheadX(): number { return this.timeToX(this.animation.currentTime); }
 
     speedCurvePath(track: AnimationTrack): string {
         const keys = track.keyframes;
         if(keys.length < 2) return "";
-        const cacheKey = `${this.pixelsPerSecond}:${this.graphSpeedMin}:${this.graphSpeedMax}:${this.graphHeight()}:${keys.map((key) => `${key.time}:${key.value}:${key.easing?.type ?? "linear"}:${key.temporal?.in?.speed ?? ""}:${key.temporal?.in?.influence ?? ""}:${key.temporal?.out?.speed ?? ""}:${key.temporal?.out?.influence ?? ""}`).join("|")}`;
+        const cacheKey = `${this.timeDomainStart}:${this.pixelsPerSecond}:${this.graphSpeedMin}:${this.graphSpeedMax}:${this.graphHeight()}:${keys.map((key) => `${key.time}:${key.value}:${key.easing?.type ?? "linear"}:${key.temporal?.in?.speed ?? ""}:${key.temporal?.in?.influence ?? ""}:${key.temporal?.out?.speed ?? ""}:${key.temporal?.out?.influence ?? ""}`).join("|")}`;
         const cached = this.speedCurveCache.get(track.id);
         if(cached?.key === cacheKey) return cached.path;
         const parts: string[] = [];
@@ -645,9 +825,18 @@ export class TimelineEditorService implements OnDestroy {
             this.selectedGraphHandleKeys.add(key);
         }
         const selected = this.graphTracks().flatMap(({ track }) => this.graphHandles(track)).filter((candidate) => this.selectedGraphHandleKeys.has(this.graphHandleKey(candidate)));
-        const originalTemporal = new Map(selected.map((candidate) => [this.graphHandleKey(candidate), this.cloneValue(candidate.keyframe.temporal)]));
-        selected.forEach((candidate) => this.initializeGraphHandle(candidate));
-        if(event.altKey) selected.forEach((candidate) => candidate.keyframe.temporal!.linked = false);
+        if(!selected.length) { this.activeGraphHandle = undefined; return; }
+        this.animation.pause?.();
+        const tracks = new Set(selected.map(handle => handle.track));
+        if(this.selectedGraphProperty === UNIFORM_SCALE_PROPERTY.property) {
+            for(const track of [...tracks]) {
+                const partner = this.activeAnimation?.tracks.find(candidate => candidate.targetId === track.targetId
+                    && candidate.property === (track.property === 'transform.scaleX' ? 'transform.scaleY' : 'transform.scaleX'));
+                if(partner) tracks.add(partner);
+            }
+        }
+        const originalTemporal = [...tracks].flatMap(track => track.keyframes.map(keyframe =>
+            ({ track, keyframe, temporal: this.cloneValue(keyframe.temporal) })));
         this.activeGraphHandle = handle;
         this.graphDrag = {
             pointerId: event.pointerId,
@@ -658,13 +847,16 @@ export class TimelineEditorService implements OnDestroy {
             moved: false,
             uniformScale: this.selectedGraphProperty === UNIFORM_SCALE_PROPERTY.property,
             capture: (event.currentTarget as Element).closest<HTMLElement>(".speed-graph-surface") ?? undefined,
-            snapshots: selected.map((candidate) => ({ handle: candidate, temporal: originalTemporal.get(this.graphHandleKey(candidate)) })),
+            unlink: event.altKey,
+            originalTemporal,
+            snapshots: selected.map(handle => ({ handle, temporal: this.cloneValue(handle.keyframe.temporal) })),
         };
         try { this.graphDrag.capture?.setPointerCapture(event.pointerId); } catch {}
         this.installGlobalPointerTracking(
             event.pointerId,
             (pointerEvent) => this.updateGraphHandleDrag(pointerEvent),
             (pointerEvent) => this.zone.run(() => this.endGraphHandleDrag(pointerEvent)),
+            () => this.zone.run(() => this.cancelGraphDrag()),
         );
     }
 
@@ -674,7 +866,7 @@ export class TimelineEditorService implements OnDestroy {
         this.graphDrag.latestX = event.clientX;
         this.graphDrag.latestY = event.clientY;
         if(Math.hypot(event.clientX - this.graphDrag.startX, event.clientY - this.graphDrag.startY) > 1) this.graphDrag.moved = true;
-        if(this.graphFrame == null) {
+        if(this.graphDrag.moved && this.graphFrame == null) {
             this.zone.runOutsideAngular(() => this.graphFrame = requestAnimationFrame(() => this.zone.run(() => this.applyGraphDragFrame())));
         }
     }
@@ -683,35 +875,29 @@ export class TimelineEditorService implements OnDestroy {
         if(!this.graphDrag || this.graphDrag.pointerId !== event.pointerId) return;
         if(this.graphFrame != null) { cancelAnimationFrame(this.graphFrame); this.graphFrame = undefined; this.applyGraphDragFrame(); }
         const drag = this.graphDrag;
-        const moved = drag.moved;
-        if(!moved) {
-            drag.snapshots.forEach((snapshot) => snapshot.handle.keyframe.temporal = this.cloneValue(snapshot.temporal));
-            const trackIds = new Set(drag.snapshots.map((snapshot) => snapshot.handle.track.id));
-            if(drag.uniformScale) {
-                drag.snapshots.forEach((snapshot) => {
-                    const partner = this.mirrorScaleTrack(snapshot.handle.track);
-                    if(partner) trackIds.add(partner.id);
-                });
-            }
-            this.animation.invalidate(trackIds);
-            this.animation.previewAt(this.animation.currentTime);
-        }
-        try { drag.capture?.releasePointerCapture(event.pointerId); } catch {}
+        const moved = drag.moved && drag.originalTemporal.some(snapshot =>
+            JSON.stringify(snapshot.keyframe.temporal) !== JSON.stringify(snapshot.temporal));
+        if(!moved) this.restoreGraphTangents(drag);
         this.graphDrag = undefined;
+        try { drag.capture?.releasePointerCapture(event.pointerId); } catch {}
         this.clearGlobalPointerTracking();
+        this.changeDetector.markForCheck();
         if(moved) this.animationChange.emit();
     }
 
     setActiveHandleValue(field: "speed" | "influence", value: number | string): void {
-        if(!this.activeGraphHandle) return;
+        const active = this.activeGraphHandle;
+        if(!active) return;
         const numeric = Number(value);
         if(!Number.isFinite(numeric)) return;
-        const handle = this.initializeGraphHandle(this.activeGraphHandle);
+        const next = field === "influence" ? Math.max(0, Math.min(1, numeric)) : numeric;
+        if(next === active[field]) return;
+        const handle = this.initializeGraphHandle(active);
         handle[field] = field === "influence" ? Math.max(0, Math.min(1, numeric)) : numeric;
-        this.linkGraphHandleSpeed(this.activeGraphHandle);
-        const trackIds = new Set([this.activeGraphHandle.track.id]);
+        this.linkGraphHandleSpeed(active);
+        const trackIds = new Set([active.track.id]);
         if(this.selectedGraphProperty === UNIFORM_SCALE_PROPERTY.property) {
-            const partner = this.mirrorScaleTrack(this.activeGraphHandle.track);
+            const partner = this.mirrorScaleTrack(active.track);
             if(partner) trackIds.add(partner.id);
         }
         this.animation.invalidate(trackIds);
@@ -728,6 +914,7 @@ export class TimelineEditorService implements OnDestroy {
         const source = temporal[active.side];
         const opposite = active.side === "in" ? temporal.out : temporal.in;
         if(source && opposite) opposite.speed = source.speed;
+        syncLoopSeam(active.track, undefined, active.keyframe.id);
         const trackIds = new Set([active.track.id]);
         if(this.selectedGraphProperty === UNIFORM_SCALE_PROPERTY.property) {
             const partner = this.mirrorScaleTrack(active.track);
@@ -761,8 +948,27 @@ export class TimelineEditorService implements OnDestroy {
         return Math.max(360, ((this.timeDomainEnd - this.timeDomainStart) * this.pixelsPerSecond) + (this.timePadding * 2));
     }
 
-    get timeDomainStart(): number { return this.timeDomainBounds().start; }
-    get timeDomainEnd(): number { return this.timeDomainBounds().end; }
+    get timeDomainStart(): number { return Math.min(this.timeDomainBounds().start,
+        this.inspection?.loopGhosts ? this.animation.workArea.start - this.loopGhostSpan : 0); }
+    get timeDomainEnd(): number { return Math.max(this.timeDomainBounds().end,
+        this.inspection?.loopGhosts ? this.animation.workArea.end + this.loopGhostSpan : 0); }
+    private get loopGhostSpan(): number { return (this.animation.workArea.end - this.animation.workArea.start) * .2; }
+    loopSeamX(side: 'start' | 'end'): number { return this.timeToX(this.animation.workArea[side]); }
+    loopGhostPath(track: AnimationTrack): string {
+        if(!this.inspection?.loopGhosts) return '';
+        const {start, end} = this.animation.workArea, span = end - start;
+        if(span <= 0) return '';
+        const parts: string[] = [];
+        for(const direction of [-1, 1]) for(let index = 0; index <= 48; index++) {
+            const t = direction < 0 ? start - this.loopGhostSpan + this.loopGhostSpan * index / 48 : end + this.loopGhostSpan * index / 48;
+            const sample = direction < 0 ? t + span : t - span;
+            const keys = track.keyframes;
+            const i = keys.findIndex((key, i) => i < keys.length - 1 && sample >= key.time && sample <= keys[i+1].time);
+            const speed = i < 0 ? 0 : this.segmentSpeed(keys[i], keys[i+1], sample);
+            parts.push(`${index ? 'L' : 'M'}${this.timeToX(t).toFixed(2)},${this.graphSpeedY(speed).toFixed(2)}`);
+        }
+        return parts.join(' ');
+    }
 
     get overscrollHeight(): number {
         const toolbarHeight = 36;
@@ -887,11 +1093,7 @@ export class TimelineEditorService implements OnDestroy {
         table.scrollLeft = Math.max(0, layerWidth + this.timePadding + (anchorTime - this.timeDomainStart) * nextScale - anchorScreen);
     }
 
-    fitTimeline() {
-        const visibleWidth = this.host.nativeElement.querySelector<HTMLElement>(".timeline-ruler-cell")?.clientWidth ?? 600;
-        const span = Math.max(0.1, this.timeDomainEnd - this.timeDomainStart);
-        this.pixelsPerSecond = this.clampTimelineScale((visibleWidth - (this.timePadding * 2)) / span);
-    }
+    fitTimeline() { this.fitTimeRange(this.timeDomainStart, this.timeDomainEnd); }
 
     rulerMarks(): TimelineRulerMark[] {
         const start = this.timeDomainStart;
@@ -1094,7 +1296,11 @@ export class TimelineEditorService implements OnDestroy {
             selected.add(entry.keyframe.id);
             selectedByTrack.set(entry.track, selected);
         });
-        selectedByTrack.forEach((selected, track) => applyEasingPresetToSelection(track, selected, type));
+        selectedByTrack.forEach((selected, track) => {
+            const previous = structuredClone(track);
+            applyEasingPresetToSelection(track, selected, type);
+            syncLoopSeam(track, previous);
+        });
         this.animation.invalidate(new Set([...selectedByTrack.keys()].map((track) => track.id)));
         this.animation.previewAt(this.animation.currentTime);
         this.animationChange.emit();
@@ -1155,9 +1361,8 @@ export class TimelineEditorService implements OnDestroy {
         }
 
         const entries = this.selectedKeyframeEntries();
-        if(entries.length === 0) {
-            return;
-        }
+        if(entries.length === 0 || this.loopBoundaryRetimeBlocked(entries)) return;
+        this.animation.pause?.();
 
         this.keyframeDrag = {
             pointerId: event.pointerId,
@@ -1178,6 +1383,7 @@ export class TimelineEditorService implements OnDestroy {
             event.pointerId,
             (pointerEvent) => this.updateKeyframeDrag(pointerEvent),
             (pointerEvent) => this.zone.run(() => this.endKeyframeDrag(pointerEvent)),
+            () => this.zone.run(() => this.cancelKeyframeDrag()),
         );
     }
 
@@ -1233,6 +1439,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     copySelectedKeyframes(): boolean {
+        this.pruneFilteredKeySelection();
         return this.editing.copy(this.activeAnimation?.tracks ?? []);
     }
 
@@ -1273,6 +1480,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     deleteSelectedKeyframes(): boolean {
+        this.pruneFilteredKeySelection();
         const svg = this.editor.selectedSVG;
         if(!svg || !this.editing.delete(this.activeAnimation!)) {
             return false;
@@ -1626,6 +1834,7 @@ export class TimelineEditorService implements OnDestroy {
     beginScrub(event: PointerEvent) {
         if(event.button !== 0) return;
         event.preventDefault();
+        this.animation.pause?.();
         this.scrubbing = true;
         this.scrubPointerId = event.pointerId;
         this.scrubRect = (event.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1636,6 +1845,7 @@ export class TimelineEditorService implements OnDestroy {
             event.pointerId,
             (pointerEvent) => this.updateScrub(pointerEvent),
             (pointerEvent) => this.endScrub(pointerEvent),
+            () => this.cancelScrub(),
         );
         this.queueScrubFrame();
     }
@@ -1653,10 +1863,18 @@ export class TimelineEditorService implements OnDestroy {
         if(this.scrubFrame != null) cancelAnimationFrame(this.scrubFrame);
         this.scrubFrame = undefined;
         this.applyScrubFrame();
+        this.cancelScrub();
+    }
+
+    private cancelScrub(): void {
+        if(!this.scrubbing) return;
+        if(this.scrubFrame != null) cancelAnimationFrame(this.scrubFrame);
+        this.scrubFrame = undefined;
+        const pointerId = this.scrubPointerId;
         this.scrubbing = false;
         this.scrubPointerId = undefined;
         this.scrubRect = undefined;
-        try { this.scrubCapture?.releasePointerCapture(event.pointerId); } catch {}
+        if(pointerId != null) { try { this.scrubCapture?.releasePointerCapture(pointerId); } catch {} }
         this.scrubCapture = undefined;
         this.clearGlobalPointerTracking();
     }
@@ -1801,6 +2019,11 @@ export class TimelineEditorService implements OnDestroy {
         const commandKey = event.ctrlKey || event.metaKey;
         const key = event.key.toLowerCase();
 
+        if(event.altKey && !commandKey && !event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+            this.jumpToPose(event.key === 'ArrowLeft' ? -1 : 1);
+            this.consumeShortcut(event); return;
+        }
+
         if(commandKey && key === "c") {
             if(this.copySelectedKeyframes()) {
                 this.consumeShortcut(event);
@@ -1854,7 +2077,7 @@ export class TimelineEditorService implements OnDestroy {
             const settings = element.settings as Record<string, unknown>;
             const fill = isGradientPaint(settings["fill"]) ? settings["fill"].id : "";
             const stroke = isGradientPaint(settings["stroke"]) ? settings["stroke"].id : "";
-            parts.push(`${element.id}:${element.motion.pathId ?? ""}:${fill}:${stroke}`);
+            parts.push(`${element.id}:${element.name}:${element.motion.pathId ?? ""}:${fill}:${stroke}`);
             if(element instanceof Group) append(element.elements);
         });
         append(elements);
@@ -1867,13 +2090,13 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private segmentSpeed(from: Keyframe, to: Keyframe, time: number): number {
+        if(from.easing?.type === "hold") return 0;
         if(from.temporal?.out || to.temporal?.in) return evaluateTemporalSpeed(from, to, time);
         const duration = to.time - from.time;
         if(duration <= 0) return 0;
         const base = (Number(to.value) - Number(from.value)) / duration;
         const t = Math.max(0, Math.min(1, (time - from.time) / duration));
         switch(from.easing?.type ?? "linear") {
-            case "hold": return 0;
             case "ease-in": return base * 2 * t;
             case "ease-out": return base * 2 * (1 - t);
             case "ease-in-out": return base * (t < 0.5 ? 4 * t : 4 * (1 - t));
@@ -1915,10 +2138,12 @@ export class TimelineEditorService implements OnDestroy {
 
     private linkGraphHandleSpeed(handle: GraphHandle): void {
         const temporal = handle.keyframe.temporal;
-        if(!temporal?.linked) return;
-        const active = temporal[handle.side];
-        const opposite = handle.side === "in" ? temporal.out : temporal.in;
-        if(active && opposite) opposite.speed = active.speed;
+        if(temporal?.linked) {
+            const active = temporal[handle.side];
+            const opposite = handle.side === 'in' ? temporal.out : temporal.in;
+            if(active && opposite) opposite.speed = active.speed;
+        }
+        syncLoopSeam(handle.track, undefined, handle.keyframe.id);
     }
 
     private applyGraphDragFrame(): void {
@@ -1927,13 +2152,12 @@ export class TimelineEditorService implements OnDestroy {
         if(!drag) return;
         const speedPerPixel = (this.graphSpeedMax - this.graphSpeedMin) / Math.max(1, this.graphHeight() - 20);
         const deltaSpeed = (drag.startY - drag.latestY) * speedPerPixel;
-        const restored = new Set<Keyframe>();
+        this.restoreGraphTangents(drag);
         drag.snapshots.forEach((snapshot) => {
-            if(restored.has(snapshot.handle.keyframe)) return;
-            snapshot.handle.keyframe.temporal = this.cloneValue(snapshot.temporal);
-            restored.add(snapshot.handle.keyframe);
-        });
-        drag.snapshots.forEach((snapshot) => {
+            if(drag.unlink) {
+                snapshot.handle.keyframe.temporal ??= { linked: false };
+                snapshot.handle.keyframe.temporal.linked = false;
+            }
             const value = this.initializeGraphHandle(snapshot.handle);
             const original = snapshot.temporal?.[snapshot.handle.side] ?? { speed: snapshot.handle.speed, influence: snapshot.handle.influence };
             const duration = Math.max(1e-9, Math.abs(snapshot.handle.other.time - snapshot.handle.keyframe.time));
@@ -1951,26 +2175,30 @@ export class TimelineEditorService implements OnDestroy {
         }
         this.animation.invalidate(trackIds);
         this.animation.previewAt(this.animation.currentTime);
+        this.changeDetector.markForCheck();
     }
 
-    private cancelGraphDrag(): void {
+    private restoreGraphTangents(drag: GraphHandleDrag): void {
+        for(const snapshot of drag.originalTemporal) {
+            const key = snapshot.track.keyframes.find(key => key.id === snapshot.keyframe.id);
+            if(key) key.temporal = this.cloneValue(snapshot.temporal);
+        }
+    }
+
+    private cancelGraphDrag(restore = true): void {
         const drag = this.graphDrag;
         if(!drag) return;
         if(this.graphFrame != null) cancelAnimationFrame(this.graphFrame);
         this.graphFrame = undefined;
-        drag.snapshots.forEach((snapshot) => snapshot.handle.keyframe.temporal = this.cloneValue(snapshot.temporal));
-        const trackIds = new Set(drag.snapshots.map((snapshot) => snapshot.handle.track.id));
-        if(drag.uniformScale) {
-            drag.snapshots.forEach((snapshot) => {
-                const partner = this.mirrorScaleTrack(snapshot.handle.track);
-                if(partner) trackIds.add(partner.id);
-            });
-        }
-        try { drag.capture?.releasePointerCapture(drag.pointerId); } catch {}
+        if(restore) this.restoreGraphTangents(drag);
         this.graphDrag = undefined;
+        try { drag.capture?.releasePointerCapture(drag.pointerId); } catch {}
         this.clearGlobalPointerTracking();
-        this.animation.invalidate(trackIds);
-        this.animation.previewAt(this.animation.currentTime);
+        if(restore) {
+            this.animation.invalidate(new Set(drag.originalTemporal.map(snapshot => snapshot.track.id)));
+            this.animation.previewAt(this.animation.currentTime);
+        }
+        this.changeDetector.markForCheck();
     }
 
     private applyKeyframeDragFrame(): void {
@@ -2268,12 +2496,17 @@ export class TimelineEditorService implements OnDestroy {
             const end = (event: PointerEvent) => { if(event.pointerId === pointerId) endCallback(event); };
             document.addEventListener("pointermove", move, { capture: true, passive: false });
             document.addEventListener("pointerup", end, true);
-            document.addEventListener("pointercancel", end, true);
+            const cancel = (event: PointerEvent) => {
+                if(event.pointerId === pointerId) { if(cancelCallback) cancelCallback(); else endCallback(event); }
+            };
+            document.addEventListener("pointercancel", cancel, true);
+            if(cancelCallback) document.addEventListener('lostpointercapture', cancel, true);
             if(cancelCallback) window.addEventListener('blur', cancelCallback);
             this.globalPointerCleanup = () => {
                 document.removeEventListener("pointermove", move, true);
                 document.removeEventListener("pointerup", end, true);
-                document.removeEventListener("pointercancel", end, true);
+                document.removeEventListener("pointercancel", cancel, true);
+                if(cancelCallback) document.removeEventListener('lostpointercapture', cancel, true);
                 if(cancelCallback) window.removeEventListener('blur', cancelCallback);
                 this.globalPointerCleanup = undefined;
             };
@@ -2338,7 +2571,16 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private selectedKeyframeEntries(): KeyframeEntry[] {
+        this.pruneFilteredKeySelection();
         return this.editing.entries(this.activeAnimation?.tracks ?? []);
+    }
+
+    private pruneFilteredKeySelection(): void {
+        if(!this.filteringRows) return;
+        const visible = new Set(this.rows.filter(row => 'property' in row).flatMap(row => this.keyframes(row)
+            .flatMap(key => key.groupedKeyframeIds ?? [key.id])));
+        if(this.surfaceMode === 'graph') this.graphTracks().forEach(({track}) => track.keyframes.forEach(key => visible.add(key.id)));
+        this.editing.selectedKeyframeIds.forEach(id => { if(!visible.has(id)) this.editing.selectedKeyframeIds.delete(id); });
     }
 
     private timelineKeyframeEasingType(keyframe: TimelineKeyframe): EasingType | "mixed" {
@@ -2406,12 +2648,20 @@ export class TimelineEditorService implements OnDestroy {
         this.pruneKeyframeSelection();
     }
 
+    private loopBoundaryRetimeBlocked(entries: readonly KeyframeEntry[]): boolean {
+        if(!entries.some(({track, keyframe}) => track.loopSeam
+            && [track.loopSeam.startKeyId, track.loopSeam.endKeyId].includes(keyframe.id))) return false;
+        this.animation.contextMessage = 'Unlink loop endpoints before retiming boundary keys. Their values remain editable.';
+        return true;
+    }
+
     private nudgeSelectedKeyframes(direction: -1 | 1, largeStep: boolean): boolean {
         const entries = this.selectedKeyframeEntries();
         if(entries.length === 0) {
             return false;
         }
 
+        if(this.loopBoundaryRetimeBlocked(entries)) return true;
         const delta = direction * (largeStep ? 0.1 : 0.01);
         entries.forEach((entry) => {
             entry.keyframe.time = this.snapTime(entry.keyframe.time + delta);
@@ -2748,6 +2998,8 @@ interface GraphHandleDrag {
     uniformScale: boolean;
     capture?: HTMLElement;
     snapshots: GraphHandleSnapshot[];
+    unlink: boolean;
+    originalTemporal: { track: AnimationTrack; keyframe: Keyframe; temporal?: Keyframe['temporal'] }[];
 }
 
 function lowerBound(keys: readonly TimelineKeyframe[], time: number): number {

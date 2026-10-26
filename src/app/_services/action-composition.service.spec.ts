@@ -1,3 +1,4 @@
+import { linkLoopSeam, loopEndpoints } from '../editor/animation/loop-seam';
 import { ElementRef, NgZone } from '@angular/core';
 import { fakeAsync, tick } from '@angular/core/testing';
 import { TimelineEditorService } from './timeline-editor.service';
@@ -46,6 +47,35 @@ function track(targetId: string, property = 'transform.translateX'): AnimationTr
 }
 
 describe('action composition', () => {
+    it('links editable action endpoints through keying, undo, duplication, reload and runtime repeats', () => {
+        const t = setup(), source = t.actions.create('Loop')!;
+        source.animation.tracks = [track(t.shape.id)];
+        const channel = source.animation.tracks[0];
+        t.mutations.mutate(() => linkLoopSeam(channel,0,1,'start',true), 'animation');
+        t.playback.seek(1);
+        t.mutations.mutate(() => t.playback.upsertKeyframe(t.shape,'transform.translateX','number',25), 'animation');
+        expect(loopEndpoints(channel)!.start.value).toBe(25);
+        expect(loopEndpoints(channel)!.end.value).toBe(25);
+        t.mutations.undo();
+        expect(loopEndpoints(t.playback.activeAnimation!.tracks[0])!.start.value).toBe(0);
+        t.mutations.redo();
+        expect(loopEndpoints(t.playback.activeAnimation!.tracks[0])!.end.value).toBe(25);
+        const live = t.actions.actions[0];
+        t.actions.duplicate(live);
+        const copy = t.playback.activeAnimation!.tracks[0];
+        expect(loopEndpoints(copy)).toBeDefined();
+        expect(copy.loopSeam!.startKeyId).not.toBe(live.animation.tracks[0].loopSeam!.startKeyId);
+        t.playback.editAction(); const placement = t.actions.place(live.id,1)!;
+        t.actions.retime(placement,{repeat:3});
+        expect(t.actions.loopWarning(placement)).toBe('');
+        const save = t.mutations.captureSave()!;
+        expectRuntimeDomParity(save,[0,1,1.5,1.999,2,2.1,3,3.999,4,1.25]);
+        const restored = SVG.fromSave(JSON.parse(JSON.stringify(save)),t.editor);
+        expect(loopEndpoints(restored.animation.composition!.actions[0].animation.tracks[0])).toBeDefined();
+        t.actions.retime(placement,{sourceStart:.2}); expect(t.actions.loopWarning(placement)).toContain('differs');
+        t.playback.ngOnDestroy(); t.mutations.ngOnDestroy();
+    });
+
     it('commits a left-edge trim and scene start together and rejects extensions into adjacent blocks', () => {
         const t = setup(), source = t.actions.create('Move')!;
         t.playback.editAction(); const first = t.actions.place(source.id, 0)!, second = t.actions.place(source.id, 1)!;

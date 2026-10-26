@@ -1,5 +1,6 @@
 import { RigBindingControlsComponent } from './rig-binding-controls.component';
 import { RigConstraintsComponent } from './rig-constraints.component';
+import { RigPoseActionsComponent } from './rig-pose-actions.component';
 import { Component, OnDestroy } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
@@ -9,7 +10,7 @@ import { RigBindingSessionService } from '../../_services/rig-binding-session.se
 
 /** Workspace switching plus the selected bone's setup or pose; artwork and weights live in the binding controls. */
 @Component({
-    selector: 'app-rig-panel', standalone: true, imports: [RigBindingControlsComponent, RigConstraintsComponent, NgFor, NgIf, FaIconComponent],
+    selector: 'app-rig-panel', standalone: true, imports: [RigBindingControlsComponent, RigConstraintsComponent, RigPoseActionsComponent, NgFor, NgIf, FaIconComponent],
     template: `
     <div class="workspace-bar" *ngIf="rig.active">
       <div class="rig-segmented" role="group" aria-label="Rig workspace">
@@ -45,11 +46,11 @@ import { RigBindingSessionService } from '../../_services/rig-binding-session.se
             <div class="rig-fields"><label>Offset X<input aria-label="Pose offset X" type="number" [disabled]="!rig.canPose" [value]="display(livePosition.x)" (blur)="positionValue('x', $event)" (keydown)="fieldKey($event, display(bone.poseX ?? 0))" /></label>
               <label>Offset Y<input aria-label="Pose offset Y" type="number" [disabled]="!rig.canPose" [value]="display(livePosition.y)" (blur)="positionValue('y', $event)" (keydown)="fieldKey($event, display(bone.poseY ?? 0))" /></label>
               <label>Rotation (°)<input aria-label="FK rotation" type="number" [disabled]="!rig.canPose" [value]="display(livePose)" (blur)="poseValue($event)" (keydown)="fieldKey($event, display(bone.pose))" /></label></div>
-            <div *ngIf="rig.isAnimating" class="rig-actions"><button type="button" class="btn btn-sm btn-secondary" [disabled]="!rig.canPose" (click)="rig.keyPose()">Key pose at playhead</button></div>
             <p class="rig-hint">{{rig.isAnimating ? 'Pose changes create keys at the playhead in the current scene or action.' : 'Drag a tip to rotate, a body to move. Artwork follows as you drag; Esc cancels. Arrow keys nudge; Shift for larger steps.'}}</p>
           </ng-container>
           <p class="rig-hint" *ngIf="rig.workspace === 'pose' && rig.drivingConstraint(bone.id)">This bone follows IK. Select its target to animate the chain.</p>
         </ng-container>
+        <app-rig-pose-actions *ngIf="rig.isAnimating" />
         <div class="rig-actions"><button class="btn btn-sm btn-secondary" [disabled]="rig.isAnimating && !rig.canPose" [title]="rig.workspace === 'pose' && active.constraints?.length ? 'Clear rotations and moves; enabled IK still reaches for its targets' : 'Clear rotations and moves'" (click)="rig.resetPose()">Reset pose</button>
           <button *ngIf="!rig.isAnimating && rig.workspace === 'pose' && active.constraints?.length" class="btn btn-sm btn-secondary" title="Clear the pose and pause IK until you pose again; needed before binding artwork" (click)="rig.resetToRest()">Reset to rest</button></div>
       </section>

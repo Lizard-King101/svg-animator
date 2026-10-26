@@ -7,7 +7,7 @@ import { NgFor, NgIf } from '@angular/common';
 import { RigEditingService } from '../../_services/rig-editing.service';
 import { DocumentMutationService } from '../../_services/document-mutation.service';
 import { CanvasWorkspaceComponent } from '../canvas-workspace/canvas-workspace.component';
-import { canvasToWorkspaceProjection } from '../../editor/canvas-workspace-projection';
+import { canvasViewProjection } from '../../editor/canvas-workspace-projection';
 import { Bone, boneMatrices } from '../../editor/objects/armature';
 import { applyMatrix, invertMatrix, Matrix } from '../../editor/objects/transform.object';
 import { RigWeightOverlayComponent } from './rig-weight-overlay.component';
@@ -16,12 +16,14 @@ import { RigWeightOverlayComponent } from './rig-weight-overlay.component';
     selector: 'app-rig-overlay', standalone: true, imports: [NgFor, NgIf, RigWeightOverlayComponent],
     template: `
       <ng-container *ngIf="rig.visible && rig.active">
-        <svg aria-label="Armature bones"><g *ngFor="let bone of bones; trackBy: track">
+        <ng-container *ngIf="bones as projectedBones">
+        <svg aria-label="Armature bones"><g *ngFor="let bone of projectedBones; trackBy: track">
           <polygon *ngIf="!bone.point" class="bone-shape" [attr.points]="bone.diamond" [style.stroke]="bone.id === rig.boneId ? null : bone.color" [style.fill]="bone.color" [class.selected-bone]="bone.id === rig.boneId" [class.driven]="bone.driven" [class.ik-candidate]="bone.pickable === true" [class.ik-excluded]="bone.pickable === false" [class.picked]="session.pending?.bones?.includes(bone.id)" tabindex="0" role="button" [attr.aria-label]="'Select ' + bone.name" (pointerdown)="begin($event, bone.id, 'body')" (pointermove)="move($event)" (pointerup)="end($event)" (pointercancel)="cancel()" (lostpointercapture)="cancel()" (keydown)="key($event, bone.id)" (click)="choose(bone.id)" />
           <circle [attr.cx]="bone.start.x" [attr.cy]="bone.start.y" r="4" />
         </g></svg>
-        <button *ngFor="let bone of bones; trackBy: track" class="bone-tip" [class.point-bone]="bone.point" [class.picked]="session.pending?.bones?.includes(bone.id)" [style.--bone-color]="bone.color" [style.border-color]="bone.color" [style.left.px]="bone.end.x" [style.top.px]="bone.end.y" [attr.aria-label]="(rig.workspace === 'rest' ? 'Edit ' : 'Pose ') + bone.name" [title]="bone.title" [class.driven]="bone.driven" [class.ik-candidate]="bone.pickable === true" [class.ik-excluded]="bone.pickable === false" [attr.aria-pressed]="bone.id === rig.boneId"
+        <button *ngFor="let bone of projectedBones; trackBy: track" class="bone-tip" [class.point-bone]="bone.point" [class.picked]="session.pending?.bones?.includes(bone.id)" [style.--bone-color]="bone.color" [style.border-color]="bone.color" [style.left.px]="bone.end.x" [style.top.px]="bone.end.y" [attr.aria-label]="(rig.workspace === 'rest' ? 'Edit ' : 'Pose ') + bone.name" [title]="bone.title" [class.driven]="bone.driven" [class.ik-candidate]="bone.pickable === true" [class.ik-excluded]="bone.pickable === false" [attr.aria-pressed]="bone.id === rig.boneId"
           (click)="$event.stopPropagation(); choose(bone.id)" (pointerdown)="begin($event, bone.id, bone.point ? 'body' : 'tip')" (pointermove)="move($event)" (pointerup)="end($event)" (pointercancel)="cancel()" (lostpointercapture)="cancel()" (keydown)="key($event, bone.id)"></button>
+        </ng-container>
         <app-rig-weight-overlay *ngIf="rig.workspace === 'weights'" [artwork]="artwork" [workspace]="workspace" />
       </ng-container>`,
     styles: `:host {display:contents;} svg {position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:20; overflow:visible;} line,circle {stroke:var(--accent);} circle {fill:var(--bg-surface);} .bone-tip {position:absolute; transform:translate(-50%,-50%); z-index:21; width:14px; height:14px; padding:0; border:2px solid var(--accent); background:var(--bg-surface); border-radius:50%; touch-action:none; cursor:pointer;} .bone-tip[aria-pressed=true],button:focus-visible,.selected {outline:2px solid var(--text-primary); outline-offset:2px;} .bone-shape {pointer-events:all; cursor:pointer; fill:var(--bg-surface); fill-opacity:.65; stroke:var(--text-secondary); stroke-width:1.5;} .bone-shape:hover {fill:var(--accent);} .bone-shape.picked {stroke:var(--accent); stroke-width:2.5;} .bone-shape.selected-bone {fill:var(--bg-base); fill-opacity:.9; stroke:var(--accent); stroke-width:3; paint-order:stroke;} .bone-shape:focus {outline:none;} .bone-shape:focus-visible {stroke:var(--text-primary); stroke-width:3;} .point-bone {width:22px; height:22px; background:transparent;} .point-bone::before,.point-bone::after {content:""; position:absolute; background:var(--bone-color,var(--accent)); left:50%; top:50%; transform:translate(-50%,-50%);} .point-bone::before {width:30px; height:1px;} .point-bone::after {height:30px; width:1px;} .bone-tip.picked {background:var(--bone-color,var(--accent));} .bone-shape.driven {stroke-dasharray:4 3;} .bone-tip.driven {border-style:dashed; cursor:not-allowed;} .bone-shape.ik-candidate {stroke:var(--accent); stroke-width:3; cursor:crosshair;} .bone-tip.ik-candidate {border-color:var(--accent); background:var(--accent); cursor:crosshair;} .ik-excluded {opacity:.3; cursor:not-allowed;}`,
@@ -42,7 +44,7 @@ export class RigOverlayComponent implements DoCheck, OnDestroy {
     track(_index: number, item: { id: string }) { return item.id; }
     private get projection() {
         const svg = this.rig.editor.selectedSVG;
-        return svg && this.artwork && this.workspace ? canvasToWorkspaceProjection(this.artwork.getBoundingClientRect(), this.workspace.element.getBoundingClientRect(), svg.canvasBounds).canvasToWorkspace : undefined;
+        return svg && this.artwork && this.workspace ? canvasViewProjection(svg).canvasToWorkspace : undefined;
     }
     get bones() {
         // Pose gestures preview through the shared live pose; only rest edits project a local skeleton draft.

@@ -26,6 +26,18 @@ export function rigTimelineProperties(bone: Bone): AnimatablePropertyDefinition[
         label: field === 'pose' ? 'Rotation' : field === 'poseX' ? 'Offset X' : 'Offset Y', valueType: 'number', group: 'transform', mvp: true }));
 }
 
+export function rigBoneBranchIds(rig: Armature, boneId?: string): Set<string> {
+    if(!boneId) return new Set(rig.bones.map(bone => bone.id));
+    const ids = new Set([boneId]);
+    for(let changed = true; changed;) {
+        changed = false;
+        rig.bones.forEach(bone => {
+            if(bone.parentId && ids.has(bone.parentId) && !ids.has(bone.id)) { ids.add(bone.id); changed = true; }
+        });
+    }
+    return ids;
+}
+
 @Injectable()
 export class TimelineEditingService {
     selectedKeyframeIds = new Set<string>();

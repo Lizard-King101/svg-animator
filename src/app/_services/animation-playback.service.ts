@@ -1,3 +1,4 @@
+import { syncLoopSeam, loopEndpoints } from '../editor/animation/loop-seam';
 import { compositionHasOverlap, restoreAnimation, placementTiming } from '../editor/objects/animation.object';
 import { Subject } from 'rxjs';
 import { AnimationAction, AnimationDocument } from '../editor/objects/animation.object';
@@ -26,11 +27,18 @@ export class AnimationPlaybackService implements OnDestroy {
     mode: EditorMode = "edit";
     currentTime = 0;
     speed = 1;
+    readonly previewSpeeds = [.25, .5, 1, 1.5, 2];
+    setPreviewSpeed(value: unknown): void {
+        const speed = Number(value);
+        if(!this.previewSpeeds.includes(speed)) return;
+        this.speed = speed;
+        this.lastFrameTime = undefined;
+    }
     contextMessage = '';
     playing = false;
     revision = 0;
 
-    readonly contextChanging = new Subject<void>();
+    readonly contextChanging = new Subject<'seek' | 'playback' | void>();
     private actionId?: string;
     private contextDocumentId?: string;
     private sceneTime = 0;
@@ -140,6 +148,10 @@ export class AnimationPlaybackService implements OnDestroy {
             this.contextMessage = 'This duration would overlap placements or cut off their trimmed source range. Adjust the placements first.';
             return;
         }
+        if(this.activeAnimation!.tracks.some(track => {
+            const pair = loopEndpoints(track);
+            return pair && pair.end.time > Math.max(.1, duration);
+        })) { this.contextMessage = 'Unlink loop endpoints before shortening the duration past their end.'; return; }
         const oldDuration = this.activeAnimation!.duration;
         const oldArea = normalizeWorkArea(this.activeAnimation!.workArea, oldDuration);
         const followsDuration = Math.abs(oldArea.start) < 0.0005 && Math.abs(oldArea.end - oldDuration) < 0.0005;
@@ -292,6 +304,7 @@ export class AnimationPlaybackService implements OnDestroy {
         }
 
         track.keyframes.sort((a, b) => a.time - b.time);
+        syncLoopSeam(track, undefined, this.findKeyframe(track, this.currentTime)?.id);
         this.invalidate([track.id]);
 
         if(this.mode === "animate") {
@@ -335,7 +348,7 @@ export class AnimationPlaybackService implements OnDestroy {
             return;
         }
 
-        this.contextChanging.next();
+        this.contextChanging.next('playback');
         this.setMode("animate");
         const range = this.workArea;
         if(this.currentTime < range.start || this.currentTime >= range.end) {
@@ -377,7 +390,7 @@ export class AnimationPlaybackService implements OnDestroy {
     }
 
     seek(time: number) {
-        if(this.clampTime(time) !== this.currentTime) this.contextChanging.next();
+        if(this.clampTime(time) !== this.currentTime) this.contextChanging.next('seek');
         this.currentTime = this.clampTime(time);
         if(this.mode === "animate") {
             this.previewAt(this.currentTime);

@@ -6,7 +6,7 @@ import { weightHeatColor } from '../../editor/rig-weight-colors';
 import { isEditableEventTarget } from '../../editor/editable-event-target';
 import { DocumentMutationService } from '../../_services/document-mutation.service';
 import { CanvasWorkspaceComponent } from '../canvas-workspace/canvas-workspace.component';
-import { canvasToWorkspaceProjection } from '../../editor/canvas-workspace-projection';
+import { canvasViewProjection } from '../../editor/canvas-workspace-projection';
 import { applyMatrix } from '../../editor/objects/transform.object';
 import { combinedMotionAdjustedMatrixFor } from '../../editor/objects/motion-path.object';
 import { BoneWeight, WeightPointRef, weightOwner } from '../../editor/objects/armature';
@@ -30,12 +30,14 @@ interface WeightSelectGesture extends WeightGestureContext { kind: 'select'; sta
     selector: 'app-rig-weight-overlay', standalone: true, imports: [NgFor, NgIf],
     template: `<ng-container *ngIf="enabled">
       <div class="paint-surface" [class.select-surface]="!painting" tabindex="0" [attr.aria-label]="painting ? 'Weight painting canvas' : 'Weight point selection canvas'" (pointerdown)="begin($event)" (pointermove)="move($event)" (pointerup)="end($event)" (pointercancel)="cancel()" (lostpointercapture)="cancel()" (pointerleave)="leave()" (blur)="captureBlur($event)" (mousedown)="$event.stopPropagation()"></div>
-      <svg class="weight-handles" aria-hidden="true"><ng-container *ngFor="let point of points; trackBy: track"><line *ngIf="point.handle" [class.independent]="!point.inherited" [attr.x1]="point.x" [attr.y1]="point.y" [attr.x2]="point.anchor.x" [attr.y2]="point.anchor.y" /></ng-container>
+      <ng-container *ngIf="points as projectedPoints">
+      <svg class="weight-handles" aria-hidden="true"><ng-container *ngFor="let point of projectedPoints; trackBy: track"><line *ngIf="point.handle" [class.independent]="!point.inherited" [attr.x1]="point.x" [attr.y1]="point.y" [attr.x2]="point.anchor.x" [attr.y2]="point.anchor.y" /></ng-container>
         <g *ngIf="painting && cursor" class="brush" [attr.data-tool]="session.paintMode"><circle class="brush-ring" [attr.cx]="cursor.x" [attr.cy]="cursor.y" [attr.r]="session.brushRadius" /><circle class="brush-half" [attr.cx]="cursor.x" [attr.cy]="cursor.y" [attr.r]="session.brushRadius / 2" /><circle class="brush-center" [attr.cx]="cursor.x" [attr.cy]="cursor.y" r="1.5" /></g>
         <rect *ngIf="marquee as box" class="selection-box" [attr.x]="box.x" [attr.y]="box.y" [attr.width]="box.width" [attr.height]="box.height" />
       </svg>
-      <button *ngFor="let cluster of clusters; trackBy: track" class="weight-point" [class.weight-handle]="cluster.handle" [class.overlapping]="cluster.groups.length > 1" [class.selected]="selected(cluster)" [style.left.px]="cluster.x" [style.top.px]="cluster.y" [style.background]="cluster.color" [attr.aria-label]="clusterLabel(cluster)" [title]="clusterLabel(cluster) + (painting ? ' · Drag to paint; Alt-click to inspect' : '')"
+      <button *ngFor="let cluster of clustersFor(projectedPoints); trackBy: track" class="weight-point" [class.weight-handle]="cluster.handle" [class.overlapping]="cluster.groups.length > 1" [class.selected]="selected(cluster)" [style.left.px]="cluster.x" [style.top.px]="cluster.y" [style.background]="cluster.color" [attr.aria-label]="clusterLabel(cluster)" [title]="clusterLabel(cluster) + (painting ? ' · Drag to paint; Alt-click to inspect' : '')"
         (pointerdown)="pointDown($event, cluster)" (pointermove)="move($event)" (pointerup)="end($event)" (pointercancel)="cancel()" (lostpointercapture)="cancel()" (blur)="captureBlur($event)" (mousedown)="$event.stopPropagation()" (click)="choose($event, cluster)" (keydown)="pointKey($event, cluster)">{{cluster.groups.length > 1 ? cluster.groups.length : ''}}</button>
+      </ng-container>
       <div class="rig-hud" role="status" aria-label="Weight brush">
         <span class="rig-hud-group"><span class="rig-swatch" [style.background]="rig.boneId ? session.color(rig.boneId) : null" aria-hidden="true"></span><strong>{{boneName}}</strong></span>
         <span>{{toolLabel}}<ng-container *ngIf="painting"> · {{session.brushRadius}}px · {{brushPercent(session.brushStrength)}}%<ng-container *ngIf="session.paintMode === 'set'"> → {{brushPercent(session.brushValue)}}%</ng-container></ng-container></span>
@@ -88,7 +90,7 @@ export class RigWeightOverlayComponent implements AfterViewChecked, DoCheck, OnD
     track(_index: number, point: { id: string }): string { return point.id; }
     private get projection() {
         const svg = this.rig.editor.selectedSVG;
-        return svg && this.artwork && this.workspace ? canvasToWorkspaceProjection(this.artwork.getBoundingClientRect(), this.workspace.element.getBoundingClientRect(), svg.canvasBounds).canvasToWorkspace : undefined;
+        return svg && this.artwork && this.workspace ? canvasViewProjection(svg).canvasToWorkspace : undefined;
     }
     private get context(): string { return this.session.scopeKey + ':' + this.session.paintMode + ':' + this.session.brushRadius + ':' + this.session.brushStrength + ':' + this.session.brushValue; }
     get points(): ProjectedWeightPoint[] {
@@ -112,6 +114,7 @@ export class RigWeightOverlayComponent implements AfterViewChecked, DoCheck, OnD
                 color: heat ? (state.boneIds.includes(this.rig.boneId ?? '') ? weightHeatColor(weight) : 'var(--text-muted)') : stops.length ? `conic-gradient(${stops.join(',')})` : 'var(--bg-surface)', percent: Math.round(weight*10000)/100 }];
         });
     }
+    readonly clustersFor = clusterWeightPoints;
     get clusters(): WeightCluster[] { return clusterWeightPoints(this.points); }
     get marquee(): {x: number; y: number; width: number; height: number} | undefined {
         const gesture = this.gesture;

@@ -6,7 +6,11 @@
     <line class="graph-playhead animation-graph-playhead"
           [attr.data-pixels-per-second]="timeline.pixelsPerSecond" [attr.data-time-padding]="timeline.timePadding" [attr.data-domain-start]="timeline.timeDomainStart"
           [attr.x1]="timeline.graphPlayheadX()" [attr.x2]="timeline.graphPlayheadX()" y1="0" [attr.y2]="timeline.graphHeight()"></line>
+    <ng-container *ngIf="timeline.inspection?.loopGhosts">
+      <line *ngFor="let side of ['start', 'end']" [attr.x1]="timeline.loopSeamX($any(side))" [attr.x2]="timeline.loopSeamX($any(side))" y1="0" [attr.y2]="timeline.graphHeight()" stroke="var(--text-muted)" stroke-dasharray="3 4" pointer-events="none" />
+    </ng-container>
     <ng-container *ngFor="let graphTrack of timeline.graphRenderTracks()">
+      <path *ngIf="timeline.inspection?.loopGhosts" [attr.d]="timeline.loopGhostPath(graphTrack.track)" [attr.stroke]="graphTrack.color" fill="none" stroke-dasharray="4 4" opacity="0.35" pointer-events="none" />
       <path class="speed-curve" [attr.d]="timeline.speedCurvePath(graphTrack.track)" [attr.stroke]="graphTrack.color"></path>
       <ng-container *ngFor="let handle of timeline.graphHandles(graphTrack.track)">
         <circle *ngIf="graphTrack.axis != 'y'" class="speed-key" [class.selected]="timeline.graphKeyframeSelected(handle)" [attr.stroke]="graphTrack.color"
@@ -45,5 +49,5 @@
   <div class="speed-axis-label max">{{ timeline.graphSpeedMax.toFixed(2) }}</div>
   <div class="speed-axis-label zero">0 units/s</div>
   <div class="speed-axis-label min">{{ timeline.graphSpeedMin.toFixed(2) }}</div>
-  <div class="graph-empty" *ngIf="timeline.graphTracks().length == 0">Select a numeric property with timeline.keyframes to edit its speed.</div>
+  <div class="graph-empty" *ngIf="timeline.graphTracks().length == 0">Select a numeric property with keyframes to edit its speed.</div>
 </div>

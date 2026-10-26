@@ -7,13 +7,15 @@
           *ngIf="!timeline.isPropertyRow(row)"
           [attr.aria-label]="(timeline.rowExpanded(row) ? 'Collapse ' : 'Expand ') + timeline.rowLabel(row)"
           [attr.aria-expanded]="timeline.rowExpanded(row)"
+          [disabled]="timeline.filteringRows"
+          [title]="timeline.filteringRows ? 'Matching branches are expanded while filtering' : ''"
           (click)="$event.stopPropagation(); timeline.toggleRow(row)">
     <fa-icon [icon]="timeline.rowExpanded(row) ? 'angle-down' : 'angle-right'"></fa-icon>
   </button>
   <span class="row-expander-placeholder" *ngIf="timeline.isPropertyRow(row)"></span>
   <span class="row-name" *ngIf="!timeline.isPropertyRow(row)">{{ row.type == 'rig' ? '⊕ ' : row.type == 'bone' ? '◇ ' : '' }}{{ timeline.rowLabel(row) }}</span>
   <ng-container *ngIf="row.type == 'property' || row.type == 'rig-property'">
-    <span class="row-name">{{ row.property.label }}</span>
+    <span class="row-name">{{ row.property.label }} <span *ngIf="timeline.rowLoopLabel(row) as loopLabel" [attr.title]="loopLabel" [attr.aria-label]="loopLabel">↔</span></span>
     <button class="scale-link-toggle"
             *ngIf="timeline.isScaleRow(row)"
             [class.active]="timeline.scaleLinked(row)"

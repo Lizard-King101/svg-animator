@@ -13,7 +13,7 @@ describe('persistent IK target gestures', () => {
             {id:'lower',name:'Shin',parentId:'upper',x:50,y:0,angle:0,length:40,pose:0},
             {id:'foot',name:'Foot L',kind:'point',parentId:null,x:300,y:200,angle:0,length:0,pose:0},
         ]};
-        const rig = {editor:{selectedSVG:{id:'document',canvasBounds:{x:10,y:20,width:100,height:100}},activeTool:{}},
+        const rig = {editor:{selectedSVG:{id:'document',width:100,height:100,zoom:2,pos:{x:100,y:150},canvasBounds:{x:10,y:20,width:100,height:100}},activeTool:{}},
             active,displayedRig:active,activeId:'rig',boneId:'lower',bone:active.bones[1],activeIKConstraint:constraint as TwoBoneIKConstraint | undefined,
             ikChain:{upper:active.bones[0],lower:active.bones[1]},ikTargetPosition:{x:300,y:200},ikEndpoint:{x:90,y:0},
             posePreview:undefined as Armature | undefined,clearPosePreview:jasmine.createSpy('clearPosePreview'),visible:true,canEdit:true,canPose:true,animationContext:'scene:0',workspace:'pose',poseMethod:'fk',problem:undefined,

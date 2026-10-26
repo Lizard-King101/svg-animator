@@ -39,6 +39,20 @@ function track(targetId: string, property: string, from: number | boolean, to: n
 }
 
 describe('animation inspection', () => {
+    it('wraps seam ghosts with display-time direction without changing live state or duration', () => {
+        const {animation,inspection,svg}=setup();
+        animation.setWorkArea(.2,.8); animation.seek(.8); inspection.loopGhosts=true;
+        const before=JSON.stringify(svg.save());
+        const skins=inspection.display!.skins;
+        expect(skins.map(skin=>skin.direction)).toEqual(['past','past','future','future']);
+        expect(skins[2].time).toBeCloseTo(.3); expect(skins[2].displayTime).toBeCloseTo(.9);
+        expect(skins[3].time).toBeCloseTo(.4);
+        expect(svg.animation.duration).toBe(1); expect(JSON.stringify(svg.save())).toBe(before);
+        animation.seek(.2);
+        expect(inspection.display!.skins[1].time).toBeCloseTo(.7);
+        expect(inspection.display!.skins[1].direction).toBe('past');
+        animation.ngOnDestroy();
+    });
     it('bounds onion samples without duplicate endpoints or loop wrapping', () => {
         expect(onionTimes(0, 1, 0.1)).toEqual([0.1, 0.2]);
         expect(onionTimes(1, 1, 0.1)).toEqual([0.8, 0.9]);

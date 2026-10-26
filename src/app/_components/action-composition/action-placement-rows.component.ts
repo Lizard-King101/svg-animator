@@ -11,10 +11,11 @@ import { ActionPlacementBlockComponent } from './action-placement-block.componen
     selector: 'app-action-placement-rows', standalone: true, imports: [DecimalPipe, NgFor, NgIf, FormsModule, ActionPlacementBlockComponent],
     template: `<ng-container *ngIf="!actions.playback.activeAction">
       <ng-container *ngFor="let placement of actions.placements; trackBy: identity">
-        <div class="placement-label" [style.height.px]="timeline.placementRowHeight">
+        <div class="placement-label" [attr.title]="actions.loopWarning(placement) || null" [style.height.px]="timeline.placementRowHeight">
           <div><button (click)="actions.playback.editAction(placement.actionId)" title="Edit linked source">{{actions.action(placement.actionId)?.name}}</button>
             <label>Start <input type="number" min="0" step="0.01" [attr.aria-label]="'Start of ' + name(placement)" [ngModel]="placement.start" (blur)="change(placement, 'start', $event)" (keydown)="key(placement, 'start', $event)"></label>
             <button (click)="actions.repeatPlacement(placement)" title="Copy timing into an adjacent linked placement">Repeat</button>
+            <span *ngIf="actions.loopWarning(placement)" aria-label="Trimmed loop seam warning">⚠</span>
             <button (click)="actions.removePlacement(placement)" aria-label="Remove placement">×</button></div>
           <div><label *ngFor="let field of fields">{{field.label}} <input type="number" [step]="field.key === 'repeat' ? 1 : .01"
             [attr.aria-label]="field.label + ' of ' + name(placement)" [ngModel]="value(placement, field.key)"

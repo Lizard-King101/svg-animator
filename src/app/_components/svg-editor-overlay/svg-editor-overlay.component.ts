@@ -2,7 +2,7 @@ import { ConstructionTool } from '../../_services/tools/construction.tool';
 import { NgFor, NgIf } from "@angular/common";
 import { Component, HostBinding, Input } from "@angular/core";
 import { EditorService } from "../../_services/editor.service";
-import { canvasToWorkspaceProjection } from "../../editor/canvas-workspace-projection";
+import { canvasToWorkspaceProjection, canvasViewProjection } from "../../editor/canvas-workspace-projection";
 import { localBounds, resolvedOrigin } from "../../editor/objects/element-bounds";
 import { Path } from "../../editor/objects/elements/path.object";
 import { gradientGeometry, GradientGeometry } from "../../editor/objects/gradient-geometry";
@@ -46,6 +46,15 @@ export class SVGEditorOverlayComponent {
     }
 
     asPath(element: unknown): Path | null { return element instanceof Path ? element : null; }
+
+    /** Authoring guides stay visible independently of the path's eventual fill/stroke. */
+    drawingPath() {
+        const pen = this.editor.activeTool, path = this.editor.activeElement, svg = this.editor.selectedSVG;
+        if(!(pen instanceof PenTool) || !(path instanceof Path) || path.closed || !svg) return undefined;
+        const start = path.lines[0]?.points[0]; if(!start) return undefined;
+        const matrix = multiplyMatrix(canvasViewProjection(svg).canvasToWorkspace, combinedMotionAdjustedMatrixFor(svg, path));
+        return { data: path.raw, preview: pen.tmpPath?.raw ?? '', transform: matrixToSvg(matrix), start: applyMatrix(matrix, start.x, start.y) };
+    }
 
     screenPx(px: number): number { return px; }
     screenDash(first: number, second: number): string { return `${first} ${second}`; }

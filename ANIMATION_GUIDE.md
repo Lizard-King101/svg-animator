@@ -1,5 +1,13 @@
 # Animation Guide
 
+## Finding channels and navigating poses
+
+Use **Search timeline**, **Selected only**, and **Animated only** together to narrow the timeline. Search includes object, rig, bone and channel names, even inside collapsed groups. Matching branches expand temporarily; **Clear filters** restores the previous expansion. **Reveal selection** clears filters, expands the selected artwork or bone branch, and scrolls it into view. Changing filters clears selected keys to avoid editing hidden channels.
+
+**Fit keys** frames selected keys; **Fit work area** frames the playback range. The previous/next pose buttons (or **Alt+Left / Alt+Right**) use selected key channels first, then selected artwork or a selected bone branch, otherwise all enabled channels in the active scene/action. They pause playback and stop at the first/last available playable key. Text and number fields keep their normal keyboard behavior.
+
+The **Preview** selector runs playback from **0.25× to 2×**. Preview speed, filters and viewport fitting are session controls: they do not change key times, project duration or exported animation.
+
 This guide covers the shipped timeline and speed-graph workflow. Authored animation can be published as an Embedded Animation SVG for a shared player, a self-contained Animated SVG, external runtime assets, or a ready-to-run Web Bundle.
 
 ## Rig-friendly outlines
@@ -88,7 +96,13 @@ Project JSON and reopening retain sources and links. Animated SVG/ZIP exports re
 - Drag an empty lane area to marquee-select keys; hold Shift to add to the selection.
 - Press Escape during a key drag to restore the starting times.
 
-Each track remains sorted with one keyframe per timestamp. If a retimed key collides with another key on the same track, the dragged key replaces the destination deterministically.
+Each track remains sorted with one keyframe per timestamp. If a dragged or nudged key collides with another key on the same track, the moved key replaces the destination deterministically.
+
+For a range edit, select keys at two or more different times, then open **Retime keys** beside Fit work area. **Duration %** stretches or compresses the selection: 200% takes twice as long, 50% takes half as long. Anchor the change at the selection's Start, Center, End, or the current Playhead. **Apply timing** (or Enter) commits once; Escape or Cancel discards the draft. Changing selection, seeking, switching context, playback or history closes stale drafts. **Reverse keys** reflects the selection around its time-range center, regardless of the duration percentage or anchor.
+
+Range retiming uses the 0.01s timeline grid and requires a continuous block on each selected channel. Any collision, crossing of an unselected key, or collapsed segment rejects the entire command. Linked boundary keys must be unlinked first; edits that would break matched seam speeds also require unlinking. Keys can move outside the document's duration, just as with dragging; the duration and work area stay unchanged. Use Fit keys to locate the result and adjust duration deliberately when needed.
+
+Stretching rescales speed handles by each segment's duration change while preserving influence. Reversing swaps incoming/outgoing handles, negates speeds, and transfers ease-in/ease-out to the reversed segment. Transition handles outside the selection remain attached to its edges; their speeds adapt to the changed interval. A handle pair whose speeds diverge becomes unlinked. Hold and discrete animation stays stepped in the reversed key order, rather than reproducing the exact time-reversed instant of each discontinuity. These commands edit source keys in the active scene or action; they do not change action placement rates.
 
 In Graph mode, drag a key's root node horizontally to retime only that numeric channel. X and Y roots are independent even when both curves are overlaid: X uses round nodes and Y uses square nodes.
 
@@ -128,6 +142,19 @@ Each segment has an outgoing handle on its source key and an incoming handle on 
 - Press Escape during a handle drag to restore the starting tangents.
 
 Preset easing stays exact until a segment is customized. Editing a preset segment initializes equivalent temporal handles. Applying a preset again clears custom temporal data on the affected segment.
+
+## Making a linked loop
+
+1. Set the work-area start/end to the cycle you want to repeat. In **Loop seam**, choose **Selected keys / graph channels** or **Selected artwork / rig**. Only existing animated channels in that scope are included.
+2. Choose **Start pose → end** or **End pose → start**. **Link endpoints** creates missing boundary keys and replaces the other boundary's values with the chosen pose. Interior keys stay in place. Linking equal values is explicit, never automatic.
+3. Edit either boundary using the canvas, Pose fields or timeline values. Its partner updates in the same undo step. The **↔** row badge describes the linked range. **Match seam speed** also matches the incoming/outgoing numeric speeds across the seam, while keeping each influence independent. Hold/discrete channels can still have deliberate jumps.
+4. Enable **Loop ghosts** for wrapped canvas onion skins and a faint dashed graph continuation across the work-area seam. Adjust **Spacing** for the canvas ghosts. They are preview aids and do not create keys, extend duration or appear in exports. The Loop playback checkbox remains a separate control.
+
+**Unlink** preserves the current keys and motion. Linked boundary times are protected: unlink before retiming those keys or shortening duration past their end. Moving the preview work area does not move an existing link; the row badge retains its authored range. Relink to deliberately establish new boundaries. Full-cycle move/resize and offset links for rotations such as 0°→360° are future work; equality linking replaces the chosen endpoint value, including rotation.
+
+Links in an action source affect every placement using that source. Trimming a placement to a different source interval shows a seam warning instead of rewriting shared keys. After a finite placement ends, the underlying scene/base value still resumes. Save/reopen and independent action/artwork duplication retain correctly mapped links. Removing a boundary key removes its link. Project JSON now saves as document v18; published animation continues to evaluate ordinary endpoint keys.
+
+Speed-graph **Speed** and **Influence** fields apply on Enter/blur; Escape cancels typing. Pointer cancellation, lost capture and window blur discard unfinished graph drags. Seeking retains the selected curve. Changing action context or undoing clears stale handle references.
 
 ## Example: a bouncing ball
 
@@ -200,7 +227,7 @@ Keep foot controls under the armature root for planted feet. In **Pose**, moving
 
 Selecting either chain bone or its target opens the same named constraint. Rename it, change its target, enable/disable it, **Flip bend**, or **Match target to tip**. Setup changes in Edit preserve the visible artwork and suspend solving; Pose resumes reaching toward the target. Match in Edit moves the point into the rest setup at the current tip, avoiding an unintended jump when posing. **Remove constraint** retains the visible limb as an ordinary FK pose.
 
-IK needs the lower bone to start exactly on the upper bone's tip. Drawing a bone near the selected bone's tip snaps it there, and dragging a connected bone's body in Bone setup moves the shared joint instead of separating it. If a joint has drifted, the IK panel names the problem and **Reconnect joint** (or **Snap to … tip** before IK exists) repairs it in one undo step; posing stays paused until then. **IK in this armature** lists every constraint as On, Off or Needs fix. In Pose, bones driven by an enabled constraint show dashed outlines; drag the target instead. **Quick IK** bends a chain once without saving a link. Drag the circular target in Pose to move the actual foot/hand point. Unreachable targets stay where you placed them while the chain clamps to its nearest reachable point; lengths never stretch. During a drag the skeleton and linked artwork preview the solve live; release commits it in one undo step. Escape, focus loss, pointer cancellation, selection/context changes and undo cancel unfinished gestures. Arrow keys nudge the target by one canvas unit, or ten with Shift. Targets, links, names, bend settings and setup suspension survive save/reload. Current saves use rig schema v5 in document v17; older poses, target links, weights and inherited handles remain compatible.
+IK needs the lower bone to start exactly on the upper bone's tip. Drawing a bone near the selected bone's tip snaps it there, and dragging a connected bone's body in Bone setup moves the shared joint instead of separating it. If a joint has drifted, the IK panel names the problem and **Reconnect joint** (or **Snap to … tip** before IK exists) repairs it in one undo step; posing stays paused until then. **IK in this armature** lists every constraint as On, Off or Needs fix. In Pose, bones driven by an enabled constraint show dashed outlines; drag the target instead. **Quick IK** bends a chain once without saving a link. Drag the circular target in Pose to move the actual foot/hand point. Unreachable targets stay where you placed them while the chain clamps to its nearest reachable point; lengths never stretch. During a drag the skeleton and linked artwork preview the solve live; release commits it in one undo step. Escape, focus loss, pointer cancellation, selection/context changes and undo cancel unfinished gestures. Arrow keys nudge the target by one canvas unit, or ten with Shift. Targets, links, names, bend settings and setup suspension survive save/reload. Current saves use rig schema v5 in document v18; older poses, target links, weights and inherited handles remain compatible.
 
 For a quick unlinked pose, select a connected lower bone, choose **Pose → Quick IK**, and drag the square endpoint handle. This shortcut stores the resulting FK pose; use **Add IK…** for a persistent control. In Animate, the quick unlinked solve keys its resulting FK rotations; use persistent targets when you want editable foot/hand position channels.
 
@@ -208,10 +235,14 @@ For a quick unlinked pose, select a connected lower bone, choose **Pose → Quic
 
 Finish the hierarchy, bindings and IK links in **Edit**, then switch to **Animate**. The rig inspector uses **Pose** while animating. Select a bone or control in Layers, on the canvas, or in the timeline. Expand the armature and bone rows to find **Rotation**, **Offset X** and **Offset Y**. Rotation is an offset from the rest angle; offsets use the bone parent's coordinates. These are control channels, so keys remain editable without creating a track for every SVG point.
 
-1. At the starting time, use **Key pose at playhead** to record the selected control, or the diamond beside an individual timeline property.
+1. At the starting time, use **Key selected control** to record the selected control, or the diamond beside an individual timeline property.
 2. Move the playhead. Rotate an FK bone, drag a root/control, or drag a persistent IK target. Numeric Pose fields and timeline values also create keys at the current time. When a channel first gets a key after time zero, its starting base value is recorded at zero.
 3. For an enabled IK chain, animate its foot/hand target. The chain's driven bone controls are disabled so a second set of keys cannot fight the solver. Move Body to change the body pose while root-parented foot controls stay planted; key the root to move the whole rig.
 4. Adjust timing and easing in the same dope sheet and speed graph used for artwork. Scrubbing backward or jumping between times recomputes FK, then IK, then weighted paths and rigid attachments. Onion skins can show the deformed artwork.
+
+Use **Key armature pose** to record rotation and both offsets for every editable control at the current time, even when an IK-driven bone is selected. Enabled IK chains are excluded; their target controls are keyed instead. The Pose panel shows the receiving scene/action and playhead time.
+
+**Copy armature pose** captures the currently displayed authored control values, including an interpolated pose between keys. Seek to another time, then **Paste armature pose** to key that complete pose in one undo step. You can also paste into an action that includes the same rig. Copying creates no keys or saved changes. The clipboard is session-only and uses bone IDs within the same project/armature; changing the rest skeleton or IK routing requires copying again. It does not retarget another character or copy solver-generated angles, constraint settings, weights or rest data. Playback and unfinished pose gestures disable these commands.
 
 Canvas changes preview while dragging and commit all changed channels in one undo step on release. Escape, lost capture/focus, history, and animation-context changes discard unfinished gestures. Base artwork, rest/bind data and weights are preserved while previewing. Enabled IK solves during animation even if the last Edit operation left setup solving suspended. Returning to Edit restores the authored base pose and setup state.
 

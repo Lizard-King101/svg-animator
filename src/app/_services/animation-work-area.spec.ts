@@ -2,6 +2,15 @@ import { AnimationPlaybackService } from "./animation-playback.service";
 import { createDefaultAnimation, evaluateTrack, restoreAnimation } from "../editor/objects/animation.object";
 
 describe("animation work area", () => {
+    it('changes preview speed without changing persisted timing or accepting invalid speeds', () => {
+        const { playback, animation } = service();
+        const before = JSON.stringify(animation);
+        playback.setPreviewSpeed('0.5'); expect(playback.speed).toBe(.5);
+        playback.setPreviewSpeed(0); playback.setPreviewSpeed(NaN); playback.setPreviewSpeed(-1);
+        expect(playback.speed).toBe(.5);
+        expect(JSON.stringify(animation)).toBe(before);
+        playback.ngOnDestroy();
+    });
     function service() {
         const animation = createDefaultAnimation();
         animation.duration = 6;

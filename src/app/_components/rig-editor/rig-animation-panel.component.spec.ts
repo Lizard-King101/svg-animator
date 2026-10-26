@@ -47,10 +47,27 @@ describe('animated pose inspector', () => {
         const count=t.projects.upsert.calls.count(); input.focus(); input.value='99';
         input.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); t.fixture.detectChanges();
         expect(t.svg.animation.tracks).toHaveSize(0); expect(input.value).toBe('0');
-        const keyButton=[...t.fixture.nativeElement.querySelectorAll('button')].find((button:any)=>button.textContent.trim()==='Key pose at playhead') as HTMLButtonElement;
+        const keyButton=[...t.fixture.nativeElement.querySelectorAll('button')].find((button:any)=>button.textContent.trim()==='Key selected control') as HTMLButtonElement;
         keyButton.click(); t.fixture.detectChanges();
         expect(t.svg.animation.tracks.map(track=>track.property).sort()).toEqual(['bones.target.pose','bones.target.poseX','bones.target.poseY']);
         expect(t.projects.upsert.calls.count()).toBe(count+1);
         t.destroy();
+    });
+    it('exposes whole-pose commands with context and preserves one undo step on paste', async () => {
+        const t = await setup();
+        const button = (text: string) => [...t.fixture.nativeElement.querySelectorAll('button')].find((item:any) => item.textContent.trim() === text) as HTMLButtonElement;
+        expect(button('Paste armature pose').disabled).toBeTrue();
+        t.rig.setPosePosition(8,12); button('Copy armature pose').click(); t.fixture.detectChanges();
+        expect(button('Paste armature pose').disabled).toBeFalse();
+        t.playback.seek(1); const count = t.projects.upsert.calls.count();
+        button('Paste armature pose').click(); t.fixture.detectChanges();
+        expect(t.fixture.nativeElement.querySelector('[aria-label="Pose keying context"]').textContent).toContain('Scene · 1s');
+        expect(t.projects.upsert.calls.count()).toBe(count + 1);
+        expect(t.svg.animation.tracks.every(track => track.keyframes.some(key => key.time === 1))).toBeTrue();
+        t.playback.playing = true; t.fixture.detectChanges();
+        expect(button('Key armature pose').disabled).toBeTrue();
+        expect(button('Copy armature pose').disabled).toBeTrue();
+        expect(button('Paste armature pose').disabled).toBeTrue();
+        t.playback.playing = false; t.destroy();
     });
 });

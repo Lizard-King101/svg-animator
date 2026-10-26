@@ -78,6 +78,7 @@ SVG Animator is a motion SVG studio: a browser-based drawing, editing, and keyfr
 - Edit/animate modes, playback, scrubbing, timeline zoom/fit, nested rows, per-property tracks, and non-interactive summary diamonds on collapsed layers.
 - Virtualized fixed-height rows and visible-time key filtering keep timeline DOM proportional to the viewport rather than the document's total key count.
 - Keyframe add/remove, multi-selection, marquee, drag/nudge, copy/paste/delete, individual graph-key retiming, and easing presets.
+- Selected key ranges support stretch/compress by duration percentage around Start, Center, End or Playhead, plus reversal with segment easing and speed-handle remapping. Drafts support Enter/Escape, atomic collision rejection, loop-seam protection and one-step undo in scenes and actions. Holds remain stepped in reversed key order; duration/work area are unchanged.
 - AE-style numeric speed graphs with signed property-units-per-second, independent influence lengths, linked speed continuity, exact fields, vertical fit/pan/zoom, and paired X/Y overlays for compatible properties.
 - Numeric, boolean, string, and color evaluation; deterministic interpolation, temporal cubic overshoot, bounded-property clamping, and retained preview base-state restoration.
 - Animatable transforms, visibility, opacity, fill/stroke, stroke width, draw progress, motion progress/orientation/offsets, and path-point positions.
@@ -131,3 +132,26 @@ Multi-object scaling is proportional. Rotation across differently scaled parent 
 
 - Unlinked connected pairs retain the quick two-bone posing handle; those gestures store ordinary FK poses. Persistent targets are added with **Add IK…**, by clicking a target bone or creating one at the tip.
 - Bone tool automatically distinguishes a point click from a length-bone drag with a five-screen-pixel dead zone.
+
+### Drawing and rig navigation polish
+
+- The Pen tool keeps completed segments, the provisional segment, and a closing-point marker visible while drawing, including when the final path has no visible stroke. Construction guides disappear on closure or cancellation and do not export.
+- Middle-drag pans from weight-paint surfaces and bone controls. Panning preserves the active tool and avoids document history entries; bone, weight, and IK overlays follow the current pan/zoom without waiting for a later layout update.
+
+## Linked loop endpoints and speed-graph reliability
+
+- Loop seam controls link animated channels at the work-area boundaries in scene or action time, with explicit start/end value matching, bidirectional pose editing, optional seam-speed matching, range badges and unlinking. Keys, artwork scopes and authored rig controls are supported; IK-driven channels are excluded.
+- Wrapped onion skins and dashed graph continuations expose the next/previous cycle without extending duration or changing exports. Trimmed placements warn when their playback range differs from linked source endpoints.
+- Graph gestures restore every affected tangent on cancel/no-op; Alt-unlink, pointer/focus interruption, current-handle targeting, Hold speed and domain caching are corrected. Numeric handle edits commit on blur/Enter and cancel with Escape. Scrubbing retains the selected graph; graph height follows the available pane.
+- Document v18 persists authoring links with independent-copy remapping and unchanged runtime interpolation. Boundary retiming requires unlinking first; whole-cycle retiming and rotation winding links remain planned.
+
+## Timeline navigation and visibility
+
+- Search object, rig, bone and channel names; combine Selected only and Animated only filters. Matching hierarchy is temporarily expanded, with original expansion restored on clearing. Reveal selection expands and scrolls to the selected artwork or bone branch.
+- Fit selected keys or the work area in either timeline view. Previous/next pose buttons and Alt+Left/Right use selected key channels, then selected artwork/bone branches, otherwise the active scene/action.
+- Preview speed ranges from 0.25× to 2× without retiming keys or exports. Navigation pauses playback; filtering clears key selection and protects newly hidden keys from selection commands. Toolbar controls wrap within the timeline.
+
+## Pose blocking
+
+- Separate Key selected control and Key armature pose commands record rotation and both offsets at the playhead. Whole-armature keying includes authored FK and IK target controls while skipping enabled IK-driven bones, with one undo step and visible scene/action context.
+- Copy armature pose captures sampled control values without saving. Paste armature pose creates keys at another time or in a compatible action for the same rig. Clipboard identity and rest/IK structure checks prevent retargeting or partial paste; playback and active pose gestures disable commands. Clipboard data is session-only, and pose keys retain normal loop-link, history and export behavior.

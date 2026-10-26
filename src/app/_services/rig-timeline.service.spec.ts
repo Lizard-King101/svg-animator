@@ -56,6 +56,21 @@ function track(property: string, id = property): AnimationTrack {
 }
 
 describe('bone timeline and reusable actions', () => {
+    it('filters and navigates a selected bone branch while preserving its hierarchy', () => {
+        const t = setup();
+        t.editor.selectedElements = []; t.rig.selectBone('character', 'upper');
+        t.svg.animation.tracks = [track('bones.lower.pose'), track('bones.foot.poseX')];
+        t.svg.animation.tracks[1].keyframes[1].time = .5;
+        t.playback.invalidate();
+        t.timeline.expandedLayerIds.clear();
+        t.timeline.setRowFilters('', true, true);
+        expect(t.timeline.rows.filter(row => row.type === 'bone').map(row => row.bone.id)).toEqual(['root', 'upper', 'lower']);
+        expect(t.timeline.rows.filter(row => row.type === 'rig-property').map(row => row.property.property)).toEqual(['bones.lower.pose']);
+        expect(t.timeline.adjacentPoseTime(1)).toBe(1);
+        t.timeline.setRowFilters('foot', false, true);
+        expect(t.timeline.rows.filter(row => row.type === 'rig-property').map(row => row.property.property)).toEqual(['bones.foot.poseX']);
+        t.destroy();
+    });
     it('projects real rig hierarchy independently of artwork and pairs target position curves', () => {
         const t = setup();
         expect(t.timeline.rows.filter(row => row.type === 'bone').map(row => [row.bone.id, row.depth])).toEqual([['root',1],['upper',2],['lower',3],['foot',2]]);
