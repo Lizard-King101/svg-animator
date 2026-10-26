@@ -29,7 +29,7 @@ import { RigWeightOverlayComponent } from './rig-weight-overlay.component';
 export class RigOverlayComponent implements DoCheck, OnDestroy {
     @Input({ required: true }) artwork!: SVGElement;
     @Input({ required: true }) workspace!: CanvasWorkspaceComponent;
-    private drag?: { tool: unknown; mode: 'rest' | 'pose'; part: 'body' | 'tip'; originalBone: Bone; changes: Partial<Bone>; inverse: Matrix; parentInverse?: Matrix; id: string; rigId: string; documentId: string; revision: number; pointerId: number; capture: HTMLElement; startX: number; startY: number; startAngle: number; original: number; angle: number; joint: { x: number; y: number };
+    private drag?: { tool: unknown; animationContext: string; mode: 'rest' | 'pose'; part: 'body' | 'tip'; originalBone: Bone; changes: Partial<Bone>; inverse: Matrix; parentInverse?: Matrix; id: string; rigId: string; documentId: string; revision: number; pointerId: number; capture: HTMLElement; startX: number; startY: number; startAngle: number; original: number; angle: number; joint: { x: number; y: number };
         /** Bone setup drags of a connected bone move the joint it shares with its parent. */ jointStart?: { x: number; y: number }; jointTo?: { x: number; y: number }; };
     private suppressClick = false;
     private creation?: { pointerId: number; capture: HTMLElement };
@@ -70,25 +70,27 @@ export class RigOverlayComponent implements DoCheck, OnDestroy {
         this.cancel(); this.suppressClick = false;
         if(this.session.pending || this.rig.ikPick) return;
         this.rig.boneId = id;
-        if(this.drawing.selected) {
+        if(this.drawing.selected && this.rig.canEdit) {
             event.preventDefault(); const capture = event.currentTarget as HTMLElement;
             this.drawing.down(event); if(!this.drawing.draft) return;
             this.creation = { pointerId: event.pointerId, capture }; capture.setPointerCapture(event.pointerId); return;
         }
-        if(this.rig.workspace === 'weights' || !this.rig.canEdit || this.rig.problem || !this.projection) return;
+        if(this.rig.workspace === 'weights' || !this.rig.canManipulate || this.rig.problem || !this.projection) return;
+        if(this.rig.workspace === 'pose' && this.rig.drivingConstraint(id)) return;
         const bone = this.bones.find(bone => bone.id === id), svg = this.rig.editor.selectedSVG;
         if(!bone || !svg || !this.rig.active || !this.rig.bone) return;
         event.preventDefault(); const rect = this.workspace.element.getBoundingClientRect();
         const joint = { x: bone.start.x + rect.left, y: bone.start.y + rect.top }, capture = event.currentTarget as HTMLElement;
         const displayed = this.rig.displayedRig!, originalBone = displayed.bones.find(item => item.id === id)!;
         const parent = originalBone.parentId ? boneMatrices(displayed).get(originalBone.parentId) : undefined;
-        this.drag = { tool: this.rig.editor.activeTool, mode: this.rig.workspace, part, originalBone: { ...originalBone }, changes: {}, inverse: invertMatrix(this.projection), parentInverse: parent ? invertMatrix(parent) : undefined, id, rigId: this.rig.active.id, documentId: svg.id, revision: this.mutations.revision, pointerId: event.pointerId, capture, joint, startX: event.clientX, startY: event.clientY,
+        this.drag = { tool: this.rig.editor.activeTool, animationContext: this.rig.animationContext, mode: this.rig.workspace, part, originalBone: { ...originalBone }, changes: {}, inverse: invertMatrix(this.projection), parentInverse: parent ? invertMatrix(parent) : undefined, id, rigId: this.rig.active.id, documentId: svg.id, revision: this.mutations.revision, pointerId: event.pointerId, capture, joint, startX: event.clientX, startY: event.clientY,
             startAngle: Math.atan2(event.clientY - joint.y, event.clientX - joint.x), original: this.rig.bone.pose, angle: this.rig.bone.pose,
             jointStart: this.rig.workspace === 'rest' && part === 'body' && this.rig.isJointConnected(id) ? this.jointWorld(id) : undefined };
         capture.focus(); capture.setPointerCapture(event.pointerId);
     }
     move(event: PointerEvent): void {
         if(this.creation) { if(this.creation.pointerId === event.pointerId) this.drawing.move(event); return; }
+        this.ngDoCheck();
         const drag = this.drag; if(!drag || drag.pointerId !== event.pointerId) return;
         event.preventDefault(); event.stopPropagation();
         if(Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 3) { drag.angle = drag.original; drag.changes = {}; drag.jointTo = undefined; if(drag.mode === 'pose') this.rig.clearPosePreview(); return; }
@@ -132,7 +134,8 @@ export class RigOverlayComponent implements DoCheck, OnDestroy {
         this.suppressClick = false;
         if((this.session.pending || this.rig.ikPick) && ['Enter', ' '].includes(event.key)) { event.preventDefault(); event.stopPropagation(); this.choose(id); return; }
         if(event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); this.cancel(); return; }
-        if(this.rig.workspace === 'weights' || !['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
+        if(!this.rig.canManipulate || this.rig.workspace === 'weights' || !['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
+        if(this.rig.workspace === 'pose' && this.rig.drivingConstraint(id)) return;
         event.preventDefault(); event.stopPropagation(); this.cancel(); this.rig.boneId = id;
         const bone = this.rig.workspace === 'rest' ? this.rig.displayedRig?.bones.find(item => item.id === id) : this.rig.bone; if(!bone) return;
         if(this.rig.workspace === 'rest' || bone.kind === 'point') {
@@ -154,7 +157,7 @@ export class RigOverlayComponent implements DoCheck, OnDestroy {
     ngDoCheck(): void {
         this.session.validate(); this.drawing.validate(); if(this.creation && !this.drawing.draft) this.cancel();
         const drag = this.drag;
-        if(drag && (!this.rig.visible || !this.rig.canEdit || this.rig.workspace !== drag.mode || drag.tool !== this.rig.editor.activeTool || drag.id !== this.rig.boneId || drag.rigId !== this.rig.activeId || drag.documentId !== this.rig.editor.selectedSVG?.id || drag.revision !== this.mutations.revision)) this.cancel();
+        if(drag && (!this.rig.visible || !this.rig.canManipulate || this.rig.workspace !== drag.mode || drag.animationContext !== this.rig.animationContext || drag.tool !== this.rig.editor.activeTool || drag.id !== this.rig.boneId || drag.rigId !== this.rig.activeId || drag.documentId !== this.rig.editor.selectedSVG?.id || drag.revision !== this.mutations.revision)) this.cancel();
     }
     ngOnDestroy(): void { this.cancel(); }
 }

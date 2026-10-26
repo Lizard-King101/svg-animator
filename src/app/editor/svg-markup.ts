@@ -1,3 +1,4 @@
+import { RenderProjection, projectionId, clippingProjection, childProjection, isClipProjection, projectionFill, projectionStroke, projectionVisible, projectionRoles } from './render-projection';
 import { Group } from "./objects/elements/group.object";
 import { Path } from "./objects/elements/path.object";
 import { Shape } from "./objects/elements/shape.object";
@@ -5,8 +6,9 @@ import { TextElement } from "./objects/elements/text.object";
 import { motionAdjustedMatrix } from "./objects/motion-path.object";
 import { AnyElement, ImportedSourceNode, SVG } from "./objects/svg.object";
 import { matrixToSvg } from "./objects/transform.object";
-import { GradientPaint, gradientPaints, gradientTransformValue, paintOpacity, paintSVGValue } from "./objects/paint.object";
+import { GradientPaint, gradientPaints, gradientTransformValue, isGradientPaint, paintOpacity, paintSVGValue } from "./objects/paint.object";
 import { drawProgressVisible, effectiveStrokeAlignment, strokeDasharrayAttr } from "./objects/stroke-style.object";
+import { outlineGradientTransform, outlineStrokePaint, projectPathOutline } from './path-outline';
 
 export function escapeXmlText(value: unknown): string {
     return String(value)
@@ -49,6 +51,8 @@ function pathStrokeOpacity(path: Path): number | null {
 }
 
 export interface SVGMarkupOptions {
+    /** Include source identities for detached editor inspection, without enabling runtime export. */
+    renderTargets?: boolean;
     bakeRoundedCorners?: boolean;
     /** Adds deterministic player hooks. Static export leaves these absent. */
     runtime?: { signature: string };
@@ -70,47 +74,57 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
         lines.push("  </defs>");
     }
 
-    const appendElements = (elements: AnyElement[], depth: number, parentId: string | null | undefined, clipGeometry = false) => {
+    const appendElements = (elements: AnyElement[], depth: number, parentId: string | null | undefined, projection?: RenderProjection) => {
         const indent = '  '.repeat(depth);
         for(const element of elements) {
-            if(!element.visible) continue;
+            if(!projectionVisible(element.visible, projection) && !options.runtime) continue;
+            const clipGeometry = isClipProjection(projection);
+            const identity = projectionIdentity(element, projection, !!options.runtime || !!options.renderTargets);
+            const opacity = clipGeometry ? null : opacityAttr(element.opacity);
             const transform = matrixToSvg(motionAdjustedMatrix(svg, element));
 
             if(element instanceof Group) {
+                const clipId = projectionId(element.clipPathId, projection);
                 if(element.clipElement) {
-                    lines.push(`${indent}<defs>`);
-                    lines.push(`${indent}  <clipPath${attr('id', element.clipPathId)}>`);
-                    appendElements([element.clipElement] as AnyElement[], depth + 2, undefined, true);
-                    lines.push(`${indent}  </clipPath>`);
-                    lines.push(`${indent}</defs>`);
+                    lines.push(`${indent}<defs><clipPath${attr('id', clipId)}>`);
+                    appendElements([element.clipElement], depth + 1, undefined, clippingProjection(element.id, 'clip', projection));
+                    lines.push(`${indent}</clipPath></defs>`);
                 }
-                lines.push(`${indent}<g${attr('id', element.id)}${runtimeTargetAttr(!!options.runtime)}${attr('transform', transform)}${attr('opacity', opacityAttr(element.opacity))}${attr('clip-path', element.clipElement ? `url(#${element.clipPathId})` : null)}>`);
-                appendElements(element.renderedElements as AnyElement[], depth + 1, element.id, clipGeometry);
+                lines.push(`${indent}<g${identity}${attr('transform', transform)}${attr('opacity', opacity)}>`);
+                if(element.clipElement && projectionFill(projection)) appendElements([element.clipElement], depth + 1, undefined, clippingProjection(element.id, 'fill', projection));
+                if(element.clipElement) lines.push(`${indent}  <g${attr('clip-path', `url(#${clipId})`)}>`);
+                appendElements(element.renderedElements, depth + (element.clipElement ? 2 : 1), element.id, childProjection(projection));
+                if(element.clipElement) lines.push(`${indent}  </g>`);
+                if(element.clipElement && projectionStroke(projection)) appendElements([element.clipElement], depth + 1, undefined, clippingProjection(element.id, 'stroke', projection));
                 lines.push(`${indent}</g>`);
             } else if(element instanceof Path) {
                 const s = element.settings;
                 const d = bakeRoundedCorners ? element.raw : element.rawUnrounded;
                 if(clipGeometry) {
-                    lines.push(`${indent}<path${attr('id', element.id)}${attr('d', d)}${attr('transform', transform)}${attr('fill-rule', element.fillRule)}/>`);
+                    lines.push(`${indent}<path${identity}${runtimeRoleAttr(!!options.runtime, 'geometry')}${attr('d', d)}${attr('transform', transform)}${attr('fill-rule', element.fillRule)}/>`);
                     continue;
                 }
                 const alignment = effectiveStrokeAlignment(element);
                 const authoredDash = strokeDasharrayAttr(s.stroke_dasharray);
-                if(alignment !== "center" || authoredDash) {
-                    appendAlignedPath(element, d, transform, lines, depth, !!options.runtime);
+                if(projectionStroke(projection) && element.outlineSections !== undefined) {
+                    appendOutlinePath(element, d, transform, lines, depth, !!options.runtime, bakeRoundedCorners, projection, !!options.renderTargets);
+                    continue;
+                }
+                if(projectionStroke(projection) && (alignment !== "center" || authoredDash)) {
+                    appendAlignedPath(element, d, transform, lines, depth, !!options.runtime, projection, !!options.renderTargets);
                     continue;
                 }
                 lines.push(
                     `${indent}<path` +
-                    attr('id', element.id) +
-                    runtimeTargetAttr(!!options.runtime, "geometry fill stroke") +
+                    identity +
+                    runtimeRoleAttr(!!options.runtime, projectionRoles(projection)) +
                     attr('d', d) +
                     attr('transform', transform) +
-                    attr('opacity', opacityAttr(element.opacity)) +
-                    attr('fill', s.fill_enabled ? paintSVGValue(s.fill) ?? 'none' : 'none') +
+                    attr('opacity', opacity) +
+                    attr('fill', projectionFill(projection) && s.fill_enabled ? paintSVGValue(s.fill) ?? 'none' : 'none') +
                     attr('fill-opacity', s.fill_enabled ? paintOpacity(s.fill) : null) +
                     attr('fill-rule', element.fillRule) +
-                    attr('stroke', paintSVGValue(s.stroke)) +
+                    attr('stroke', projectionStroke(projection) ? paintSVGValue(s.stroke) : 'none') +
                     attr('stroke-opacity', pathStrokeOpacity(element)) +
                     attr('stroke-width', s.stroke_width ?? null) +
                     attr('stroke-linecap', s.line_cap ?? null) +
@@ -122,6 +136,7 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                     `/>`
                 );
             } else if(element instanceof TextElement) {
+                if(projection?.kind === 'stroke') continue;
                 const s = element.settings;
                 const tspanIndent = '  '.repeat(depth + 1);
                 const tspans = element.lines.map((line, i) =>
@@ -129,17 +144,17 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                 ).join('\n');
                 lines.push(
                     `${indent}<text` +
-                    attr('id', element.id) +
-                    runtimeTargetAttr(!!options.runtime, "geometry fill") +
+                    identity +
+                    runtimeRoleAttr(!!options.runtime, clipGeometry ? 'geometry' : 'geometry fill') +
                     attr('x', element.x) +
                     attr('y', element.y) +
                     attr('transform', transform) +
-                    attr('opacity', opacityAttr(element.opacity)) +
+                    attr('opacity', opacity) +
                     attr('font-size', s.font_size) +
                     attr('font-family', s.font_family) +
                     attr('font-weight', s.font_weight) +
                     attr('text-anchor', element.textAnchor) +
-                    attr('fill', paintSVGValue(s.color) ?? '#000000') +
+                    attr('fill', clipGeometry ? '#000000' : paintSVGValue(s.color) ?? '#000000') +
                     attr('fill-opacity', paintOpacity(s.color)) +
                     ` dominant-baseline="hanging">` +
                     `\n${tspans}\n${indent}</text>`
@@ -147,15 +162,15 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
             } else if(element instanceof Shape) {
                 const s = element.settings;
                 if(clipGeometry) {
-                    lines.push(`${indent}${shapeGeometryMarkup(element, transform, element.id)}`);
+                    lines.push(`${indent}${shapeGeometryMarkup(element, transform).replace('/>', `${identity}${runtimeRoleAttr(!!options.runtime, 'geometry')}/>` )}`);
                     continue;
                 }
-                if(effectiveStrokeAlignment(element) !== "center") {
-                    appendAlignedShape(element, transform, lines, depth, !!options.runtime);
+                if(projectionStroke(projection) && effectiveStrokeAlignment(element) !== "center") {
+                    appendAlignedShape(element, transform, lines, depth, !!options.runtime, projection, !!options.renderTargets);
                     continue;
                 }
-                const fillAttr = attr('fill', paintSVGValue(s.fill) ?? 'none');
-                const strokeAttr = attr('stroke', paintSVGValue(s.stroke));
+                const fillAttr = attr('fill', projectionFill(projection) ? paintSVGValue(s.fill) ?? 'none' : 'none');
+                const strokeAttr = attr('stroke', projectionStroke(projection) ? paintSVGValue(s.stroke) : 'none');
                 const fillOpacityAttr = attr('fill-opacity', paintOpacity(s.fill));
                 const strokeOpacityAttr = attr('stroke-opacity', paintOpacity(s.stroke));
                 const swAttr = attr('stroke-width', s.stroke_width ?? null);
@@ -166,12 +181,12 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                     const cr = s.corner_radius || null;
                     lines.push(
                         `${indent}<rect` +
-                        attr('id', element.id) +
-                        runtimeTargetAttr(!!options.runtime, "geometry fill stroke") +
+                        identity +
+                        runtimeRoleAttr(!!options.runtime, projectionRoles(projection)) +
                         attr('x', element.x) +
                         attr('y', element.y) +
                         attr('transform', transform) +
-                        attr('opacity', opacityAttr(element.opacity)) +
+                        attr('opacity', opacity) +
                         attr('width', element.width) +
                         attr('height', element.height) +
                         attr('rx', cr) +
@@ -182,12 +197,12 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
                 } else {
                     lines.push(
                         `${indent}<ellipse` +
-                        attr('id', element.id) +
-                        runtimeTargetAttr(!!options.runtime, "geometry fill stroke") +
+                        identity +
+                        runtimeRoleAttr(!!options.runtime, projectionRoles(projection)) +
                         attr('cx', element.centerX) +
                         attr('cy', element.centerY) +
                         attr('transform', transform) +
-                        attr('opacity', opacityAttr(element.opacity)) +
+                        attr('opacity', opacity) +
                         attr('rx', element.radiusX) +
                         attr('ry', element.radiusY) +
                         fillAttr + fillOpacityAttr + strokeAttr + strokeOpacityAttr + swAttr + strokeStyleAttrs +
@@ -197,7 +212,7 @@ export function buildSVGMarkup(svg: SVG, options: SVGMarkupOptions = {}): string
             }
         }
 
-        if(parentId !== undefined) {
+        if(parentId !== undefined && !isClipProjection(projection) && projection?.kind !== 'stroke') {
             svg.importedSourceNodes
                 .filter((node) => node.parentId === parentId)
                 .forEach((node) => appendImportedSource(node, lines, depth));
@@ -226,47 +241,65 @@ function normalizedPrimaryFontFamily(value: string | null | undefined): string {
     return (value ?? "").split(",", 1)[0].trim().replace(/^(['"])(.*)\1$/, "$2").toLowerCase();
 }
 
-function appendAlignedPath(path: Path, d: string, transform: string | null, lines: string[], depth: number, runtime: boolean): void {
+function appendOutlinePath(path: Path, d: string, transform: string | null, lines: string[], depth: number, runtime: boolean, rounded: boolean, instance?: RenderProjection, renderTargets = false): void {
+    const indent = '  '.repeat(depth), child = `${indent}  `, settings = path.settings;
+    const alignment = effectiveStrokeAlignment(path), effectId = projectionId(`stroke-${alignment}-${path.id}`, instance);
+    const projection = projectPathOutline(path, path.outlineSections, rounded);
+    lines.push(`${indent}<g${projectionIdentity(path, instance, runtime || renderTargets)}${attr('transform', transform)}${attr('opacity', opacityAttr(path.opacity))}>`);
+    lines.push(`${child}<defs>`);
+    if(alignment === 'inside') lines.push(`${child}<clipPath${attr('id', effectId)}><path${runtimeRoleAttr(runtime, 'geometry')}${attr('d', d)}${attr('fill-rule', path.fillRule)}/></clipPath>`);
+    if(alignment === 'outside') lines.push(`${child}<mask${attr('id', effectId)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/><path${runtimeRoleAttr(runtime, 'geometry')}${attr('d', d)}${attr('fill-rule', path.fillRule)} fill="black"/></mask>`);
+    if(isGradientPaint(settings.stroke) && settings.stroke.units === 'objectBoundingBox') {
+        const tag = settings.stroke.type === 'linear-gradient' ? 'linearGradient' : 'radialGradient';
+        lines.push(`${child}<${tag}${attr('id', projectionId(`outline-paint-${path.id}`, instance))}${projectionAlias(`outline-paint-${path.id}`, instance, runtime)}${attr('href', `#${settings.stroke.id}`)} gradientUnits="userSpaceOnUse"${attr('gradientTransform', outlineGradientTransform(path, path.outlineSections, rounded))}/>`);
+    }
+    lines.push(`${child}</defs>`);
+    if(projectionFill(instance)) lines.push(`${child}<path${runtimeRoleAttr(runtime, 'geometry fill')}${attr('d', d)}${attr('fill', settings.fill_enabled ? paintSVGValue(settings.fill) ?? 'none' : 'none')}${attr('fill-opacity', settings.fill_enabled ? paintOpacity(settings.fill) : null)}${attr('fill-rule', path.fillRule)}/>`);
+    lines.push(`${child}<path${runtimeRoleAttr(runtime, 'outline')}${attr('d', projection.strokeData)}${attr('fill', projectedOutlinePaint(path, instance))}${attr('fill-opacity', paintOpacity(settings.stroke))} fill-rule="nonzero"${attr('clip-path', alignment === 'inside' ? `url(#${effectId})` : null)}${attr('mask', alignment === 'outside' ? `url(#${effectId})` : null)}/>`);
+    lines.push(`${indent}</g>`);
+}
+
+function appendAlignedPath(path: Path, d: string, transform: string | null, lines: string[], depth: number, runtime: boolean, instance?: RenderProjection, renderTargets = false): void {
     const indent = "  ".repeat(depth);
     const child = "  ".repeat(depth + 1);
     const settings = path.settings;
     const alignment = effectiveStrokeAlignment(path);
-    const effectId = `stroke-${alignment}-${path.id}`;
-    const drawId = `stroke-draw-${path.id}`;
+    const effectId = projectionId(`stroke-${alignment}-${path.id}`, instance);
+    const drawId = projectionId(`stroke-draw-${path.id}`, instance);
     lines.push(`${indent}<defs>`);
     if(alignment === "inside") {
-        lines.push(`${child}<clipPath${attr('id', effectId)}><path${runtimeRoleAttr(runtime, "geometry-effect")}${attr('d', d)}${attr('fill-rule', path.fillRule)}/></clipPath>`);
+        lines.push(`${child}<clipPath${attr('id', effectId)}${projectionAlias(`stroke-${alignment}-${path.id}`, instance, runtime)}><path${runtimeRoleAttr(runtime, "geometry-effect")}${attr('d', d)}${attr('fill-rule', path.fillRule)}/></clipPath>`);
     } else if(alignment === "outside") {
-        lines.push(`${child}<mask${attr('id', effectId)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/><path${runtimeRoleAttr(runtime, "geometry-effect")}${attr('d', d)}${attr('fill-rule', path.fillRule)} fill="black"/></mask>`);
+        lines.push(`${child}<mask${attr('id', effectId)}${projectionAlias(`stroke-${alignment}-${path.id}`, instance, runtime)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/><path${runtimeRoleAttr(runtime, "geometry-effect")}${attr('d', d)}${attr('fill-rule', path.fillRule)} fill="black"/></mask>`);
     }
     if(settings.stroke_dasharray.length) {
-        lines.push(`${child}<mask${attr('id', drawId)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><path${runtimeRoleAttr(runtime, "geometry reveal")}${attr('d', d)} fill="none" stroke="white"${attr('stroke-opacity', drawProgressVisible(path.drawProgress) ? null : 0)}${attr('stroke-width', settings.stroke_width * 4)}${attr('stroke-linecap', settings.line_cap)} pathLength="1" stroke-dasharray="1 2"${attr('stroke-dashoffset', drawOffsetAttr(path))}/></mask>`);
+        lines.push(`${child}<mask${attr('id', drawId)}${projectionAlias(`stroke-draw-${path.id}`, instance, runtime)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><path${runtimeRoleAttr(runtime, "geometry reveal")}${attr('d', d)} fill="none" stroke="white"${attr('stroke-opacity', drawProgressVisible(path.drawProgress) ? null : 0)}${attr('stroke-width', settings.stroke_width * 4)}${attr('stroke-linecap', settings.line_cap)} pathLength="1" stroke-dasharray="1 2"${attr('stroke-dashoffset', drawOffsetAttr(path))}/></mask>`);
     }
     lines.push(`${indent}</defs>`);
-    lines.push(`${indent}<g${attr('id', path.id)}${runtimeTargetAttr(runtime)}${attr('transform', transform)}${attr('opacity', opacityAttr(path.opacity))}>`);
-    lines.push(`${child}<path${runtimeRoleAttr(runtime, "geometry fill")}${attr('d', d)}${attr('fill', settings.fill_enabled ? paintSVGValue(settings.fill) ?? 'none' : 'none')}${attr('fill-opacity', settings.fill_enabled ? paintOpacity(settings.fill) : null)}${attr('fill-rule', path.fillRule)}/>`);
+    lines.push(`${indent}<g${projectionIdentity(path, instance, runtime || renderTargets)}${attr('transform', transform)}${attr('opacity', opacityAttr(path.opacity))}>`);
+    if(projectionFill(instance)) lines.push(`${child}<path${runtimeRoleAttr(runtime, "geometry fill")}${attr('d', d)}${attr('fill', settings.fill_enabled ? paintSVGValue(settings.fill) ?? 'none' : 'none')}${attr('fill-opacity', settings.fill_enabled ? paintOpacity(settings.fill) : null)}${attr('fill-rule', path.fillRule)}/>`);
     if(alignment === "outside") lines.push(`${child}<g${attr('mask', `url(#${effectId})`)}>`);
     lines.push(`${alignment === 'outside' ? child + '  ' : child}<path${runtimeRoleAttr(runtime, "geometry stroke")}${attr('d', d)} fill="none"${strokePaintAttrs(settings, alignment === 'center' ? 1 : 2, pathStrokeOpacity(path))}${attr('pathLength', settings.stroke_dasharray.length ? null : drawAttr(path, 1))}${attr('stroke-dasharray', settings.stroke_dasharray.length ? strokeDasharrayAttr(settings.stroke_dasharray) : drawAttr(path, "1 2"))}${attr('stroke-dashoffset', settings.stroke_dasharray.length ? settings.stroke_dashoffset : drawDashoffsetAttr(path))}${attr('clip-path', alignment === 'inside' ? `url(#${effectId})` : null)}${attr('mask', settings.stroke_dasharray.length ? `url(#${drawId})` : null)}/>`);
     if(alignment === "outside") lines.push(`${child}</g>`);
     lines.push(`${indent}</g>`);
 }
 
-function appendAlignedShape(shape: Shape, transform: string | null, lines: string[], depth: number, runtime: boolean): void {
+function appendAlignedShape(shape: Shape, transform: string | null, lines: string[], depth: number, runtime: boolean, instance?: RenderProjection, renderTargets = false): void {
     const indent = "  ".repeat(depth);
     const child = "  ".repeat(depth + 1);
     const settings = shape.settings;
     const alignment = effectiveStrokeAlignment(shape);
-    const effectId = `stroke-${alignment}-${shape.id}`;
+    const effectId = projectionId(`stroke-${alignment}-${shape.id}`, instance);
     const geometry = shapeGeometryMarkup(shape, null, "");
     lines.push(`${indent}<defs>`);
     if(alignment === "inside") {
-        lines.push(`${child}<clipPath${attr('id', effectId)}>${geometry.replace('/>', `${runtimeRoleAttr(runtime, "geometry-effect")}/>` )}</clipPath>`);
+        lines.push(`${child}<clipPath${attr('id', effectId)}${projectionAlias(`stroke-${alignment}-${shape.id}`, instance, runtime)}>${geometry.replace('/>', `${runtimeRoleAttr(runtime, "geometry-effect")}/>` )}</clipPath>`);
     } else {
-        lines.push(`${child}<mask${attr('id', effectId)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/>${geometry.replace('/>', `${runtimeRoleAttr(runtime, "geometry-effect")} fill="black"/>`)}</mask>`);
+        lines.push(`${child}<mask${attr('id', effectId)}${projectionAlias(`stroke-${alignment}-${shape.id}`, instance, runtime)} x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox"><rect x="-100%" y="-100%" width="300%" height="300%" fill="white"/>${geometry.replace('/>', `${runtimeRoleAttr(runtime, "geometry-effect")} fill="black"/>`)}</mask>`);
     }
     lines.push(`${indent}</defs>`);
-    lines.push(`${indent}<g${attr('id', shape.id)}${runtimeTargetAttr(runtime)}${attr('transform', transform)}${attr('opacity', opacityAttr(shape.opacity))}>`);
-    lines.push(`${child}${geometry.replace('/>', `${runtimeRoleAttr(runtime, "geometry fill")}${attr('fill', paintSVGValue(settings.fill) ?? 'none')}${attr('fill-opacity', paintOpacity(settings.fill))}/>` )}`);
+    lines.push(`${indent}<g${projectionIdentity(shape, instance, runtime || renderTargets)}${attr('transform', transform)}${attr('opacity', opacityAttr(shape.opacity))}>`);
+    if(projectionFill(instance)) lines.push(`${child}${geometry.replace('/>', `${runtimeRoleAttr(runtime, "geometry fill")}${attr('fill', paintSVGValue(settings.fill) ?? 'none')}${attr('fill-opacity', paintOpacity(settings.fill))}/>` )}`);
     lines.push(`${child}${geometry.replace('/>', `${runtimeRoleAttr(runtime, "geometry stroke")} fill="none"${strokePaintAttrs(settings, 2)}${attr('stroke-dasharray', strokeDasharrayAttr(settings.stroke_dasharray))}${attr('stroke-dashoffset', settings.stroke_dasharray.length ? settings.stroke_dashoffset : null)}${attr(alignment === 'inside' ? 'clip-path' : 'mask', `url(#${effectId})`)}/>` )}`);
     lines.push(`${indent}</g>`);
 }
@@ -300,7 +333,7 @@ function collectGradients(elements: AnyElement[]): GradientPaint[] {
     return [...gradients.values()];
 }
 
-function appendGradient(gradient: GradientPaint, lines: string[], depth: number, runtime: boolean): void {
+function appendGradient(gradient: GradientPaint, lines: string[], depth: number, runtime: boolean, instance?: RenderProjection, renderTargets = false): void {
     const indent = "  ".repeat(depth);
     const tag = gradient.type === "linear-gradient" ? "linearGradient" : "radialGradient";
     const coordinateAttrs = Object.entries(gradient.coordinates)
@@ -323,4 +356,21 @@ function runtimeRoleAttr(runtime: boolean, roles?: string): string {
 function appendImportedSource(node: ImportedSourceNode, lines: string[], depth: number): void {
     const indent = "  ".repeat(depth);
     node.markup.split("\n").forEach((line) => lines.push(`${indent}${line}`));
+}
+
+function projectionIdentity(element: AnyElement, projection: RenderProjection | undefined, runtime: boolean): string {
+    return attr('id', projectionId(element.id, projection)) + runtimeTargetAttr(runtime)
+        + projectionAlias(element.id, projection, runtime)
+        + (projection && runtime ? attr('data-render-projection', projection.kind) : '')
+        + attr('style', projectionVisible(element.visible, projection) ? null : 'display:none');
+}
+
+function projectionAlias(id: string, projection: RenderProjection | undefined, runtime: boolean): string {
+    return projection && runtime ? attr('data-render-target', id) : '';
+}
+
+
+function projectedOutlinePaint(path: Path, projection?: RenderProjection): string {
+    const paint = outlineStrokePaint(path) ?? 'none';
+    return projection && paint === `url(#outline-paint-${path.id})` ? `url(#${projectionId(`outline-paint-${path.id}`, projection)})` : paint;
 }

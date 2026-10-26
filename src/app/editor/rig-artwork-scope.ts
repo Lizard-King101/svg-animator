@@ -2,6 +2,7 @@ import { AnyElement, SVG } from './objects/svg.object';
 import { Path } from './objects/elements/path.object';
 import { Group } from './objects/elements/group.object';
 import { findElementChain } from './objects/element-bounds';
+import { isGeometryVisible } from './objects/element-availability';
 import { combinedMotionAdjustedMatrixFor } from './objects/motion-path.object';
 import { allAnimationDocuments } from './objects/animation.object';
 
@@ -22,7 +23,7 @@ export function weightScopeProblem(svg: SVG, target: AnyElement): string | undef
         }
         if(!(element instanceof Path)) return `${element.name} is not a native path. Convert shapes or text to paths before weighted group binding.`;
         const chain = findElementChain(svg.elements,element) ?? [];
-        if(!element.pathPoints().length || chain.some(item => item.locked || !item.visible || item.motion.pathId)) return `Show and unlock ${element.name} and its ancestors, and remove motion-path constraints before binding.`;
+        if(!element.pathPoints().length || !isGeometryVisible(chain) || chain.some(item => item.locked || item.motion.pathId)) return `Show and unlock ${element.name} and its ancestors, and remove motion-path constraints before binding.`;
         const matrix = combinedMotionAdjustedMatrixFor(svg,element);
         if(Math.abs(matrix.a*matrix.d-matrix.b*matrix.c) < .000001) return `Restore a nonzero scale for ${element.name} before binding.`;
         if(allAnimationDocuments(svg.animation).some(animation => animation.tracks.some(track => chain.some(item => item.id === track.targetId)))) return `Remove existing animation on ${element.name} or its ancestors before binding. Rig animation channels are a later step.`;

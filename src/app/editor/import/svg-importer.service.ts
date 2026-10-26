@@ -186,6 +186,7 @@ class ImportContext {
         const artwork = this.importResolvedElement(unclipped, null);
         if(!artwork) throw new SVGImportError("Clipped artwork is not editable yet.");
         const clipElement = this.importClipPath(referenceId);
+        clipElement.visible = false;
         const id = this.id(undefined, "clip-group");
         const state = commonState(element, id, `Clip ${artwork.name}`, this.transform(element));
         // The referencing element's transform and opacity affect its clip as a unit.
@@ -225,7 +226,9 @@ class ImportContext {
             if(children.length === 0) throw new SVGImportError(`Clip path #${referenceId} is empty.`);
 
             let geometry: ElementSave;
-            if(children.length === 1 && !definition.getAttribute("transform")) {
+            // A root clip source is always active geometry. Keep deliberately
+            // hidden SVG geometry as a child so its own visibility still applies.
+            if(children.length === 1 && children[0].visible && !definition.getAttribute("transform")) {
                 geometry = children[0];
             } else {
                 geometry = this.definitionGroup(definition, children, "clip-shapes");
@@ -234,6 +237,7 @@ class ImportContext {
             const nestedReference = localUrlReference(styleValue(definition, "clip-path"));
             if(!nestedReference) return geometry;
             const nestedClip = this.importClipPath(nestedReference);
+            nestedClip.visible = false;
             const intersection = this.definitionGroup(definition, [geometry, nestedClip], "clip-intersection");
             intersection.clipElementId = nestedClip.id;
             return intersection;

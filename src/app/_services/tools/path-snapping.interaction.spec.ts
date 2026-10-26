@@ -66,7 +66,7 @@ describe('path anchor snapping gestures', () => {
             const workspace = new CanvasWorkspaceComponent(editor, mutations, zone, new ElementRef(viewport), gestures);
             workspace.ngAfterViewInit();
             const page = new EditorPage({ hidesArtworkHandles: false } as any, {} as any, editor, animation, mutations, projects,
-                { selectedLayers: [path] } as any, {} as any, {} as any, {} as any, { handleKey: () => false } as any);
+                { selectedLayers: [path] } as any, {} as any, {} as any, {} as any, { handleKey: () => false } as any, { active: false } as any);
             const keyboard = (event: KeyboardEvent) => page.handleKeyDown(event);
             const keyup = (event: KeyboardEvent) => page.handleKeyUp(event);
             document.addEventListener('keydown', keyboard);

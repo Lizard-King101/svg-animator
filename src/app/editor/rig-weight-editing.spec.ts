@@ -3,7 +3,7 @@ import { identityMatrix, translationMatrix } from './objects/transform.object';
 import { automaticWeightUpdates, bindingWeightMode, editWeightInfluence, pointWeightState } from './rig-weight-editing';
 import { assignWeightUpdates, changeScopeInfluences } from './rig-weight-commands';
 import { detachBindingWeights, linkCoincidentWeights, setPointIndependent, unlinkPointWeights } from './rig-point-weights';
-import { createDocumentEnvelope, migrateDocument } from './migrations/document-migrations';
+import { CURRENT_DOCUMENT_VERSION, createDocumentEnvelope, migrateDocument } from './migrations/document-migrations';
 import documentV13Shared from './migrations/fixtures/document-v13-shared-weights.json';
 
 const anchor = (id: string, x: number, y: number, weights = [{ boneId: 'a', weight: 1 }]): BoundPoint => ({ id, anchorId: id, x, y, weights });
@@ -180,7 +180,7 @@ describe('weight locks and document compatibility', () => {
     it('migrates document v13 without rewriting weights, inheritance, shared owners or posed geometry', () => {
         const source = structuredClone(documentV13Shared), original = JSON.stringify(source), result = migrateDocument(source);
         expect(result.status).toBe('ok'); if(result.status !== 'ok') return;
-        expect(result.value.version).toBe(14); expect(result.value.data.rigs!.version).toBe(5);
+        expect(result.value.version).toBe(CURRENT_DOCUMENT_VERSION); expect(result.value.data.rigs!.version).toBe(5);
         expect(result.value.data.rigs!.armatures).toEqual(source.data.rigs.armatures as any);
         const rig = result.value.data.rigs!.armatures[0];
         expect(bindingWeightMode(rig, rig.bindings)).toBe('custom');

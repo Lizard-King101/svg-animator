@@ -30,8 +30,7 @@ describe("LayerCommandService", () => {
         commands.selectLayer(second, { ctrlKey: true } as MouseEvent);
         expect(commands.selectedLayers).toEqual([third, first]);
         commands.renamingLayer = first;
-        first.name = "  ";
-        commands.finishLayerRename();
+        commands.finishLayerRename("  ");
         expect(first.name).toBe("Layer");
         expect(commits).toEqual(["commit"]);
     });
@@ -131,7 +130,7 @@ describe("LayerCommandService", () => {
 
         editor.selectedElements = [bottom, top];
         open(top);
-        expect(editor.contextMenu!.items.map((candidate) => candidate.label)).toEqual(["Group selection", "Delete selection"]);
+        expect(editor.contextMenu!.items.map((candidate) => candidate.label)).toEqual(["Duplicate selection", "Group selection", "Delete selection"]);
     });
 });
 

@@ -1,11 +1,13 @@
 import { AnimationEvaluationPlan } from './animation-evaluation-plan';
-import { findAnimationTarget, writeAnimationProperty } from '../objects/animation-targets';
+import { findAnimationTarget } from '../objects/animation-targets';
 import { findElementChain, resolvedOrigin } from '../objects/element-bounds';
 import { combinedMotionAdjustedMatrixFor } from '../objects/motion-path.object';
 import { SVG } from '../objects/svg.object';
 import { applyMatrix } from '../objects/transform.object';
 import { buildSVGMarkup } from '../svg-markup';
 import { captureGeometrySnapshot, restoreGeometrySnapshot } from '../objects/element-geometry';
+import { applyDocumentRigAnimation, parseRigAnimationProperty, rigArtworkIds, writeDocumentAnimationProperty } from '../rig-animation';
+import { captureRigAnimationPreview, restoreRigAnimationPreview } from '../rig-animation-preview';
 
 export interface InspectionPoint { x: number; y: number; time: number; }
 export interface MotionTrail { id: string; segments: InspectionPoint[][]; ticks: InspectionPoint[]; }
@@ -21,11 +23,15 @@ export function onionTimes(time: number, duration: number, step: number): number
 export class AnimationInspectionSnapshot {
     private readonly plan: AnimationEvaluationPlan;
     private readonly baselines;
+    private readonly rigBaseline;
+    private readonly animatedRigIds: Set<string>;
     constructor(readonly document: SVG) {
-        this.plan = new AnimationEvaluationPlan(document.animation, document.elements);
+        this.plan = new AnimationEvaluationPlan(document.animation, document.elements, document.rigs);
         this.baselines = [...this.plan.targetMap.values()].map(target => ({
             target, geometry: captureGeometrySnapshot(target), transform: { ...target.transform },
         }));
+        this.animatedRigIds = new Set(this.plan.tracks.filter(track => track.applicable && parseRigAnimationProperty(track.property)).map(track => track.targetId));
+        this.rigBaseline = captureRigAnimationPreview(document, this.animatedRigIds);
     }
 
     private at(time: number): void {
@@ -35,14 +41,16 @@ export class AnimationInspectionSnapshot {
             restoreGeometrySnapshot(base.target, base.geometry);
             base.target.transform = { ...base.transform };
         });
+        restoreRigAnimationPreview(this.document, this.rigBaseline);
         this.plan.evaluate(time).forEach(value => {
-            const target = this.plan.targetMap.get(value.targetId);
-            if(value.applied && target) writeAnimationProperty(target, value.property, value.value);
+            if(value.applied) writeDocumentAnimationProperty(this.document, value.targetId, value.property, value.value);
         });
+        applyDocumentRigAnimation(this.document, this.animatedRigIds);
     }
 
     skins(time: number, step: number, selectedIds: readonly string[] = []): OnionSkin[] {
         const subjects = new Set(selectedIds.length ? selectedIds : this.plan.tracks.map(track => track.targetId));
+        this.document.rigs.armatures.filter(rig => subjects.has(rig.id)).forEach(rig => rigArtworkIds(rig).forEach(id => subjects.add(id)));
         const kept = new Set<string>();
         this.plan.targetMap.forEach(target => {
             const chain = findElementChain(this.document.elements, target) ?? [];
@@ -52,9 +60,9 @@ export class AnimationInspectionSnapshot {
             this.at(sampleTime);
             // Compute transforms with the full scene first, retaining automatic origins,
             // clipping and motion references; hide unrelated artwork only in the image.
-            const root = new DOMParser().parseFromString(buildSVGMarkup(this.document), 'image/svg+xml');
-            root.querySelectorAll('[id]').forEach(node => {
-                const id = node.getAttribute('id')!;
+            const root = new DOMParser().parseFromString(buildSVGMarkup(this.document, { renderTargets: true }), 'image/svg+xml');
+            root.querySelectorAll('[id], [data-render-target]').forEach(node => {
+                const id = node.getAttribute('data-render-target') || node.getAttribute('id')!;
                 if(this.plan.targetMap.has(id) && !kept.has(id) && !node.closest('defs')) node.remove();
             });
             return { time: sampleTime, direction: sampleTime < time ? 'past' : 'future',

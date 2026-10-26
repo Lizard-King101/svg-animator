@@ -1,16 +1,31 @@
 import { packedColorValue } from "./evaluator";
 import { buildRuntimePathData } from "./path-data";
-import { pathRevealNodes } from "./render-roles.internal";
+import { geometryRoleNodes, isClippingGeometry, paintRoleNodes, pathRevealNodes, projectedDefinitionId, renderTargetNodes } from "./render-roles.internal";
+import { deformBinding } from './rig/armature';
+import { evaluateRigConstraints } from './rig/constraints';
+import { attachmentTransforms } from './rig/attachments';
+import { parseRigAnimationProperty } from './rig/channels';
+import { outlineProjectionProblem, projectOutlineSections } from './outline';
+import { RuntimePlayerError } from './errors';
 const MIN_VISIBLE_DRAW_PROGRESS = 0.0002;
 export class RuntimeScene {
-    constructor(root, sourceTargets) {
+    constructor(root, sourceTargets, rigs) {
         this.root = root;
         this.targetById = new Map();
-        this.nodeById = new Map();
+        this.targetNodesById = new Map();
         this.targets = clone(sourceTargets);
+        this.rigs = rigs && clone(rigs);
         this.targets.forEach((target) => this.targetById.set(target.id, target));
     }
     write(targetId, property, value) {
+        const boneChannel = parseRigAnimationProperty(property);
+        if (boneChannel) {
+            const bone = this.rigs?.armatures.find(rig => rig.id === targetId)?.bones.find(bone => bone.id === boneChannel.boneId);
+            if (!bone || typeof value !== 'number' || !Number.isFinite(value))
+                return false;
+            bone[boneChannel.field] = value;
+            return true;
+        }
         const target = this.targetById.get(targetId);
         if (!target)
             return false;
@@ -77,19 +92,53 @@ export class RuntimeScene {
         }
     }
     render() {
+        this.applyRigs();
+        // Validate the complete authored length after deformation, before changing any SVG nodes.
+        for (const target of this.targets)
+            if (target.path?.outlineSections && target.stroke) {
+                const problem = outlineProjectionProblem(target.path.contours, target.path.outlineSections, { ...target.stroke, rounded: target.path.rounded });
+                if (problem)
+                    throw new RuntimePlayerError('invalid-bundle', problem);
+            }
         this.targets.forEach((target) => {
-            const node = this.node(target.id);
-            if (!node)
-                return;
-            node.style.display = target.visible ? "" : "none";
-            setAttribute(node, "opacity", target.opacity === 1 ? null : round(target.opacity));
-            setAttribute(node, "transform", matrixToSvg(this.motionAdjustedMatrix(target)));
-            this.renderGeometry(node, target);
-            this.renderAppearance(node, target);
+            const transform = matrixToSvg(this.motionAdjustedMatrix(target));
+            this.nodes(target.id).forEach(node => {
+                const clipping = isClippingGeometry(node);
+                node.style.display = node.getAttribute('data-render-projection') === 'clip' || target.visible ? '' : 'none';
+                setAttribute(node, "opacity", clipping || target.opacity === 1 ? null : round(target.opacity));
+                setAttribute(node, "transform", transform);
+                this.renderGeometry(node, target);
+                if (!clipping)
+                    this.renderAppearance(node, target);
+            });
             this.renderGradients(target);
         });
     }
-    clear() { this.nodeById.clear(); }
+    clear() { this.targetNodesById.clear(); }
+    /** Recompute from captured rest points on every seek; solved FK never replaces authored channels. */
+    applyRigs() {
+        const evaluated = this.rigs?.armatures.map(rig => {
+            const posed = evaluateRigConstraints({ ...rig, constraintsActive: true });
+            return { paths: posed.bindings.map(binding => ({ id: binding.pathId, points: deformBinding(posed, binding) })), transforms: attachmentTransforms(posed) };
+        }) ?? [];
+        for (const rig of evaluated) {
+            for (const binding of rig.paths) {
+                const target = this.targetById.get(binding.id);
+                forEachPathPoint(target.path.contours, point => {
+                    const posed = binding.points.get(point.id);
+                    if (posed) {
+                        point.x = posed.x;
+                        point.y = posed.y;
+                    }
+                });
+                target.geometry = pathBounds(target.path.contours);
+            }
+            for (const [id, transform] of rig.transforms) {
+                const target = this.targetById.get(id);
+                target.transform = { ...transform, originX: transform.originX ?? 0, originY: transform.originY ?? 0, autoOrigin: false };
+            }
+        }
+    }
     writeGeometryPosition(target, axis, value) {
         if (target.type === "group")
             return false;
@@ -194,12 +243,24 @@ export class RuntimeScene {
         return true;
     }
     renderGeometry(node, target) {
-        const geometryNodes = node.tagName.toLowerCase() === "g"
-            ? [...node.querySelectorAll('[data-render-role~="geometry"], [data-render-role~="geometry-effect"]')]
-            : [node];
+        const geometryNodes = geometryRoleNodes(this.root, node, target.id);
         if (target.path) {
-            const data = buildRuntimePathData(target.path.contours, target.path.rounded);
+            const contours = target.path.explicitClosure || target.path.outlineSections !== undefined ? target.path.contours : legacyRenderContours(target.path.contours);
+            const data = buildRuntimePathData(contours, target.path.rounded);
             geometryNodes.forEach((item) => setAttribute(item, "d", data));
+            if (isClippingGeometry(node))
+                return;
+            if (target.path.outlineSections !== undefined && target.stroke) {
+                const projection = projectOutlineSections(target.path.contours, target.path.outlineSections, { ...target.stroke, drawProgress: target.path.drawProgress, rounded: target.path.rounded });
+                node.querySelectorAll('[data-render-role~="outline"]').forEach(item => setAttribute(item, 'd', projection.strokeData));
+                const paint = target.paints.stroke;
+                if (paint?.kind === 'gradient')
+                    this.nodes(`outline-paint-${target.id}`).forEach(gradient => {
+                        const bounds = projection.sourceBounds, [a, b, c, d, e, f] = paint.transform;
+                        setAttribute(gradient, 'gradientTransform', `matrix(${[bounds.width * a, bounds.height * b, bounds.width * c, bounds.height * d, bounds.x + bounds.width * e, bounds.y + bounds.height * f].map(round).join(' ')})`);
+                    });
+                return;
+            }
             const progress = clamp01(target.path.drawProgress);
             const reveal = pathRevealNodes(this.root, node, target.id);
             if (reveal.length)
@@ -241,7 +302,13 @@ export class RuntimeScene {
             this.roleNodes(node, "fill").forEach((item) => writePaint(item, "fill", fill, "none"));
         if (stroke !== undefined)
             this.roleNodes(node, "stroke").forEach((item) => writePaint(item, "stroke", stroke, null));
-        if (color !== undefined)
+        if (target.path?.outlineSections !== undefined)
+            node.querySelectorAll('[data-render-role~="outline"]').forEach(item => {
+                writePaint(item, 'fill', stroke ?? null, 'none');
+                if (stroke?.kind === 'gradient' && stroke.units === 'objectBoundingBox')
+                    setAttribute(item, 'fill', `url(#${projectedDefinitionId(node, `outline-paint-${target.id}`)})`);
+            });
+        if (color !== undefined && node.getAttribute('data-render-projection') !== 'stroke')
             writePaint(node, "fill", color, "#000000");
         if (target.stroke) {
             const multiplier = target.stroke.alignment === "center" ? 1 : 2;
@@ -267,25 +334,21 @@ export class RuntimeScene {
         Object.values(target.paints).forEach((paint) => {
             if (!paint || paint.kind !== "gradient")
                 return;
-            const gradient = this.node(paint.id);
-            if (!gradient)
-                return;
-            setAttribute(gradient, "gradientTransform", isIdentityTransform(paint.transform) ? null : `matrix(${paint.transform.map(round).join(" ")})`);
-            Object.entries(paint.coordinates).forEach(([name, value]) => setAttribute(gradient, name, value));
+            this.nodes(paint.id).forEach(gradient => {
+                setAttribute(gradient, "gradientTransform", isIdentityTransform(paint.transform) ? null : `matrix(${paint.transform.map(round).join(" ")})`);
+                Object.entries(paint.coordinates).forEach(([name, value]) => setAttribute(gradient, name, value));
+            });
             paint.stops.forEach((stop) => {
-                const stopNode = this.node(stop.id);
-                if (!stopNode)
-                    return;
-                setAttribute(stopNode, "offset", round(stop.offset));
-                setAttribute(stopNode, "stop-color", stop.color);
-                setAttribute(stopNode, "stop-opacity", stop.opacity < 0.9999 ? round(stop.opacity) : null);
+                this.nodes(stop.id).forEach(stopNode => {
+                    setAttribute(stopNode, "offset", round(stop.offset));
+                    setAttribute(stopNode, "stop-color", stop.color);
+                    setAttribute(stopNode, "stop-opacity", stop.opacity < 0.9999 ? round(stop.opacity) : null);
+                });
             });
         });
     }
     roleNodes(node, role) {
-        if (node.tagName.toLowerCase() !== "g")
-            return [node];
-        return [...node.querySelectorAll(`[data-render-role~="${role}"]`)];
+        return paintRoleNodes(node, role);
     }
     motionAdjustedMatrix(target) {
         const base = this.ownMatrix(target, 0);
@@ -353,12 +416,13 @@ export class RuntimeScene {
             translation(-transform.originX, -transform.originY),
         ].reduce(multiply, identity());
     }
-    node(id) {
-        if (this.nodeById.has(id))
-            return this.nodeById.get(id);
-        const node = this.root.querySelector(`[id="${attributeSelectorValue(id)}"]`);
-        this.nodeById.set(id, node);
-        return node;
+    nodes(id) {
+        let nodes = this.targetNodesById.get(id);
+        if (!nodes) {
+            nodes = renderTargetNodes(this.root, id);
+            this.targetNodesById.set(id, nodes);
+        }
+        return nodes;
     }
 }
 function writePaint(node, attribute, paint, fallback) {
@@ -386,6 +450,14 @@ function writePathPoint(contours, id, axis, value) {
         found = true;
     } });
     return found;
+}
+/** Old bundles inferred closure on every frame; never change their saved topology flags. */
+function legacyRenderContours(contours) {
+    return contours.map(contour => {
+        const first = contour.lines[0]?.points[0], last = contour.lines[contour.lines.length - 1]?.points[1];
+        const inferred = contour.lines.length > 1 && first && last && (first.id === last.id || Math.abs(first.x - last.x) < .0001 && Math.abs(first.y - last.y) < .0001);
+        return inferred && !contour.closed ? { ...contour, closed: true } : contour;
+    });
 }
 function forEachPathPoint(contours, callback) {
     contours.forEach((contour) => contour.lines.forEach((line) => {
@@ -445,6 +517,5 @@ function finite(value) { const n = typeof value === "number" ? value : Number(va
 function clamp01(value) { return Math.max(0, Math.min(1, value)); }
 function round(value) { return Math.round(value * 10000) / 10000; }
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
-function attributeSelectorValue(value) { return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"'); }
 function isIdentityTransform(value) { return value.every((item, index) => Math.abs(item - [1, 0, 0, 1, 0, 0][index]) < 1e-6); }
 //# sourceMappingURL=scene.js.map

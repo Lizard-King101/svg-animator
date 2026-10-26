@@ -1,7 +1,7 @@
 import { Armature, BoundPoint, deformBinding, effectivePointWeights, validRigs, weightOwner, weightsWithInfluence } from './objects/armature';
 import { identityMatrix, translationMatrix } from './objects/transform.object';
 import { detachBindingWeights, linkCoincidentWeights, setPointIndependent, unlinkPointWeights, weightMembers } from './rig-point-weights';
-import { createDocumentEnvelope, migrateDocument } from './migrations/document-migrations';
+import { CURRENT_DOCUMENT_VERSION, createDocumentEnvelope, migrateDocument } from './migrations/document-migrations';
 import documentV12IK from './migrations/fixtures/document-v12-ik.json';
 
 const anchor = (id: string, x: number, y: number): BoundPoint => ({ id, anchorId: id, x, y, weights: [{ boneId: 'a', weight: 1 }] });
@@ -117,7 +117,7 @@ describe('shared point and independent handle weights', () => {
         rig.bindings[0].points[1].weights = [];
         const data = { ...documentV12IK.data, rigs: { version: 4, armatures: [rig] } } as any;
         const envelope = createDocumentEnvelope(data), result = migrateDocument(JSON.parse(JSON.stringify(envelope)));
-        expect(envelope.version).toBe(14);
+        expect(envelope.version).toBe(CURRENT_DOCUMENT_VERSION);
         expect(result.status).toBe('ok');
         if(result.status === 'ok') { expect(result.migrated).toBeFalse(); expect(result.value.data.rigs?.armatures).toEqual([rig]); }
     });

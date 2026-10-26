@@ -3,8 +3,7 @@ import { Path, PathContour } from "./elements/path.object";
 import { Line } from "./line.object";
 import { Point } from "./point.object";
 import { normalizeDashArray } from "./stroke-style.object";
-
-interface LengthSample { t: number; length: number; }
+import { cubicRange, curveLengthSamples, curveTAtLength } from '../../../../packages/runtime/src/curve-range';
 
 export function dashedPathContours(path: Path, editor: EditorService): PathContour[] {
     return dashedPathContourGroups(path, editor).flatMap((group) => group.pieces);
@@ -37,13 +36,13 @@ function dashContour(contour: PathContour, pattern: number[], patternLength: num
     let current: Line[] = [];
 
     for(const line of contour.lines.filter((candidate) => candidate.points.length >= 2)) {
-        const samples = lengthSamples(line);
+        const samples = curveLengthSamples(line);
         const lineLength = samples[samples.length - 1].length;
         let consumed = 0;
         while(consumed < lineLength - 1e-7) {
             const amount = Math.min(remaining, lineLength - consumed);
             if(patternIndex % 2 === 0 && amount > 1e-7) {
-                const segment = subLine(line, tAtLength(samples, consumed), tAtLength(samples, consumed + amount), editor);
+                const segment = subLine(line, curveTAtLength(samples, consumed), curveTAtLength(samples, consumed + amount), editor);
                 connect(current, segment);
                 current.push(segment);
             }
@@ -87,39 +86,6 @@ function dashContour(contour: PathContour, pattern: number[], patternLength: num
     }
 }
 
-function lengthSamples(line: Line): LengthSample[] {
-    if(line.type !== "bezier" || !line.controlStart || !line.controlEnd) {
-        return [{ t: 0, length: 0 }, { t: 1, length: Math.hypot(line.points[1].x - line.points[0].x, line.points[1].y - line.points[0].y) }];
-    }
-    const samples: LengthSample[] = [{ t: 0, length: 0 }];
-    let previous = line.points[0];
-    let length = 0;
-    for(let index = 1; index <= 64; index++) {
-        const t = index / 64;
-        const point = cubicPoint(line.points[0], line.controlStart, line.controlEnd, line.points[1], t);
-        length += Math.hypot(point.x - previous.x, point.y - previous.y);
-        samples.push({ t, length });
-        previous = point;
-    }
-    return samples;
-}
-
-function tAtLength(samples: LengthSample[], target: number): number {
-    if(target <= 0) return 0;
-    if(target >= samples[samples.length - 1].length) return 1;
-    let low = 0;
-    let high = samples.length - 1;
-    while(high - low > 1) {
-        const middle = (low + high) >> 1;
-        if(samples[middle].length < target) low = middle;
-        else high = middle;
-    }
-    const before = samples[low];
-    const after = samples[high];
-    const ratio = (target - before.length) / Math.max(1e-9, after.length - before.length);
-    return before.t + ((after.t - before.t) * ratio);
-}
-
 function subLine(line: Line, startT: number, endT: number, editor: EditorService): Line {
     if(line.type !== "bezier" || !line.controlStart || !line.controlEnd) {
         return new Line(editor, { type: "line", points: [lerpPoint(line.points[0], line.points[1], startT), lerpPoint(line.points[0], line.points[1], endT)] });
@@ -127,34 +93,10 @@ function subLine(line: Line, startT: number, endT: number, editor: EditorService
     const segment = cubicRange(line.points[0], line.controlStart, line.controlEnd, line.points[1], startT, endT);
     return new Line(editor, {
         type: "bezier",
-        points: [segment[0], segment[3]],
-        controlStart: segment[1],
-        controlEnd: segment[2],
+        points: [new Point(segment[0].x, segment[0].y), new Point(segment[3].x, segment[3].y)],
+        controlStart: new Point(segment[1].x, segment[1].y),
+        controlEnd: new Point(segment[2].x, segment[2].y),
     });
-}
-
-function cubicRange(p0: Point, p1: Point, p2: Point, p3: Point, startT: number, endT: number): [Point, Point, Point, Point] {
-    const left = splitCubic(p0, p1, p2, p3, endT)[0];
-    if(startT <= 0) return left;
-    return splitCubic(...left, startT / Math.max(endT, 1e-9))[1];
-}
-
-function splitCubic(p0: Point, p1: Point, p2: Point, p3: Point, t: number): [[Point, Point, Point, Point], [Point, Point, Point, Point]] {
-    const a = lerpPoint(p0, p1, t);
-    const b = lerpPoint(p1, p2, t);
-    const c = lerpPoint(p2, p3, t);
-    const d = lerpPoint(a, b, t);
-    const e = lerpPoint(b, c, t);
-    const f = lerpPoint(d, e, t);
-    return [[new Point(p0.x, p0.y), a, d, f], [f, e, c, new Point(p3.x, p3.y)]];
-}
-
-function cubicPoint(p0: Point, p1: Point, p2: Point, p3: Point, t: number): Point {
-    const mt = 1 - t;
-    return new Point(
-        mt ** 3 * p0.x + 3 * mt ** 2 * t * p1.x + 3 * mt * t ** 2 * p2.x + t ** 3 * p3.x,
-        mt ** 3 * p0.y + 3 * mt ** 2 * t * p1.y + 3 * mt * t ** 2 * p2.y + t ** 3 * p3.y,
-    );
 }
 
 function lerpPoint(start: Point, end: Point, t: number): Point {

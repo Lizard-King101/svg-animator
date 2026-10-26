@@ -9,7 +9,8 @@ import { Path } from "../editor/objects/elements/path.object";
 import { Shape } from "../editor/objects/elements/shape.object";
 import { TextElement } from "../editor/objects/elements/text.object";
 import { canConvertStrokeToPath, StrokeToPathProfile } from "../editor/objects/stroke-outline.object";
-import { AnyElement } from "../editor/objects/svg.object";
+import { AnyElement, SVG } from "../editor/objects/svg.object";
+import { AnimationPlaybackService } from './animation-playback.service';
 
 /** Selection state and mutation-aware commands shared by the layer panel and editor shortcuts. */
 @Injectable()
@@ -17,7 +18,17 @@ export class LayerCommandService {
     draggingLayer?: AnyElement;
     dragTargetLayer?: AnyElement;
     dragTargetPosition?: "before" | "after" | "inside";
-    renamingLayer?: AnyElement;
+    private renameSession?: { element: AnyElement; document: SVG; revision: number; name: string };
+    get renamingLayer(): AnyElement | undefined {
+        const session = this.renameSession;
+        if(session && (session.document !== this.editor.selectedSVG || session.revision !== this.mutations.revision
+            || session.element.name !== session.name)) this.renameSession = undefined;
+        return this.renameSession?.element;
+    }
+    set renamingLayer(element: AnyElement | undefined) {
+        const document = this.editor.selectedSVG;
+        this.renameSession = element && document ? { element, document, revision: this.mutations.revision, name: element.name } : undefined;
+    }
     get selectedLayers(): AnyElement[] { return this.editor.selectedElements; }
     set selectedLayers(elements: AnyElement[]) { this.editor.selectedElements = elements; }
     private layerPointer = new RowPointerDrag<AnyElement>();
@@ -26,7 +37,8 @@ export class LayerCommandService {
     private collapsedGroupIds = new Set<string>();
 
     constructor(public editor: EditorService, private layerOperations: LayerOperationsService, private mutations: DocumentMutationService,
-        @Optional() private clipboard: ObjectClipboardCommandService | null = null) {}
+        @Optional() private clipboard: ObjectClipboardCommandService | null = null,
+        @Optional() private animation: AnimationPlaybackService | null = null) {}
 
     private snapshotAndSave(): void { this.mutations.commit(); }
 
@@ -108,13 +120,18 @@ export class LayerCommandService {
         return this.selectedLayers.includes(element) || this.editor.selectedElement === element;
     }
 
-    clippingGroupFor(element: AnyElement): Group | undefined {
-        const context = this.layerContext(element);
-        return context?.parent?.clipElementId === element.id ? context.parent : undefined;
+    clippingGroupFor(element: AnyElement, parent?: Group | null): Group | undefined {
+        const owner = parent === undefined ? this.layerContext(element)?.parent : parent;
+        return owner?.clipElementId === element.id ? owner : undefined;
     }
 
-    isClippingMask(element: AnyElement): boolean {
-        return !!this.clippingGroupFor(element);
+    isClippingMask(element: AnyElement, parent?: Group | null): boolean {
+        return !!this.clippingGroupFor(element, parent);
+    }
+
+    layerVisibilityTitle(element: AnyElement, parent?: Group | null): string {
+        if(this.isClippingMask(element, parent)) return `${element.visible ? 'Hide' : 'Show'} clipping artwork; clipping stays active`;
+        return element.visible ? 'Hide layer' : 'Show layer';
     }
 
     selectLayer(element: AnyElement, event?: Pick<MouseEvent, "shiftKey" | "ctrlKey" | "metaKey">) {
@@ -209,20 +226,38 @@ export class LayerCommandService {
         this.renamingLayer = element;
     }
 
-    finishLayerRename() {
-        if(this.renamingLayer) {
-            this.renamingLayer.name = this.renamingLayer.name.trim() || 'Layer';
-            this.snapshotAndSave();
-        }
+    finishLayerRename(value?: string) {
+        const element = this.renamingLayer;
         this.renamingLayer = undefined;
+        if(!element || value === undefined) return;
+        const name = value.trim() || 'Layer';
+        if(name === element.name) return;
+        element.name = name;
+        this.mutations.commit('metadata');
     }
 
     duplicateLayer(element: AnyElement) {
-        const duplicate = this.layerOperations.duplicate(element);
-        if(duplicate) {
-            this.selectLayer(duplicate);
-            this.snapshotAndSave();
-        }
+        this.duplicateLayers([element]);
+    }
+
+    duplicateSelectedLayers(): void {
+        this.duplicateLayers(this.selectedLayers);
+    }
+
+    private duplicateLayers(elements: readonly AnyElement[]): void {
+        if(!elements.length) return;
+        this.animation?.pause();
+        // Clone the authored geometry and transforms, never a transient animation frame.
+        this.animation?.restorePreview();
+        const duplicates = this.layerOperations.duplicateMany(elements);
+        if(!duplicates.length) return;
+        this.selectedLayers = duplicates;
+        this.lastSelectedLayer = duplicates[duplicates.length - 1];
+        this.renamingLayer = undefined;
+        this.editor.selectedPathAnchor = undefined;
+        this.editor.selectedPathLine = undefined;
+        this.editor.selectedPathLines = [];
+        this.snapshotAndSave();
     }
 
     convertLayerStrokeToPath(path: Path, profile: StrokeToPathProfile) {
@@ -363,15 +398,20 @@ export class LayerCommandService {
 
         const items = this.selectedLayers.length > 1 ? this.selectionMenuItems(element) : this.layerMenuItems(element);
         this.editor.openContextMenu(event.clientX, event.clientY, items);
+        const hasTopologyCommand = this.selectedLayers.length > 1 ? this.canCombineSelectedPaths(element)
+            : element instanceof Path && canConvertStrokeToPath(element);
+        const problem = hasTopologyCommand && this.layerOperations.topologyProblem(this.selectedLayers);
+        if(problem && this.editor.contextMenu) this.editor.contextMenu.infoLines = [problem];
     }
 
     /** Commands for the whole selection; single-layer commands are omitted so nothing acts on just the clicked row. */
     private selectionMenuItems(element: AnyElement): EditorContextMenuItem[] {
         return contextMenuSections(
             this.clipboardItems(),
+            [{ label: 'Duplicate selection', shortcut: 'Ctrl+D', action: () => this.duplicateSelectedLayers() }],
             [
                 ...(this.canGroupSelectedLayers() ? [{ label: 'Group selection', shortcut: 'Ctrl+G', action: () => this.groupSelectedLayers() }] : []),
-                ...(this.canCombineSelectedPaths(element) ? [{ label: 'Combine selected paths', action: () => this.combineSelectedPaths(element) }] : []),
+                ...(this.canCombineSelectedPaths(element) ? [{ label: 'Combine selected paths', disabled: !!this.layerOperations.topologyProblem(this.selectedLayers), action: () => this.combineSelectedPaths(element) }] : []),
             ],
             [{ label: 'Delete selection', shortcut: 'Del', danger: true, action: () => this.deleteSelectedLayers() }],
         );
@@ -407,6 +447,7 @@ export class LayerCommandService {
                 ...(element.motion.pathId ? [{ label: 'Detach motion path', action: () => this.detachMotionPath(element) }] : []),
                 ...(element instanceof Path && canConvertStrokeToPath(element) ? [{
                     label: 'Convert stroke to path',
+                    disabled: !!this.layerOperations.topologyProblem([element]),
                     children: [
                         { label: 'Optimized', action: () => this.convertLayerStrokeToPath(element, 'optimized') },
                         { label: 'Precise', action: () => this.convertLayerStrokeToPath(element, 'precise') },

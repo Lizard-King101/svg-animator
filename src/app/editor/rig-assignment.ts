@@ -2,6 +2,7 @@ import { Armature, hasBonePose, WeightPointRef } from './objects/armature';
 import { allAnimationDocuments } from './objects/animation.object';
 import { findAnimationTarget } from './objects/animation-targets';
 import { findElementChain, parentMatrixFor, resolvedOrigin } from './objects/element-bounds';
+import { isGeometryVisible } from './objects/element-availability';
 import { Group } from './objects/elements/group.object';
 import { Path } from './objects/elements/path.object';
 import { combinedMotionAdjustedMatrixFor } from './objects/motion-path.object';
@@ -74,7 +75,7 @@ export function prepareArtworkAssignment(svg: SVG, rig: Armature, target: AnyEle
         if(ids.length > 1) candidate = assignWeightUpdates(candidate, automaticWeightUpdates(candidate, bindingPointRefs(candidate, pathIds)));
         return { candidate, pinOrigins: [...new Set(paths.flatMap(path => findElementChain(svg.elements, path) ?? []))], unbound: false };
     }
-    if(chain.some(item => item.locked || !item.visible || item.motion.pathId)) throw new Error('Show and unlock artwork, and remove motion-path constraints before assigning bones.');
+    if(!isGeometryVisible(chain) || chain.some(item => item.locked || item.motion.pathId)) throw new Error('Show and unlock artwork, and remove motion-path constraints before assigning bones.');
     if(allAnimationDocuments(svg.animation).some(animation => animation.tracks.some(track => chain.some(item => item.id === track.targetId)))) throw new Error('Remove existing animation on this artwork or its ancestors before assigning bones.');
     const parentMatrix = parentMatrixFor(svg.elements, target);
     if(Math.abs(parentMatrix.a * parentMatrix.d - parentMatrix.b * parentMatrix.c) < .000001) throw new Error('Restore a nonzero parent scale before assigning bones.');

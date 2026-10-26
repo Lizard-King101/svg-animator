@@ -1,7 +1,7 @@
 <div [style.grid-template-rows]="timeline.placementGridRows" class="timeline-table" *ngIf="timeline.surfaceMode == 'timeline'"
      (scroll)="timeline.updateTimelineViewport($event); timeline.closeColorEditor()" (wheel)="timeline.timelineWheel($event)"
      (pointerdown)="timeline.beginViewportPan($event)">
-  <div class="timeline-head-left">Layers</div>
+  <div class="timeline-head-left">Layers &amp; bones</div>
   <div class="timeline-time-cell timeline-ruler-cell">
     <app-timeline-ruler />
   </div>
@@ -18,7 +18,7 @@
 
     <div class="timeline-time-cell" *ngIf="timeline.surfaceMode == 'timeline'">
       <div class="timeline-time-content timeline-lane"
-           [ngClass]="{'property': row.type == 'property'}"
+           [ngClass]="{'property': timeline.isPropertyRow(row)}"
            [style.width.px]="timeline.timelineContentWidth"
            [style.--timeline-grid-step]="timeline.gridStepWidth()"
            [style.--timeline-grid-offset]="timeline.gridOffset()"
@@ -28,7 +28,7 @@
            (pointercancel)="timeline.endLaneGesture($event)">
         <div class="playhead animation-playhead" [attr.data-pixels-per-second]="timeline.pixelsPerSecond" [attr.data-time-padding]="timeline.timePadding" [attr.data-domain-start]="timeline.timeDomainStart" [style.left]="timeline.playheadLeft()"></div>
         <button class="key-diamond"
-                *ngFor="let keyframe of row.type == 'property' ? timeline.visibleKeyframes(row) : []"
+                *ngFor="let keyframe of timeline.isPropertyRow(row) ? timeline.visibleKeyframes(row) : []"
                 [attr.data-keyframe-id]="keyframe.id"
                 [attr.data-keyframe-ids]="keyframe.groupedKeyframeIds?.join(',')"
                 [ngClass]="{'selected': timeline.isKeyframeSelected(keyframe)}"
@@ -39,7 +39,7 @@
           <fa-icon [icon]="timeline.keyframeEasingIcon(keyframe)"></fa-icon>
         </button>
         <span class="key-summary-diamond"
-              *ngFor="let keyframe of row.type == 'layer' ? timeline.visibleKeyframes(row) : []"
+              *ngFor="let keyframe of !timeline.isPropertyRow(row) ? timeline.visibleKeyframes(row) : []"
               [style.left]="timeline.keyframeLeft(keyframe.time)"
               [title]="keyframe.time.toFixed(2) + 's · ' + keyframe.summaryCount + ' keyframe' + (keyframe.summaryCount == 1 ? '' : 's')"
               aria-hidden="true">
@@ -70,7 +70,7 @@
 
 <div class="timeline-graph-layout" *ngIf="timeline.surfaceMode == 'graph'">
   <section class="graph-layer-pane">
-    <div class="timeline-head-left">Layers</div>
+    <div class="timeline-head-left">Layers &amp; bones</div>
     <div class="graph-layer-scroll"
          (scroll)="timeline.updateLayerViewport($event); timeline.closeColorEditor()">
       <div class="timeline-virtual-spacer" *ngIf="timeline.virtualTopHeight" [style.height.px]="timeline.virtualTopHeight"></div>

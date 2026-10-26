@@ -16,12 +16,15 @@ import { detachBindingWeights, linkCoincidentWeights, setPointIndependent, unlin
 import { assignWeightUpdates, changeScopeInfluences, WeightUpdate } from '../editor/rig-weight-commands';
 import { applyRigPose, bindingProblem } from '../editor/rig-binding';
 import { findElementChain, pinTransformOrigin, parentMatrixFor } from '../editor/objects/element-bounds';
+import { isGeometryVisible } from '../editor/objects/element-availability';
 import { Path } from '../editor/objects/elements/path.object';
 import { combinedMotionAdjustedMatrixFor } from '../editor/objects/motion-path.object';
 import { allAnimationDocuments } from '../editor/objects/animation.object';
 import { EditorService } from './editor.service';
 import { AnimationPlaybackService } from './animation-playback.service';
 import { DocumentMutationService, MutationDomain } from './document-mutation.service';
+import { RigAnimationField, rigAnimationProperty } from '../editor/rig-animation';
+import { documentRigChannelProblem } from '../editor/rig-animation-conflicts';
 
 /** Owns rig commands; selection and the rest/pose workspace are session-only. */
 @Injectable()
@@ -30,7 +33,7 @@ export class RigEditingService {
     activeId?: string;
     boneId?: string;
     private currentWorkspace: 'rest' | 'pose' | 'weights' = 'rest';
-    get workspace() { return this.currentWorkspace; }
+    get workspace() { return this.isAnimating ? 'pose' as const : this.currentWorkspace; }
     set workspace(value: 'rest' | 'pose' | 'weights') {
         if(value === 'pose' && this.active?.constraintsActive === false && this.canEdit) {
             if(!this.readyToPose()) return;
@@ -50,7 +53,7 @@ export class RigEditingService {
     get selectedIKConstraints() { return this.active?.constraints?.filter(item => [item.upperBoneId,item.lowerBoneId,item.targetBoneId].includes(this.boneId ?? '')) ?? []; }
     get activeIKConstraint(): TwoBoneIKConstraint | undefined { return this.selectedIKConstraints.find(item => item.id === this.selectedIKConstraintId) ?? this.selectedIKConstraints[0]; }
     selectIKConstraint(id: string): void { this.selectedIKConstraintId = id; this.clearPosePreview(); }
-    get displayedRig() { try { return this.active && evaluateRigConstraints(this.active); } catch { return this.active; } }
+    get displayedRig() { try { return this.active && evaluateRigConstraints(this.playback.isRigPreviewed(this.active.id) ? {...this.active, constraintsActive:true} : this.active); } catch { return this.active; } }
     /** The enabled constraint that owns a bone's rotation; such bones are posed through their target. */
     drivingConstraint(boneId: string): TwoBoneIKConstraint | undefined { return this.active?.constraints?.find(item => item.enabled && [item.upperBoneId,item.lowerBoneId].includes(boneId)); }
     get ikChain() { const rig = this.displayedRig, id = this.activeIKConstraint?.lowerBoneId ?? this.boneId; return rig && id ? twoBoneChain(rig,id) : undefined; }
@@ -105,14 +108,20 @@ export class RigEditingService {
         const svg = this.editor.selectedSVG, rig = this.active; if(!svg || !rig) return undefined;
         // Previews start only from valid artwork, which they temporarily replace.
         if(this.posePreview) return undefined;
-        try { const evaluated = evaluateRigConstraints(rig); return bindingProblem(svg,evaluated) ?? attachmentProblem(svg,evaluated); }
+        try { const evaluated = this.displayedRig!; return bindingProblem(svg,evaluated) ?? attachmentProblem(svg,evaluated); }
         catch(error) { return (error as Error).message; }
     }
     /** The Weights workspace takes over the inspector, as artwork edits there would invalidate bindings. */
     get ownsInspector() { return this.canEdit && this.visible && !!this.active && this.workspace === 'weights'; }
-    get hidesArtworkHandles() { return this.canEdit && this.visible && !!this.active && this.workspace !== 'rest'; }
+    get hidesArtworkHandles() { return this.canPose && this.visible && !!this.active && this.workspace !== 'rest'; }
     get canEdit() { return !!this.editor.selectedSVG && this.playback.mode === 'edit'; }
-    constructor(public editor: EditorService, private playback: AnimationPlaybackService, private mutations: DocumentMutationService) {}
+    get isAnimating() { return this.playback.mode === 'animate'; }
+    get canPose() { return !!this.editor.selectedSVG && !this.playback.playing && (this.canEdit || (!!this.activeId && this.playback.allowsTarget(this.activeId))); }
+    get canManipulate() { return this.workspace === 'pose' ? this.canPose : this.canEdit; }
+    get animationContext() { return `${this.playback.mode}:${this.playback.contextKey}:${this.playback.currentTime}:${this.playback.revision}:${this.playback.playing}`; }
+    constructor(public editor: EditorService, private playback: AnimationPlaybackService, private mutations: DocumentMutationService) {
+        this.playback.contextChanging.subscribe(() => this.clearPosePreview());
+    }
 
     select(id: string): void { this.activeId = id; this.boneId = this.active?.bones[0]?.id; this.visible = true; this.message = ''; }
     selectBone(rigId: string, boneId: string): void { this.select(rigId); this.boneId = boneId; }
@@ -272,7 +281,7 @@ export class RigEditingService {
         this.mutate(() => rig.bones = rig.bones.filter(item => item !== bone), 'metadata'); this.boneId = rig.bones[0]?.id;
     }
     setPose(angle: number, boneId = this.boneId): void {
-        const candidate = this.fkCandidate(boneId, { pose: angle }); if(candidate) this.commitPose(candidate);
+        const candidate = this.fkCandidate(boneId, { pose: angle }); if(candidate) this.commitAuthoredPose(candidate);
     }
     /** Shows an FK rotation or body offset on the live artwork until the gesture commits or cancels. */
     previewFK(boneId: string, changes: Pick<Bone, 'pose'> | Required<Pick<Bone, 'poseX' | 'poseY'>>): Armature | undefined {
@@ -282,15 +291,15 @@ export class RigEditingService {
     }
     private fkCandidate(boneId: string | undefined, changes: Partial<Pick<Bone, 'pose' | 'poseX' | 'poseY'>>): Armature | undefined {
         const rig = this.active, bone = rig?.bones.find(item => item.id === boneId);
-        if(!rig || !bone || !this.canEdit || !Object.values(changes).every(Number.isFinite) || !this.readyToPose()) return;
-        const driver = changes.pose !== undefined ? this.drivingConstraint(bone.id) : undefined;
+        if(!rig || !bone || !this.canPose || !Object.values(changes).every(Number.isFinite) || !this.readyToPose()) return;
+        const driver = this.isAnimating || changes.pose !== undefined ? this.drivingConstraint(bone.id) : undefined;
         if(driver) { this.message = `${bone.name} follows ${driver.name}. Drag ${rig.bones.find(item => item.id === driver.targetBoneId)?.name ?? 'its target'} to pose it, or turn the constraint off to rotate it directly.`; return; }
         const candidate = structuredClone(rig); Object.assign(candidate.bones.find(item => item.id === bone.id)!, changes);
         if(candidate.constraints?.length) candidate.constraintsActive = true;
         return candidate;
     }
     previewIK(target: {x:number;y:number}): Armature | undefined {
-        if(!this.active || !this.boneId || !this.canEdit || !this.readyToPose()) { this.clearPosePreview(); return; }
+        if(!this.active || !this.boneId || !this.canPose || !this.readyToPose()) { this.clearPosePreview(); return; }
         const candidate = this.ikCandidate(target);
         if(candidate) return this.previewPose(candidate);
         this.clearPosePreview(); return undefined;
@@ -305,7 +314,7 @@ export class RigEditingService {
     private previewPose(candidate: Armature): Armature | undefined {
         this.clearPosePreview();
         const svg = this.editor.selectedSVG, rig = this.active;
-        if(!svg || !rig || !this.canEdit || !this.readyToPose()) return;
+        if(!svg || !rig || !this.canPose || !this.readyToPose()) return;
         const evaluated = this.evaluatePose(candidate); if(!evaluated) return;
         const paths = evaluated.bindings.flatMap(binding => { const path = findAnimationTarget(svg.elements, binding.pathId); return path instanceof Path ? [path] : []; });
         const geometry = paths.map(path => ({ path, snapshot: captureGeometrySnapshot(path) }));
@@ -319,8 +328,8 @@ export class RigEditingService {
     }
     clearPosePreview(): void { const live = this.livePose; this.livePose = undefined; live?.restore(); }
     setIKTarget(target: {x:number;y:number}): void {
-        if(!this.active || !this.canEdit || !this.readyToPose()) return;
-        const candidate = this.ikCandidate(target); if(candidate) this.commitPose(candidate);
+        if(!this.active || !this.canPose || !this.readyToPose()) return;
+        const candidate = this.ikCandidate(target); if(candidate) this.commitAuthoredPose(candidate);
     }
     flipIKBend(): void {
         const constraint = this.activeIKConstraint;
@@ -330,15 +339,15 @@ export class RigEditingService {
         this.setIKTarget(target);
     }
     setPosePosition(x: number, y: number, boneId = this.boneId): void {
-        const candidate = this.fkCandidate(boneId, { poseX: x, poseY: y }); if(candidate) this.commitPose(candidate);
+        const candidate = this.fkCandidate(boneId, { poseX: x, poseY: y }); if(candidate) this.commitAuthoredPose(candidate);
     }
     /** In Pose, enabled IK keeps reaching for its targets after a reset; elsewhere the reset is the rest setup. */
     resetPose(toRest = this.workspace !== 'pose'): boolean {
-        const rig = this.active, svg = this.editor.selectedSVG; if(!rig || !svg || !this.canEdit || !this.readyToPose()) return false;
+        const rig = this.active, svg = this.editor.selectedSVG; if(!rig || !svg || !this.canPose || (toRest && this.isAnimating) || !this.readyToPose()) return false;
         const candidate = structuredClone(rig);
         candidate.bones.forEach(bone => { bone.pose = 0; delete bone.poseX; delete bone.poseY; });
         if(candidate.constraints?.length) candidate.constraintsActive = !toRest;
-        return this.commitPose(candidate);
+        return this.commitAuthoredPose(candidate);
     }
     /** Clears every pose and pauses IK until the next pose edit, so artwork can be bound or bones drawn. */
     resetToRest(): boolean { return this.resetPose(true); }
@@ -357,6 +366,29 @@ export class RigEditingService {
         catch(error) { this.message = (error as Error).message; return; }
     }
     private mutate<T>(change: () => T, domain?: MutationDomain): T { this.clearPosePreview(); return this.mutations.mutate(change, domain); }
+    /** Canvas pose gestures key authored offsets; the setup and solved IK angles stay untouched. */
+    private commitAuthoredPose(candidate: Armature, forceBoneId?: string): boolean {
+        if(!this.isAnimating) return this.commitPose(candidate);
+        this.clearPosePreview();
+        const rig = this.active;
+        if(!rig || !this.canPose || !this.evaluatePose(candidate)) return false;
+        const fields: RigAnimationField[] = ['pose', 'poseX', 'poseY'];
+        const updates = candidate.bones.flatMap(bone => {
+            if(this.drivingConstraint(bone.id)) return [];
+            const original = rig.bones.find(item => item.id === bone.id);
+            return fields.filter(field => original && (bone.id === forceBoneId || (bone[field] ?? 0) !== (original[field] ?? 0)))
+                .map(field => ({property:rigAnimationProperty(bone.id,field),value:bone[field] ?? 0}));
+        });
+        if(!updates.length) return false;
+        const conflict = updates.map(update => documentRigChannelProblem(this.editor.selectedSVG!,rig.id,update.property)).find(Boolean);
+        if(conflict) { this.message = conflict; return false; }
+        this.mutate(() => updates.forEach(update => this.playback.upsertTargetKeyframe(rig.id,update.property,'number',update.value)), 'animation');
+        this.message = this.playback.contextMessage;
+        return !this.message;
+    }
+    keyPose(): void {
+        if(this.active && this.boneId && this.isAnimating) this.commitAuthoredPose(structuredClone(this.active),this.boneId);
+    }
     private commitPose(candidate: Armature, pinOrigins: AnyElement[] = []): boolean {
         this.clearPosePreview();
         const svg = this.editor.selectedSVG, rig = this.active, evaluated = this.evaluatePose(candidate);
@@ -600,7 +632,7 @@ export class RigEditingService {
         if(this.displayedRig!.bones.some(hasBonePose)) { this.message = REST_REQUIRED; return false; }
         const chain = findElementChain(svg.elements, element);
         if(!chain || this.overlapsLink(element)) { this.message = 'This artwork or its ancestor/descendant already has a rig link. Detach or unbind that link first.'; return false; }
-        if(chain.some(item => item.locked || !item.visible || item.motion.pathId)) { this.message = 'Show and unlock artwork, and remove motion-path constraints before attaching.'; return false; }
+        if(!isGeometryVisible(chain) || chain.some(item => item.locked || item.motion.pathId)) { this.message = 'Show and unlock artwork, and remove motion-path constraints before attaching.'; return false; }
         if(allAnimationDocuments(svg.animation).some(animation => animation.tracks.some(track => chain.some(item => item.id === track.targetId)))) { this.message = 'Attach artwork without existing animation on it or its ancestors.'; return false; }
         const matrix = parentMatrixFor(svg.elements, element);
         if(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c) < .000001) { this.message = 'Restore a nonzero parent scale before attaching.'; return false; }

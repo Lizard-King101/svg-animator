@@ -20,9 +20,9 @@ import { boneMatrices } from '../../editor/objects/armature';
 export class IKTargetComponent implements DoCheck, OnDestroy {
     @Input({required:true}) artwork!: SVGElement;
     @Input({required:true}) workspace!: CanvasWorkspaceComponent;
-    private drag?: { pointerId:number; capture:HTMLElement; documentId:string; rigId:string; boneId:string; constraintId?:string; revision:number; tool:unknown; inverse:Matrix; left:number; top:number; startX:number; startY:number; origin:{x:number;y:number}; target:{x:number;y:number}; moved:boolean };
+    private drag?: { pointerId:number; capture:HTMLElement; documentId:string; rigId:string; boneId:string; constraintId?:string; revision:number; animationContext:string; tool:unknown; inverse:Matrix; left:number; top:number; startX:number; startY:number; origin:{x:number;y:number}; target:{x:number;y:number}; moved:boolean };
     constructor(public rig:RigEditingService,private mutations:DocumentMutationService,private session:RigBindingSessionService) {}
-    get enabled() { return !this.session.pending && this.rig.canEdit && this.rig.visible && this.rig.workspace === 'pose' && (this.rig.activeIKConstraint ? this.rig.activeIKConstraint.enabled : this.rig.poseMethod === 'ik') && !!this.rig.ikChain; }
+    get enabled() { return !this.session.pending && this.rig.canPose && this.rig.visible && this.rig.workspace === 'pose' && (this.rig.activeIKConstraint ? this.rig.activeIKConstraint.enabled : this.rig.poseMethod === 'ik') && !!this.rig.ikChain; }
     get targetLabel() {
         const constraint = this.rig.activeIKConstraint;
         return constraint ? 'Move IK target ' + this.rig.active?.bones.find(bone => bone.id === constraint.targetBoneId)?.name : 'IK target for ' + this.rig.bone?.name;
@@ -40,9 +40,10 @@ export class IKTargetComponent implements DoCheck, OnDestroy {
     begin(event:PointerEvent):void {
         event.stopPropagation(); if(event.button !== 0 || !this.enabled || !this.projection || this.rig.problem) return;
         event.preventDefault(); this.cancel(); const capture=event.currentTarget as HTMLElement, rect=this.workspace.element.getBoundingClientRect(), origin=this.rig.ikTargetPosition!;
-        this.drag={pointerId:event.pointerId,capture,documentId:this.rig.editor.selectedSVG!.id,rigId:this.rig.activeId!,boneId:this.rig.boneId!,revision:this.mutations.revision,tool:this.rig.editor.activeTool,
+        capture.focus();
+        this.drag={pointerId:event.pointerId,capture,documentId:this.rig.editor.selectedSVG!.id,rigId:this.rig.activeId!,boneId:this.rig.boneId!,revision:this.mutations.revision,animationContext:this.rig.animationContext,tool:this.rig.editor.activeTool,
             constraintId:this.rig.activeIKConstraint?.id,inverse:invertMatrix(this.projection),left:rect.left,top:rect.top,startX:event.clientX,startY:event.clientY,origin,target:origin,moved:false};
-        capture.focus(); capture.setPointerCapture(event.pointerId);
+        capture.setPointerCapture(event.pointerId);
     }
     move(event:PointerEvent):void {
         this.ngDoCheck();
@@ -74,7 +75,7 @@ export class IKTargetComponent implements DoCheck, OnDestroy {
     }
     ngDoCheck():void {
         const drag=this.drag;
-        if(drag && (!this.enabled || drag.documentId!==this.rig.editor.selectedSVG?.id || drag.rigId!==this.rig.activeId || drag.boneId!==this.rig.boneId || drag.constraintId!==this.rig.activeIKConstraint?.id || drag.revision!==this.mutations.revision || drag.tool!==this.rig.editor.activeTool)) this.cancel();
+        if(drag && (!this.enabled || drag.animationContext!==this.rig.animationContext || drag.documentId!==this.rig.editor.selectedSVG?.id || drag.rigId!==this.rig.activeId || drag.boneId!==this.rig.boneId || drag.constraintId!==this.rig.activeIKConstraint?.id || drag.revision!==this.mutations.revision || drag.tool!==this.rig.editor.activeTool)) this.cancel();
     }
     ngOnDestroy():void { this.cancel(); }
 }

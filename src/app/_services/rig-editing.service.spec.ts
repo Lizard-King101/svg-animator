@@ -14,6 +14,7 @@ import { AnimationPlaybackService } from './animation-playback.service';
 import { DocumentMutationService } from './document-mutation.service';
 import { HistoryService } from './history.service';
 import { RigEditingService } from './rig-editing.service';
+import { OutlineEditingService } from './outline-editing.service';
 import { SVG } from '../editor/objects/svg.object';
 import { Path } from '../editor/objects/elements/path.object';
 import { Group } from '../editor/objects/elements/group.object';
@@ -84,6 +85,38 @@ describe('armature editing and weighted FK', () => {
         const after = combinedMotionAdjustedMatrixFor(t.svg, t.path), actual = applyMatrix(after, point.x, point.y);
         expect(after).toEqual(before); expect(actual.x).toBeCloseTo(100 - (world.y - 100)); expect(actual.y).toBeCloseTo(100 + (world.x - 100));
         expect(t.rigs.problem).toBeUndefined(); t.rigs.resetPose(); expect(point.x).toBeCloseTo(140); expect(point.y).toBeCloseTo(100);
+    });
+    it('binds and poses hidden clipping geometry while retaining normal hidden-layer and lock protections', () => {
+        const t = setup(), source = new Group(t.editor), detail = new Path(t.editor);
+        detail.lines = [new Line(t.editor, { type: 'line', points: [new Point(110, 100), new Point(120, 100)] })];
+        source.elements = [t.path]; source.visible = false;
+        t.group.elements = [source, detail]; t.group.clipElementId = source.id; t.svg.elements = [t.group];
+        t.mutations.commit();
+        expect(t.rigs.assignArtworkBones(t.group, [t.rigs.boneId!])).toBeTrue();
+        expect(t.rigs.active!.bindings.map(binding => binding.pathId)).toEqual([t.path.id, detail.id]);
+        const before = t.svg.save(); t.rigs.setPose(90);
+        expect(t.rigs.problem).toBeUndefined(); expect(source.visible).toBeFalse();
+        expect(t.path.lines[0].points[1].x).toBeCloseTo(100); expect(t.path.lines[0].points[1].y).toBeCloseTo(140);
+        source.visible = true; expect(t.rigs.problem).toBeUndefined(); source.visible = false;
+        t.path.visible = false; expect(t.rigs.problem).toContain('Show and unlock'); t.path.visible = true;
+        t.group.visible = false; expect(t.rigs.problem).toContain('Show and unlock'); t.group.visible = true;
+        source.locked = true; expect(t.rigs.problem).toContain('Show and unlock'); source.locked = false;
+        const after = t.svg.save(); t.mutations.undo(); expect(t.svg.save()).toEqual(before);
+        t.mutations.redo(); expect(t.svg.save()).toEqual(after); expect(t.rigs.problem).toBeUndefined();
+    });
+    for(const command of ['assign', 'attach'] as const) it(`allows ${command} and posing of a hidden shape clipping source`, () => {
+        const t = setup(), source = new Shape(t.editor, { type: 'ellipse', position: new Point(100, 100), width: 40, height: 20 });
+        source.visible = false; t.group.elements = [source, t.path]; t.group.clipElementId = source.id; t.svg.elements = [t.group];
+        t.mutations.commit();
+        const attach = () => command === 'assign' ? t.rigs.assignArtworkBones(source, [t.rigs.boneId!]) : t.rigs.attach(source, t.rigs.boneId!);
+        t.group.visible = false; expect(attach()).toBeFalse(); t.group.visible = true;
+        source.locked = true; expect(attach()).toBeFalse(); source.locked = false;
+        expect(attach()).toBeTrue(); t.rigs.setPose(90);
+        expect(t.rigs.problem).toBeUndefined(); expect(source.visible).toBeFalse();
+        const expected = attachmentMatrix(t.rigs.active!, t.rigs.active!.attachments![0]);
+        expect(ownMatrix(source).a).toBeCloseTo(expected.a); expect(ownMatrix(source).e).toBeCloseTo(expected.e);
+        t.group.visible = false; expect(t.rigs.problem).toContain('Show'); t.group.visible = true;
+        source.locked = true; expect(t.rigs.problem).toContain('unlock');
     });
     it('normalizes blended weights and leaves zero-weight anchors at rest', () => {
         const t = setup(), root = t.rigs.bone!; t.rigs.addBone(true); t.rigs.editBone({ x: 40 }); const child = t.rigs.bone!;
@@ -185,7 +218,7 @@ describe('armature editing and weighted FK', () => {
     });
     it('lets only the open Weights workspace replace artwork properties', () => {
         const t = setup(); t.rigs.addBone(true); t.rigs.bind();
-        TestBed.configureTestingModule({ imports: [PropertiesPanelComponent], providers: [
+        TestBed.configureTestingModule({ imports: [PropertiesPanelComponent], providers: [OutlineEditingService,
             { provide: RigEditingService, useValue: t.rigs }, { provide: RigBindingSessionService, useValue: new RigBindingSessionService(t.rigs, t.mutations) },
             { provide: EditorService, useValue: t.editor }, { provide: AnimationPlaybackService, useValue: t.playback }, { provide: DocumentMutationService, useValue: t.mutations },
             { provide: PaintEditingService, useValue: { apply: () => true } }] });

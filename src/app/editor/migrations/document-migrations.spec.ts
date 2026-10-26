@@ -17,14 +17,95 @@ import {
     storeRuntimeProjects,
 } from "./document-migrations";
 import { ProjectService, PROJECT_STORAGE_KEY } from "../../_services/project.service";
+import type { PathSave } from '../objects/elements/path.object';
+import type { GroupSave } from '../objects/elements/group.object';
+import { AnimationTrack, createDefaultAnimation } from '../objects/animation.object';
 
 describe("document migrations", () => {
+    it('migrates legacy clipping sources to hidden artwork without mutating inputs or ordinary visibility', () => {
+        const base = migrateDocument(legacyProjects[0].svgData);
+        if(base.status !== 'ok') throw new Error('Invalid test fixture');
+        const source = { ...base.value.data.elements[0], id: 'source', visible: true };
+        const child = { ...source, id: 'detail', visible: false };
+        const inner: GroupSave = { type: 'group', id: 'inner', name: 'Inner', visible: true, locked: false,
+            clipElementId: source.id, elements: [child, source] };
+        const outerMask = { ...source, id: 'outer-source' };
+        const outer: GroupSave = { type: 'group', id: 'outer', name: 'Outer', visible: true, locked: false,
+            clipElementId: outerMask.id, elements: [inner, outerMask] };
+        const data = { ...base.value.data, elements: [outer] };
+        const input = { kind: DOCUMENT_ENVELOPE_KIND, version: 16, data };
+        const before = JSON.stringify(input);
+        const result = migrateDocument(input);
+        expect(result.status).toBe('ok');
+        if(result.status !== 'ok') return;
+        expect(result.value.version).toBe(CURRENT_DOCUMENT_VERSION);
+        expect(result.migrated).toBeTrue();
+        const migrated = result.value.data.elements[0] as GroupSave;
+        expect(migrated.visible).toBeTrue();
+        expect(migrated.elements[1].visible).toBeFalse();
+        const migratedInner = migrated.elements[0] as GroupSave;
+        expect(migratedInner.visible).toBeTrue();
+        expect(migratedInner.elements.map(element => element.visible)).toEqual([false, false]);
+        expect(JSON.stringify(input)).toBe(before);
+        expect(migrateDocument(result.value)).toEqual({ status: 'ok', value: result.value, migrated: false, warnings: [] });
+        const unversioned = migrateDocument(data);
+        expect(unversioned.status).toBe('ok');
+        if(unversioned.status === 'ok') expect(unversioned.value.data.elements).toEqual(result.value.data.elements);
+    });
+
+    it('preserves explicit visible clipping artwork in current documents', () => {
+        const base = migrateDocument(legacyProjects[0].svgData);
+        if(base.status !== 'ok') throw new Error('Invalid test fixture');
+        const source = { ...base.value.data.elements[0], id: 'source', visible: true };
+        const group: GroupSave = { type: 'group', id: 'group', name: 'Eye', visible: true, locked: false,
+            clipElementId: source.id, elements: [source] };
+        const envelope = { ...base.value, data: { ...base.value.data, elements: [group] } };
+        const result = migrateDocument(JSON.parse(JSON.stringify(envelope)));
+        expect(result.status).toBe('ok');
+        if(result.status === 'ok') {
+            expect(result.migrated).toBeFalse();
+            expect(result.value).toEqual(envelope);
+            expect((result.value.data.elements[0] as GroupSave).elements[0].visible).toBeTrue();
+        }
+    });
+
+    it('keeps legacy scene and action clip-source visibility channels hidden without changing their identity or scope', () => {
+        const base = migrateDocument(legacyProjects[0].svgData);
+        if(base.status !== 'ok') throw new Error('Invalid test fixture');
+        const source = { ...base.value.data.elements[0], id: 'source', visible: false };
+        const detail = { ...source, id: 'detail', visible: true };
+        const group: GroupSave = { type: 'group', id: 'group', name: 'Eye', visible: true, locked: false,
+            clipElementId: source.id, elements: [detail, source] };
+        const track = (id: string, targetId: string): AnimationTrack => ({ id, targetId, property: 'visible', valueType: 'boolean',
+            keyframes: [{ id: `${id}-show`, time: 0, value: true }, { id: `${id}-hide`, time: 1, value: false }] });
+        const animation = createDefaultAnimation(), actionAnimation = createDefaultAnimation();
+        animation.tracks = [track('scene-source', source.id), track('scene-detail', detail.id)];
+        actionAnimation.tracks = [{ ...track('action-source', source.id), enabled: false }, track('action-detail', detail.id)];
+        animation.composition = { version: 1, actions: [{ id: 'blink', name: 'Blink', targetIds: [source.id, detail.id], animation: actionAnimation }],
+            placements: [{ id: 'blink-placement', actionId: 'blink', start: 0 }] };
+        const input = { kind: DOCUMENT_ENVELOPE_KIND, version: 16, data: { ...base.value.data, elements: [group], animation } };
+        const before = JSON.stringify(input), result = migrateDocument(input);
+        expect(result.status).toBe('ok');
+        if(result.status !== 'ok') return;
+        const migrated = result.value.data.animation!;
+        const expected = (value: AnimationTrack) => ({ ...value, keyframes: value.keyframes.map(key => ({ ...key, value: false })) });
+        expect(migrated.tracks[0]).toEqual(expected(animation.tracks[0]));
+        expect(migrated.tracks[1]).toEqual(animation.tracks[1]);
+        const action = migrated.composition!.actions[0];
+        expect(action.animation.tracks[0]).toEqual(expected(actionAnimation.tracks[0]));
+        expect(action.animation.tracks[1]).toEqual(actionAnimation.tracks[1]);
+        expect(action.targetIds).toEqual(animation.composition.actions[0].targetIds);
+        expect(migrated.composition!.placements).toEqual(animation.composition.placements);
+        expect(JSON.stringify(input)).toBe(before);
+        expect(migrateDocument(result.value)).toEqual({ status: 'ok', value: result.value, migrated: false, warnings: [] });
+    });
+
     it('upgrades v11 rigs without inventing targets or changing posed artwork', () => {
         const before = JSON.stringify(documentV11Attachments);
         const result = migrateDocument(documentV11Attachments);
         expect(result.status).toBe('ok');
         if(result.status !== 'ok') return;
-        expect(result.value.version).toBe(14);
+        expect(result.value.version).toBe(CURRENT_DOCUMENT_VERSION);
         expect(result.value.data.rigs?.version).toBe(5);
         expect(result.value.data.rigs?.armatures).toEqual(documentV11Attachments.data.rigs.armatures as any);
         expect(result.value.data.elements).toEqual(documentV11Attachments.data.elements as any);
@@ -133,6 +214,45 @@ describe("document migrations", () => {
         expect(result.value.data.animation?.tracks[0].keyframes).toEqual((documentV3AnimationV1.data.animation.tracks[0].keyframes as any));
     });
 
+    it('normalizes omitted legacy tracks after clipping migration without mutating the source', () => {
+        const data = { ...legacyProjects[0].svgData, animation: { version: 1, duration: 2, markers: [] } };
+        for(const input of [data, { kind: DOCUMENT_ENVELOPE_KIND, version: 3, data }]) {
+            const before = JSON.stringify(input);
+            const result = migrateDocument(input);
+            expect(result.status).toBe('ok');
+            if(result.status === 'ok') {
+                expect(result.value.data.animation?.version).toBe(2);
+                expect(result.value.data.animation?.tracks).toEqual([]);
+            }
+            expect(JSON.stringify(input)).toBe(before);
+        }
+    });
+
+    it('normalizes omitted legacy visibility keyframes while preserving the hidden clipping source', () => {
+        const source = { ...legacyProjects[0].svgData.elements[0], id: 'source', visible: true };
+        const group = { type: 'group', id: 'group', name: 'Eye', visible: true, locked: false,
+            clipElementId: source.id, elements: [source] };
+        const track = { id: 'source-visibility', targetId: source.id, property: 'visible', valueType: 'boolean' };
+        const input = { kind: DOCUMENT_ENVELOPE_KIND, version: 3,
+            data: { ...legacyProjects[0].svgData, elements: [group], animation: { version: 1, duration: 2, tracks: [track], markers: [] } } };
+        const before = JSON.stringify(input), result = migrateDocument(input);
+        expect(result.status).toBe('ok');
+        if(result.status === 'ok') {
+            expect(result.value.data.animation?.tracks).toEqual([{ ...track, keyframes: [] }] as AnimationTrack[]);
+            expect((result.value.data.elements[0] as GroupSave).elements[0].visible).toBeFalse();
+        }
+        expect(JSON.stringify(input)).toBe(before);
+
+        // Legacy restoration already discards empty keys; preserving them here
+        // allows that normalization without losing the valid visibility key.
+        const withKeys = { ...input, data: { ...input.data, animation: { ...input.data.animation,
+            tracks: [{ ...track, keyframes: [null, { id: 'show', time: 0, value: true }] }] } } };
+        const keysResult = migrateDocument(withKeys);
+        expect(keysResult.status).toBe('ok');
+        if(keysResult.status === 'ok') expect(keysResult.value.data.animation?.tracks[0].keyframes)
+            .toEqual([{}, { id: 'show', time: 0, value: false }] as AnimationTrack['keyframes']);
+    });
+
     it("isolates invalid records while retaining valid projects", () => {
         const result = migrateProjectDatabase(invalidProjects);
 
@@ -159,6 +279,69 @@ describe("document migrations", () => {
         });
         const future = migrateDocument(documentEnvelopeVersions[5]);
         expect(future.status).toBe("unsupported");
+    });
+});
+
+describe('outline metadata migration validation', () => {
+    const section = () => ({ id: 'outline', contourId: 'contour', start: { segmentId: 'line-1', t: 0 }, end: { segmentId: 'line-1', t: 1 } });
+    function fixture(outlineSections: unknown) {
+        const legacy = structuredClone(legacyProjects[0].svgData), source = legacy.elements[0];
+        const path: Record<string, unknown> = { ...source, contours: [{ id: 'contour', closed: false, lines: source.lines }], outlineSections };
+        return { kind: DOCUMENT_ENVELOPE_KIND, version: CURRENT_DOCUMENT_VERSION, data: { ...legacy, elements: [path] } };
+    }
+
+    it('preserves absent and explicitly empty outlines, including legacy line-only paths', () => {
+        for(const sections of [undefined, []]) {
+            const input = fixture(sections);
+            if(sections === undefined) delete input.data.elements[0]['outlineSections'];
+            const result = migrateDocument(input); expect(result.status).toBe('ok');
+            if(result.status === 'ok') {
+                expect((result.value.data.elements[0] as PathSave).outlineSections).toEqual(sections);
+                expect('outlineSections' in result.value.data.elements[0]).toBe(sections !== undefined);
+                const reopened = migrateDocument(result.value); expect(reopened.status).toBe('ok');
+                if(reopened.status === 'ok') expect(reopened.migrated).toBeFalse();
+            }
+        }
+        const legacy = fixture([]); delete legacy.data.elements[0]['contours'];
+        expect(migrateDocument(legacy).status).toBe('ok');
+        legacy.data.elements[0]['outlineSections'] = [section()];
+        expect(migrateDocument(legacy).status).toBe('invalid');
+    });
+
+    it('validates sections recursively inside nested artwork groups without changing their data', () => {
+        const input = fixture([section()]), path = input.data.elements[0];
+        input.data.elements = [{ type: 'group', id: 'outer', elements: [{ type: 'group', id: 'inner', elements: [path] }] }];
+        const before = JSON.stringify(input);
+        expect(migrateDocument(input).status).toBe('ok'); expect(JSON.stringify(input)).toBe(before);
+        path['outlineSections'] = [{ ...section(), end: { segmentId: 'missing', t: .5 } }];
+        expect(migrateDocument(input).status).toBe('invalid');
+    });
+
+    it('rejects malformed metadata lists, missing addresses, overlapping ranges, and invalid tapers', () => {
+        const invalid: unknown[] = [null, {}, 'outline', [null], [[]], [0],
+            [{ ...section(), contourId: 'missing' }], [{ ...section(), start: null }],
+            [{ ...section(), end: { segmentId: 'missing', t: .5 } }], [{ ...section(), end: { segmentId: 'line-1', t: 2 } }],
+            [section(), { ...section(), id: 'overlap', start: { segmentId: 'line-1', t: .5 } }], [section(), section()],
+            [{ ...section(), startTaper: { length: -1, tipWidth: 0 } }], [{ ...section(), endTaper: { length: .2, tipWidth: 2 } }],
+            [{ ...section(), startTaper: { length: .8, tipWidth: 0 }, endTaper: { length: .4, tipWidth: 0 } }],
+            [{ ...section(), startTaper: null }], [{ ...section(), endTaper: false }], [{ ...section(), fullContour: 'yes' }],
+        ];
+        for(const value of invalid) expect(migrateDocument(fixture(value)).status).withContext(JSON.stringify(value)).toBe('invalid');
+    });
+
+    it('accepts touching ranges and implicit closing-edge addresses, but refuses malformed source geometry safely', () => {
+        const touching = fixture([{ ...section(), end: { segmentId: 'line-1', t: .5 } },
+            { ...section(), id: 'next', start: { segmentId: 'line-1', t: .5 } }]);
+        expect(migrateDocument(touching).status).toBe('ok');
+        const closing = fixture([{ ...section(), start: { segmentId: 'contour:close', t: .2 }, end: { segmentId: 'contour:close', t: .8 } }]);
+        (closing.data.elements[0]['contours'] as { closed: boolean }[])[0].closed = true;
+        expect(migrateDocument(closing).status).toBe('ok');
+        for(const contours of [null, [null], [{ id: 'contour', closed: false, lines: null }],
+            [{ id: 'contour', closed: false, lines: [null] }],
+            [{ id: 'contour', closed: false, lines: [{ id: 'line-1', type: 'line', points: [null, null] }] }]]) {
+            const input = fixture([section()]); input.data.elements[0]['contours'] = contours;
+            expect(() => migrateDocument(input)).not.toThrow(); expect(migrateDocument(input).status).toBe('invalid');
+        }
     });
 });
 

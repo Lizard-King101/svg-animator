@@ -1,6 +1,7 @@
 import { Armature, deformBinding, PathBinding } from './objects/armature';
 import { findAnimationTarget } from './objects/animation-targets';
 import { findElementChain } from './objects/element-bounds';
+import { isGeometryVisible } from './objects/element-availability';
 import { Path } from './objects/elements/path.object';
 import { combinedMotionAdjustedMatrixFor } from './objects/motion-path.object';
 import { SVG } from './objects/svg.object';
@@ -24,11 +25,13 @@ export function createPathBinding(svg: SVG, path: Path, boneId: string): PathBin
 }
 
 /** Validate before any write: a stale binding must never overwrite hand-edited artwork. */
-export function bindingProblem(svg: SVG, rig: Armature): string | undefined {
+export interface RigArtworkValidationOptions { allowUnavailable?: boolean; }
+export function bindingProblem(svg: SVG, rig: Armature, options: RigArtworkValidationOptions = {}): string | undefined {
     for(const binding of rig.bindings) {
         const path = findAnimationTarget(svg.elements, binding.pathId);
         if(!(path instanceof Path)) return 'A bound path was removed. Unbind it before posing.';
-        if(findElementChain(svg.elements, path)?.some(element => element.locked || !element.visible)) return 'Show and unlock bound paths before posing.';
+        const chain = findElementChain(svg.elements, path) ?? [];
+        if(!options.allowUnavailable && (!isGeometryVisible(chain) || chain.some(element => element.locked))) return 'Show and unlock bound paths before posing.';
         if(pathTopology(path) !== binding.topology) return 'Bound path topology changed. Unbind and bind again before posing.';
         const matrix = combinedMotionAdjustedMatrixFor(svg, path);
         if((Object.keys(matrix) as (keyof typeof matrix)[]).some(key => Math.abs(matrix[key] - binding.matrix[key]) > .0002)) return 'A bound path transform changed. Unbind and bind again before posing.';

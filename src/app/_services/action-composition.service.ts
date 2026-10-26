@@ -1,29 +1,37 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Optional } from '@angular/core';
 import { AnimationAction, ActionPlacement, cloneAnimation, compositionHasOverlap, createDefaultAnimation, makeAnimationId, placementTiming, validPlacementTiming } from '../editor/objects/animation.object';
 import { AnyElement } from '../editor/objects/svg.object';
 import { Group } from '../editor/objects/elements/group.object';
 import { AnimationPlaybackService } from './animation-playback.service';
 import { DocumentMutationService } from './document-mutation.service';
 import { EditorService } from './editor.service';
+import { RigEditingService } from './rig-editing.service';
+
+export type ActionSelectionScope = 'selection' | 'rig';
 
 /** Persistent action/source commands. Playback owns the session editing context. */
 @Injectable()
 export class ActionCompositionService {
     message = '';
-    constructor(public editor: EditorService, public playback: AnimationPlaybackService, private mutations: DocumentMutationService) {}
+    constructor(public editor: EditorService, public playback: AnimationPlaybackService, private mutations: DocumentMutationService,
+        @Optional() private rigs?: RigEditingService) {}
     get actions() { return this.editor.selectedSVG?.animation.composition?.actions ?? []; }
     get placements() { return this.editor.selectedSVG?.animation.composition?.placements ?? []; }
     action(id: string) { return this.actions.find(action => action.id === id); }
 
-    create(name: string, extract = false): AnimationAction | undefined {
+    get selectedRig() { return this.rigs?.visible ? this.rigs.active : undefined; }
+    canCreate(scope: ActionSelectionScope): boolean { return scope === 'rig' ? !!this.selectedRig : this.editor.selectedElements.length > 0; }
+
+    create(name: string, extract = false, scope: ActionSelectionScope = 'selection'): AnimationAction | undefined {
         const svg = this.editor.selectedSVG;
-        if(!svg || !this.editor.selectedElements.length) { this.message = 'Select artwork for the action first.'; return; }
+        if(!svg || !this.canCreate(scope)) { this.message = scope === 'rig' ? 'Select an armature or bone for the action first.' : 'Select artwork for the action first.'; return; }
         const targetIds: string[] = [];
         const visit = (elements: readonly AnyElement[]) => elements.forEach(element => {
             if(!targetIds.includes(element.id)) targetIds.push(element.id);
             if(element instanceof Group) visit(element.elements);
         });
-        visit(this.editor.selectedElements);
+        if(scope === 'rig') targetIds.push(this.selectedRig!.id);
+        else visit(this.editor.selectedElements);
         this.playback.editAction();
         const animation = createDefaultAnimation();
         animation.duration = extract ? svg.animation.duration : 1;

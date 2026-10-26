@@ -5,6 +5,7 @@ import { SVG, SVGSave } from "../src/app/editor/objects/svg.object";
 import { TextElement } from "../src/app/editor/objects/elements/text.object";
 import { buildEmbeddedAnimationSvg, buildSelfContainedAnimatedSvg } from "../src/app/editor/export/runtime-svg-template";
 import { buildSVGMarkup } from "../src/app/editor/svg-markup";
+import { migrateDocument } from "../src/app/editor/migrations/document-migrations";
 
 const root = resolve(process.cwd());
 const fixtureDirectory = resolve(root, "fixtures/runtime-showcase-v1");
@@ -14,7 +15,9 @@ Object.defineProperty(TextElement.prototype, "lines", {
     get(this: TextElement) { return this.settings.content.split(/\r?\n/); },
 });
 let generatedId = 0;
-const svg = SVG.fromSave(envelope.data, { get ID() { return `fixture-${++generatedId}`; } } as never);
+const migrated = migrateDocument(envelope);
+if(migrated.status !== 'ok') throw new Error(`Showcase document migration failed: ${migrated.warnings.join(' ')}`);
+const svg = SVG.fromSave(migrated.value.data, { get ID() { return `fixture-${++generatedId}`; } } as never);
 const compile = compileRuntimeAnimation(svg.save(), { bakeRoundedCorners: true });
 if(compile.diagnostics.length) throw new Error(`Showcase fixture has compiler diagnostics: ${JSON.stringify(compile.diagnostics, null, 2)}`);
 const bundle = `${JSON.stringify(compile.bundle, null, 2)}\n`;

@@ -48,4 +48,12 @@ describe('Select tool canvas context menu', () => {
         hit(other); rightClick();
         expect(menu).toHaveBeenCalledOnceWith(jasmine.any(MouseEvent));
     });
+
+    it('opens the clipping source menu when its visible projected outline is hit', () => {
+        const { editor, child, group, menu, rightClick } = setup(); group.clipElementId = child.id;
+        const node = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        node.id = `${child.id}--stroke-${group.id}`; node.setAttribute('data-render-target', child.id);
+        spyOn(document, 'elementsFromPoint').and.returnValue([node]); rightClick();
+        expect(editor.selectedElement).toBe(child); expect(menu).toHaveBeenCalledOnceWith(jasmine.any(MouseEvent), child);
+    });
 });

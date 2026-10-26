@@ -6,7 +6,7 @@ function buildContour(contour, rounded) {
     const lines = contour.lines.filter((line) => line.points.length >= 2);
     if (!lines.length)
         return "";
-    const closed = contour.closed || (lines.length > 1 && samePoint(lines[0].points[0], lines[lines.length - 1].points[1]));
+    const closed = contour.closed;
     if (!rounded) {
         const commands = [`M ${pointText(lines[0].points[0])}`];
         lines.forEach((line) => commands.push(line.type === "bezier"
@@ -70,7 +70,7 @@ function segmentEndCorner(lines, index, closed) {
         return null;
     return roundedCorner(lines[index], lines[index === lines.length - 1 ? 0 : index + 1]);
 }
-function roundedCorner(incoming, outgoing) {
+export function roundedCorner(incoming, outgoing) {
     if (!isStraightPathSegment(incoming) || !isStraightPathSegment(outgoing) || !samePoint(incoming.points[1], outgoing.points[0]))
         return null;
     const anchor = outgoing.points[0];

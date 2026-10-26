@@ -36,6 +36,7 @@ export function insertPathPoint(path: Path, line: Line, createLine: LineFactory,
     const t = line.type === "bezier" && line.controlStart && line.controlEnd
         ? closestBezierT(start, line.controlStart, line.controlEnd, end, targetPoint ?? fallback)
         : closestLineT(start, end, targetPoint ?? fallback);
+    if(t <= .000001 || t >= .999999) return { changed: false };
 
     if(line.type === "bezier" && line.controlStart && line.controlEnd) {
         const q0 = lerpPoint(start, line.controlStart, t);
@@ -54,6 +55,7 @@ export function insertPathPoint(path: Path, line: Line, createLine: LineFactory,
             controlEnd: q2,
         });
         lines!.splice(index + 1, 0, next);
+        remapOutlineSplit(path, line.id, next.id, t);
         return { changed: true, selectedAnchor: midpoint, selectedLine: next };
     }
 
@@ -61,10 +63,12 @@ export function insertPathPoint(path: Path, line: Line, createLine: LineFactory,
     line.points = [start, midpoint];
     const next = createLine({ points: [midpoint, end] });
     lines!.splice(index + 1, 0, next);
+    remapOutlineSplit(path, line.id, next.id, t);
     return { changed: true, selectedAnchor: midpoint, selectedLine: next };
 }
 
 export function deletePathAnchor(path: Path, anchor: Point, createLine: LineFactory): PathEditResult {
+    if(path.outlineSections !== undefined) return { changed: false };
     const contour = contourForAnchor(path, anchor);
     if(!contour) return { changed: false };
     const lines = contour.lines;
@@ -116,8 +120,60 @@ export function contourForLine(path: Path, line: Line): PathContour | undefined 
     return path.contours.find((contour) => contour.lines.includes(line));
 }
 
-function contourForAnchor(path: Path, anchor: Point): PathContour | undefined {
+export function contourForAnchor(path: Path, anchor: Point): PathContour | undefined {
     return path.contours.find((contour) => contour.lines.some((line) => line.points[0] === anchor || line.points[1] === anchor));
+}
+
+/** Open a closed contour at an anchor without losing its implicit closing edge. */
+export function breakPathAtAnchor(path: Path, anchor: Point, createLine: LineFactory): PathEditResult {
+    if(path.outlineSections !== undefined) return { changed: false };
+    const contour = contourForAnchor(path, anchor);
+    if(!contour || contour.lines.some(line => line.points.length < 2)) return { changed: false };
+    if(contour.closed) {
+        const lines = [...contour.lines];
+        if(!lines.length) return { changed: false };
+        const first = lines[0].points[0], last = lines[lines.length - 1].points[1];
+        if(Math.abs(first.x - last.x) > .0001 || Math.abs(first.y - last.y) > .0001) {
+            lines.push(createLine({ points: [last, first] }));
+        }
+        let split = lines.findIndex(line => line.points[0] === anchor);
+        if(split < 0) {
+            const incoming = lines.findIndex(line => line.points[1] === anchor);
+            if(incoming < 0) return { changed: false };
+            split = (incoming + 1) % lines.length;
+        }
+        const rotated = [...lines.slice(split), ...lines.slice(0, split)];
+        const start = rotated[0].points[0];
+        rotated[rotated.length - 1].points[1] = new Point(start.x, start.y, undefined, start.cornerRadius);
+        contour.lines = rotated;
+        contour.closed = false;
+        path.settings.stroke_alignment = 'center';
+        return { changed: true, selectedAnchor: start, selectedLine: rotated[0] };
+    }
+    const outgoing = contour.lines.findIndex(line => line.points[0] === anchor);
+    if(outgoing <= 0 || contour.lines[outgoing - 1].points[1] !== anchor) return { changed: false };
+    const following = contour.lines.slice(outgoing);
+    const separate = new Point(anchor.x, anchor.y, undefined, anchor.cornerRadius);
+    following[0].points[0] = separate;
+    contour.lines = contour.lines.slice(0, outgoing);
+    path.contours.splice(path.contours.indexOf(contour) + 1, 0, path.createContour(following));
+    return { changed: true, selectedAnchor: separate, selectedLine: following[0] };
+}
+
+export function closePathContour(path: Path, contour: PathContour): PathEditResult {
+    if(path.outlineSections !== undefined || contour.closed || !path.contours.includes(contour)
+        || !contour.lines.some(line => line.points.length >= 2)) return { changed: false };
+    contour.closed = true;
+    return { changed: true, selectedLine: contour.lines[0] };
+}
+
+/** Curve-local endpoints preserve the exact rendered position through a de Casteljau split. */
+function remapOutlineSplit(path: Path, originalId: string, nextId: string, split: number): void {
+    for(const section of path.outlineSections ?? []) for(const end of [section.start, section.end]) {
+        if(end.segmentId !== originalId) continue;
+        if(end.t <= split) end.t /= split;
+        else { end.segmentId = nextId; end.t = (end.t - split) / (1 - split); }
+    }
 }
 
 function clonePoint(point: Point): Point { return point.add(0, 0); }

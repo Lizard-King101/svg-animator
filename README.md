@@ -13,6 +13,7 @@ A browser-based motion SVG studio for drawing, editing, and keyframe animation.
 
 - Multi-tab SVG documents with pan + zoom
 - Pen tool — straight segments, bezier curves, open/closed paths
+- Rig-friendly outlines — multiple visible sections on one weighted path, curve-local trimming, independent end tapers, and protected Break/Open/Close commands
 - Shape tools — rectangle and ellipse with Shift/Alt modifiers
 - Select tool — shared multi-selection with Layers, marquee, move/scale/rotate selections, keyboard nudging, anchor and bezier editing, straight ↔ curve conversion, and point insertion/deletion
 - Layers panel — nested groups, clipping, visibility, lock, rename, duplicate, drag-reorder, and delete
@@ -20,7 +21,7 @@ A browser-based motion SVG studio for drawing, editing, and keyframe animation.
 - Project gallery — asynchronous IndexedDB autosave, thumbnail previews, editable Project JSON import, session Undo for deletion, project name + dimensions picker, and resilient localStorage/in-memory fallbacks
 - SVG import — safe native conversion with full path-command, clipping, and editable gradient support plus opaque preservation
 - Animation workspace — virtualized timeline, speed graph, per-axis keyframe retiming, velocity/influence handles, easing presets, playback, selection, clipboard, and motion paths
-- Character setup — bone layers, FK and persistent two-bone IK, unified bone assignment, automatic and locked multi-point weights, shared seams, independent Bézier handles, and artwork-first or bone-first weight painting
+- Character rigging and animation — bone layers, FK and persistent two-bone IK, keyed bone/target poses, reusable rig actions, unified bone assignment, automatic and locked multi-point weights, shared seams, independent Bézier handles, and artwork-first or bone-first weight painting
 - Publishing — editable Project JSON from project-card actions plus a focused editor export flow for clean Static SVG, Embedded Animation SVG, self-contained Animated SVG, Runtime Assets ZIP, and ready-to-run Web Bundle ZIP
 - Undo / redo — per-document, section-shared history (50 entries with a 64 MiB unique-section budget)
 - Hosted on Cloudflare Workers Static Assets, routed with SPA fallback

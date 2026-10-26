@@ -1,4 +1,4 @@
-import { RuntimeContourV1, RuntimePointV1 } from "./contracts";
+import { RuntimeContourV1, RuntimeLineV1, RuntimePointV1 } from "./contracts";
 /** Shared framework-free path reconstruction used by authoring and playback. */
 export declare function buildRuntimePathData(contours: RuntimeContourV1[], rounded?: boolean): string;
 /** The implicit Z edge, retaining the caller's endpoint identities without changing saved geometry. */
@@ -21,4 +21,11 @@ export declare function isStraightPathSegment(line: {
         y: number;
     };
 }): boolean;
+export interface Corner {
+    before: RuntimePointV1;
+    after: RuntimePointV1;
+    controlBefore: RuntimePointV1;
+    controlAfter: RuntimePointV1;
+}
+export declare function roundedCorner(incoming: RuntimeLineV1, outgoing: RuntimeLineV1): Corner | null;
 //# sourceMappingURL=path-data.d.ts.map

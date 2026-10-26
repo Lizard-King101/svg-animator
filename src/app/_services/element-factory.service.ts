@@ -9,6 +9,13 @@ import { AnyElement, SVG, SVGSave } from "../editor/objects/svg.object";
 import { EditorService } from "./editor.service";
 import { clonePaint } from "../editor/objects/paint.object";
 
+export interface ElementCloneSelection {
+    roots: AnyElement[];
+    elements: Map<string, { original: AnyElement; duplicate: AnyElement }>;
+    /** Includes artwork, contours, segments, implicit closing edges, and every path point. */
+    ids: Map<string, string>;
+}
+
 /**
  * Constructs editor elements while the persisted model still requires an
  * EditorService in each constructor. Keeping that dependency here makes the
@@ -29,10 +36,28 @@ export class ElementFactory {
     }
 
     clone(element: AnyElement): AnyElement {
-        if(element instanceof Path) return this.clonePath(element);
-        if(element instanceof Shape) return this.cloneShape(element);
-        if(element instanceof TextElement) return this.cloneText(element);
-        return this.cloneGroup(element);
+        return this.cloneSelection([element]).roots[0];
+    }
+
+    cloneSelection(elements: readonly AnyElement[]): ElementCloneSelection {
+        const result: ElementCloneSelection = { roots: [], elements: new Map(), ids: new Map() };
+        result.roots = elements.map(element => this.cloneElement(element, result));
+        for(const { duplicate } of result.elements.values()) {
+            if(duplicate.motion.pathId) duplicate.motion.pathId = result.ids.get(duplicate.motion.pathId) ?? duplicate.motion.pathId;
+            if(duplicate instanceof Group && duplicate.clipElementId) {
+                duplicate.clipElementId = result.ids.get(duplicate.clipElementId) ?? duplicate.clipElementId;
+            }
+        }
+        return result;
+    }
+
+    private cloneElement(element: AnyElement, result: ElementCloneSelection): AnyElement {
+        const duplicate = element instanceof Path ? this.clonePath(element, result.ids)
+            : element instanceof Shape ? this.cloneShape(element)
+            : element instanceof TextElement ? this.cloneText(element) : this.cloneGroup(element, result);
+        result.elements.set(element.id, { original: element, duplicate });
+        result.ids.set(element.id, duplicate.id);
+        return duplicate;
     }
 
     private clonePoint(point: Point, pointMap: Map<string, Point>): Point {
@@ -45,7 +70,7 @@ export class ElementFactory {
         return cloned;
     }
 
-    private clonePath(path: Path): Path {
+    private clonePath(path: Path, ids: Map<string, string>): Path {
         const clone = new Path(this.editor);
         const pointMap = new Map<string, Point>();
 
@@ -53,24 +78,39 @@ export class ElementFactory {
         clone.visible = path.visible;
         clone.locked = false;
         clone.opacity = path.opacity;
+        clone.drawProgress = path.drawProgress;
         clone.closed = path.closed;
         clone.fillRule = path.fillRule;
         clone.transform = { ...path.transform };
         clone.motion = { ...path.motion };
         clone.settings = {
             ...path.settings,
+            stroke_dasharray: [...path.settings.stroke_dasharray],
             stroke: clonePaint(path.settings.stroke, this.editor.ID),
             fill: clonePaint(path.settings.fill, this.editor.ID),
         };
-        clone.contours = path.contours.map((contour) => clone.createContour(
-            contour.lines.map((line) => new Line(this.editor, {
-                type: line.type,
-                points: line.points.map((point) => this.clonePoint(point, pointMap)),
-                controlStart: line.controlStart ? this.clonePoint(line.controlStart, pointMap) : undefined,
-                controlEnd: line.controlEnd ? this.clonePoint(line.controlEnd, pointMap) : undefined,
-            })),
-            contour.closed,
-        ));
+        clone.contours = path.contours.map((contour) => {
+            const copied = clone.createContour(contour.lines.map((line) => {
+                const copiedLine = new Line(this.editor, {
+                    type: line.type,
+                    points: line.points.map((point) => this.clonePoint(point, pointMap)),
+                    controlStart: line.controlStart ? this.clonePoint(line.controlStart, pointMap) : undefined,
+                    controlEnd: line.controlEnd ? this.clonePoint(line.controlEnd, pointMap) : undefined,
+                });
+                ids.set(line.id, copiedLine.id);
+                return copiedLine;
+            }), contour.closed);
+            ids.set(contour.id, copied.id);
+            ids.set(`${contour.id}:close`, `${copied.id}:close`);
+            return copied;
+        });
+        pointMap.forEach((point, id) => ids.set(id, point.id));
+        clone.outlineSections = path.outlineSections?.map(section => ({
+            ...structuredClone(section), id: this.editor.ID,
+            contourId: ids.get(section.contourId)!,
+            start: { ...section.start, segmentId: ids.get(section.start.segmentId)! },
+            end: { ...section.end, segmentId: ids.get(section.end.segmentId)! },
+        }));
         return clone;
     }
 
@@ -90,6 +130,7 @@ export class ElementFactory {
         clone.motion = { ...shape.motion };
         clone.settings = {
             ...shape.settings,
+            stroke_dasharray: [...shape.settings.stroke_dasharray],
             stroke: clonePaint(shape.settings.stroke, this.editor.ID),
             fill: clonePaint(shape.settings.fill, this.editor.ID),
         };
@@ -111,7 +152,7 @@ export class ElementFactory {
         return clone;
     }
 
-    private cloneGroup(group: Group): Group {
+    private cloneGroup(group: Group, result: ElementCloneSelection): Group {
         const clone = this.createGroup();
         clone.name = `${group.name} Copy`;
         clone.visible = group.visible;
@@ -119,12 +160,8 @@ export class ElementFactory {
         clone.opacity = group.opacity;
         clone.transform = { ...group.transform };
         clone.motion = { ...group.motion };
-        const clonedElements = group.elements.map((element) => ({
-            original: element,
-            clone: this.clone(element),
-        }));
-        clone.elements = clonedElements.map((entry) => entry.clone);
-        clone.clipElementId = clonedElements.find((entry) => entry.original.id === group.clipElementId)?.clone.id ?? null;
+        clone.elements = group.elements.map(element => this.cloneElement(element, result));
+        clone.clipElementId = group.clipElementId;
         return clone;
     }
 }

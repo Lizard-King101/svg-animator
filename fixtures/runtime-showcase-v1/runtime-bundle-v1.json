@@ -664,7 +664,7 @@
   "artwork": {
     "height": 300,
     "id": "runtime-showcase-v1",
-    "signature": "fnv1a32-5ad33bef",
+    "signature": "fnv1a32-a8afd634",
     "targets": [
       {
         "geometry": {
@@ -770,6 +770,9 @@
             4
           ],
           "dashoffset": 0,
+          "lineCap": "round",
+          "lineJoin": "round",
+          "miterLimit": 4,
           "width": 1
         },
         "transform": {
@@ -983,6 +986,9 @@
             6
           ],
           "dashoffset": 2,
+          "lineCap": "round",
+          "lineJoin": "round",
+          "miterLimit": 6,
           "width": 8
         },
         "transform": {
@@ -1032,6 +1038,9 @@
           "alignment": "outside",
           "dasharray": [],
           "dashoffset": 0,
+          "lineCap": "square",
+          "lineJoin": "bevel",
+          "miterLimit": 4,
           "width": 5
         },
         "transform": {
@@ -1050,7 +1059,8 @@
       {
         "clipping": {
           "clipElementId": "clip-circle",
-          "clipPathId": "clip-clipped-group"
+          "clipPathId": "clip-clipped-group",
+          "sourceVisibility": true
         },
         "geometry": {
           "height": 110,
@@ -1113,6 +1123,9 @@
           "alignment": "center",
           "dasharray": [],
           "dashoffset": 0,
+          "lineCap": null,
+          "lineJoin": null,
+          "miterLimit": 4,
           "width": 0
         },
         "transform": {
@@ -1126,7 +1139,7 @@
           "translateY": 0
         },
         "type": "ellipse",
-        "visible": true
+        "visible": false
       },
       {
         "geometry": {
@@ -1193,6 +1206,9 @@
           "alignment": "inside",
           "dasharray": [],
           "dashoffset": 0,
+          "lineCap": "round",
+          "lineJoin": "round",
+          "miterLimit": 4,
           "width": 7
         },
         "transform": {
@@ -1242,6 +1258,9 @@
           "alignment": "center",
           "dasharray": [],
           "dashoffset": 0,
+          "lineCap": null,
+          "lineJoin": null,
+          "miterLimit": 4,
           "width": 2
         },
         "transform": {
@@ -1318,6 +1337,7 @@
     "render.paint-v1",
     "render.path-v1",
     "render.transforms-v1",
+    "render.visible-clipping-v1",
     "tracks.color-v1",
     "tracks.discrete-v1",
     "tracks.numeric-v1"

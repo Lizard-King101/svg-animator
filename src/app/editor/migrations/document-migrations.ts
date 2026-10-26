@@ -1,11 +1,13 @@
 import { validRigs } from '../objects/armature';
-import { validComposition } from '../objects/animation.object';
+import { AnimationDocument, validComposition } from '../objects/animation.object';
 import { validProjectColors } from '../objects/project-colors';
 import { SVGSave } from "../objects/svg.object";
+import { outlineSectionsProblem, OutlineSection } from '../../../../packages/runtime/src/outline';
+import type { RuntimeContourV1, RuntimeLineV1, RuntimePointV1 } from '../../../../packages/runtime/src/contracts';
 
 export const DOCUMENT_ENVELOPE_KIND = "svg-animator/document" as const;
 export const PROJECT_DATABASE_KIND = "svg-animator/project-database" as const;
-export const CURRENT_DOCUMENT_VERSION = 14 as const;
+export const CURRENT_DOCUMENT_VERSION = 17 as const;
 export const CURRENT_PROJECT_DATABASE_VERSION = 1 as const;
 
 export interface DocumentEnvelopeV1 {
@@ -64,6 +66,24 @@ export interface DocumentEnvelopeV13 {
 
 export interface DocumentEnvelopeV14 {
     kind: typeof DOCUMENT_ENVELOPE_KIND;
+    version: 14;
+    data: SVGSave;
+}
+
+export interface DocumentEnvelopeV15 {
+    kind: typeof DOCUMENT_ENVELOPE_KIND;
+    version: 15;
+    data: SVGSave;
+}
+
+export interface DocumentEnvelopeV16 {
+    kind: typeof DOCUMENT_ENVELOPE_KIND;
+    version: 16;
+    data: SVGSave;
+}
+
+export interface DocumentEnvelopeV17 {
+    kind: typeof DOCUMENT_ENVELOPE_KIND;
     version: typeof CURRENT_DOCUMENT_VERSION;
     data: SVGSave;
 }
@@ -74,7 +94,7 @@ export interface StoredProjectV1 {
     thumbnail: string;
     createdAt: number;
     updatedAt: number;
-    document: DocumentEnvelopeV14;
+    document: DocumentEnvelopeV17;
 }
 
 export interface ProjectDatabaseV1 {
@@ -107,7 +127,7 @@ export interface MigrationFailure {
     version?: number;
 }
 
-export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV14 {
+export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV17 {
     return {
         kind: DOCUMENT_ENVELOPE_KIND,
         version: CURRENT_DOCUMENT_VERSION,
@@ -116,7 +136,16 @@ export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV14 {
 }
 
 /** Migrates one persisted document without constructing editor model objects. */
-export function migrateDocument(input: unknown): MigrationResult<DocumentEnvelopeV14> {
+export function migrateDocument(input: unknown): MigrationResult<DocumentEnvelopeV17> {
+    // Prior renderers inferred closure from coincident endpoints. Preserve that
+    // appearance once; v16 treats an explicit open contour as open thereafter.
+    if(isRecord(input) && input['kind'] === DOCUMENT_ENVELOPE_KIND) {
+        const version = numericVersion(input['version']);
+        if(version !== undefined && version <= 16 && isSVGSave(input['data'])) {
+            const closed = version <= 15 ? withExplicitClosureV16(input['data']) : input['data'];
+            input = { ...input, data: withHiddenClippingArtworkV17(closed) };
+        }
+    } else if(isSVGSave(input)) input = withHiddenClippingArtworkV17(withExplicitClosureV16(input));
     const payload = isRecord(input) && input['kind'] === DOCUMENT_ENVELOPE_KIND ? input['data'] : input;
     const rigs = isRecord(payload) ? payload['rigs'] : undefined;
     if(isRecord(rigs) && rigs['version'] !== 1 && rigs['version'] !== 2 && rigs['version'] !== 3 && rigs['version'] !== 4 && rigs['version'] !== 5) return unsupported('armature', numericVersion(rigs['version']));
@@ -179,21 +208,113 @@ export function migrateDocument(input: unknown): MigrationResult<DocumentEnvelop
             if(!isSVGSave(input['data'])) return invalid('Document v13 contains an invalid SVG payload.');
             return success(createDocumentEnvelope(input['data']), true, ['Migrated document version 13 to version 14 with optional weight locks.']);
         }
+        if(version === 14) {
+            if(!isSVGSave(input['data'])) return invalid('Document v14 contains an invalid SVG payload.');
+            return success(createDocumentEnvelope(input['data']), true, ['Migrated document version 14 to version 15 with bone pose animation channels.']);
+        }
+        if(version === 15) {
+            if(!isSVGSave(input['data'])) return invalid('Document v15 contains an invalid SVG payload.');
+            return success(createDocumentEnvelope(input['data']), true, ['Migrated document version 15 to version 16 with outline sections and explicit open contours.']);
+        }
+        if(version === 16) {
+            if(!isSVGSave(input['data'])) return invalid('Document v16 contains an invalid SVG payload.');
+            return success(createDocumentEnvelope(input['data']), true, ['Migrated document version 16 to version 17 with clipping artwork visibility.']);
+        }
         if(version !== CURRENT_DOCUMENT_VERSION) return unsupported("document", version);
         if(!isSVGSave(input["data"])) {
-            return invalid("Document v14 contains an invalid SVG payload.");
+            return invalid("Document v17 contains an invalid SVG payload.");
         }
         const upgraded = withRigV5(withStrokeStyleV5(withAnimationV2(input["data"])));
         const migrated = upgraded !== input["data"];
-        return success(migrated ? createDocumentEnvelope(upgraded) : input as unknown as DocumentEnvelopeV14, migrated,
+        return success(migrated ? createDocumentEnvelope(upgraded) : input as unknown as DocumentEnvelopeV17, migrated,
             migrated ? ["Normalized document defaults."] : []);
     }
 
     if(isSVGSave(input)) {
-        return success(createDocumentEnvelope(withStrokeStyleV5(withAnimationV2(withImportedSourceNodes(input)))), true, ["Migrated an unversioned document to version 14."]);
+        return success(createDocumentEnvelope(withStrokeStyleV5(withAnimationV2(withImportedSourceNodes(input)))), true, ["Migrated an unversioned document to version 17."]);
     }
 
     return invalid("Value is neither a legacy SVG document nor a supported document envelope.");
+}
+
+/** Earlier renderers always omitted clipping-source artwork from the painted scene. */
+function withHiddenClippingArtworkV17(document: SVGSave): SVGSave {
+    const clipSourceIds = new Set<string>();
+    const visit = (element: SVGSave['elements'][number]): SVGSave['elements'][number] => {
+        if(element.type !== 'group') return element;
+        const elements = element.elements.map(child => {
+            const migrated = visit(child);
+            if(migrated.id === element.clipElementId) clipSourceIds.add(migrated.id);
+            return migrated.id === element.clipElementId && migrated.visible
+                ? { ...migrated, visible: false } : migrated;
+        });
+        return elements.some((child, index) => child !== element.elements[index]) ? { ...element, elements } : element;
+    };
+    const elements = document.elements.map(visit);
+    // Visibility previously never painted a clip source. Keep those scene/action
+    // channels hidden so a later seek cannot unexpectedly reveal legacy artwork.
+    const hideClipTracks = (animation: AnimationDocument): AnimationDocument => {
+        // Older animation payloads can omit these arrays; the existing animation
+        // migration normalizes them after this appearance-preservation pass.
+        const sourceTracks = Array.isArray(animation.tracks) ? animation.tracks : [];
+        const tracks = sourceTracks.map(track => {
+            if(!track || track.property !== 'visible' || !clipSourceIds.has(track.targetId) || !Array.isArray(track.keyframes)) return track;
+            const keyframes = track.keyframes.map(key => !key || key.value === false ? key : { ...key, value: false });
+            return keyframes.some((key, index) => key !== track.keyframes[index]) ? { ...track, keyframes } : track;
+        });
+        const actions = animation.composition?.actions.map(action => {
+            const local = hideClipTracks(action.animation);
+            return local === action.animation ? action : { ...action, animation: local };
+        });
+        const composition = animation.composition && actions?.some((action, index) => action !== animation.composition!.actions[index])
+            ? { ...animation.composition, actions } : animation.composition;
+        return tracks.some((track, index) => track !== sourceTracks[index]) || composition !== animation.composition
+            ? { ...animation, tracks, ...(composition ? { composition } : {}) } : animation;
+    };
+    const animation = document.animation && hideClipTracks(document.animation);
+    return elements.some((element, index) => element !== document.elements[index]) || animation !== document.animation
+        ? { ...document, elements, ...(animation ? { animation } : {}) } : document;
+}
+
+/** Only valid saved binding signatures follow the closure migration; stale bindings stay stale. */
+function withExplicitClosureV16(document: SVGSave): SVGSave {
+    const topologyChanges = new Map<string, { before: string; after: string }>();
+    const visit = (element: SVGSave['elements'][number]): SVGSave['elements'][number] => {
+        if(element.type === 'group') {
+            const elements = element.elements.map(visit);
+            return elements.some((child, index) => child !== element.elements[index]) ? { ...element, elements } : element;
+        }
+        if(element.type !== 'path') return element;
+        if(!element.contours?.length) {
+            return !element.closed && legacyClosed(element.lines ?? [])
+                ? { ...element, closed: true, settings: { ...element.settings, stroke_alignment: 'center' } } : element;
+        }
+        const contours = element.contours.map(contour => !contour.closed && legacyClosed(contour.lines) ? { ...contour, closed: true } : contour);
+        if(contours.every((contour, index) => contour === element.contours![index])) return element;
+        const signature = (value: typeof contours) => JSON.stringify(value.map(contour => [contour.id, contour.closed,
+            contour.lines.map(line => [line.id, line.type, line.points.map(point => point.id), line.controlStart?.id, line.controlEnd?.id])]));
+        topologyChanges.set(element.id, { before: signature(element.contours), after: signature(contours) });
+        // Old Path.fromSave forced centered alignment whenever a stored contour
+        // was open, even if its renderer inferred a closed contour afterwards.
+        return { ...element, closed: contours[0].closed, contours,
+            settings: { ...element.settings, stroke_alignment: 'center' } };
+    };
+    const elements = document.elements.map(visit);
+    if(elements.every((element, index) => element === document.elements[index])) return document;
+    const rigs = document.rigs && { ...document.rigs, armatures: document.rigs.armatures.map(rig => ({ ...rig,
+        bindings: rig.bindings.map(binding => {
+            const change = topologyChanges.get(binding.pathId);
+            return change && binding.topology === change.before ? { ...binding, topology: change.after } : binding;
+        }),
+    })) };
+    return { ...document, elements, ...(rigs ? { rigs } : {}) };
+}
+
+function legacyClosed(lines: { points: { id: string; x: number; y: number }[] }[]): boolean {
+    const complete = lines.filter(line => line.points.length >= 2);
+    if(complete.length < 2) return false;
+    const first = complete[0].points[0], last = complete[complete.length - 1].points[1];
+    return first.id === last.id || (Math.abs(first.x - last.x) < .0001 && Math.abs(first.y - last.y) < .0001);
 }
 
 /** Legacy poses, anchor inheritance, and separate weights remain unchanged; links are never guessed. */
@@ -377,12 +498,55 @@ function isSVGSave(input: unknown): input is SVGSave {
         && typeof input["id"] === "string"
         && typeof input["name"] === "string"
         && Array.isArray(input["elements"])
+        && validArtworkOutlines(input['elements'])
         && (input["rigs"] === undefined || validRigs(input["rigs"]))
         && (input["projectColors"] === undefined || validProjectColors(input["projectColors"]))
         && isFiniteNumber(input["width"])
         && isFiniteNumber(input["height"])
         && input["width"] >= 0
         && input["height"] >= 0;
+}
+
+/** Metadata addresses require stable saved contours; absent metadata keeps legacy loading unchanged. */
+function validArtworkOutlines(elements: unknown[]): boolean {
+    return elements.every(element => {
+        if(!isRecord(element)) return true;
+        if(element['type'] === 'group') return Array.isArray(element['elements']) && validArtworkOutlines(element['elements']);
+        if(element['type'] !== 'path' || element['outlineSections'] === undefined) return true;
+        const sections = element['outlineSections'];
+        if(!Array.isArray(sections)) return false;
+        // An empty list intentionally hides the stroke, including legacy paths
+        // with only `lines` and paths still being drawn with incomplete segments.
+        if(!sections.length) return true;
+        const savedContours = element['contours'];
+        if(!Array.isArray(savedContours)) return false;
+        const contours: RuntimeContourV1[] = [], contourIds = new Set<string>();
+        for(const saved of savedContours) {
+            if(!isRecord(saved) || typeof saved['id'] !== 'string' || !saved['id'] || contourIds.has(saved['id'])
+                || typeof saved['closed'] !== 'boolean' || !Array.isArray(saved['lines'])) return false;
+            contourIds.add(saved['id']);
+            const lines: RuntimeLineV1[] = [], segmentIds = new Set<string>();
+            for(const line of saved['lines']) {
+                if(!isRecord(line) || typeof line['id'] !== 'string' || !line['id'] || segmentIds.has(line['id'])
+                    || (line['type'] !== 'line' && line['type'] !== 'bezier') || !Array.isArray(line['points'])
+                    || !line['points'].every(validOutlinePoint)
+                    || (line['controlStart'] !== undefined && !validOutlinePoint(line['controlStart']))
+                    || (line['controlEnd'] !== undefined && !validOutlinePoint(line['controlEnd']))) return false;
+                segmentIds.add(line['id']);
+                if(line['points'].length >= 2) lines.push({ id: line['id'], type: line['type'], points: [line['points'][0], line['points'][1]],
+                    ...(line['controlStart'] ? { controlStart: line['controlStart'] as RuntimePointV1 } : {}),
+                    ...(line['controlEnd'] ? { controlEnd: line['controlEnd'] as RuntimePointV1 } : {}),
+                });
+            }
+            contours.push({ id: saved['id'], closed: saved['closed'], lines });
+        }
+        return outlineSectionsProblem(contours, sections as OutlineSection[]) === undefined;
+    });
+}
+
+function validOutlinePoint(point: unknown): point is RuntimePointV1 {
+    return isRecord(point) && typeof point['id'] === 'string' && !!point['id'] && isFiniteNumber(point['x']) && isFiniteNumber(point['y'])
+        && (point['cornerRadius'] === undefined || (isFiniteNumber(point['cornerRadius']) && point['cornerRadius'] >= 0));
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {

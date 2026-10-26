@@ -12,6 +12,12 @@ import { bindToolKeyboard } from '../../editor/tool-keyboard';
     template: `<ng-container *ngIf="rig.bone && rig.workspace !== 'weights'">
       <div class="rig-section-title"><span>Inverse kinematics</span>
         <span *ngIf="rig.activeIKConstraint as constraint" class="rig-chip" [class.accent]="constraint.enabled && !issue(constraint)" [class.danger]="!!issue(constraint)">{{issue(constraint) ? 'Needs fix' : constraint.enabled ? 'On' : 'Off'}}</span></div>
+      <ng-container *ngIf="rig.isAnimating && rig.activeIKConstraint as constraint">
+        <div class="relationship"><span>Chain</span><strong>{{boneName(constraint.upperBoneId)}} → {{boneName(constraint.lowerBoneId)}}</strong></div>
+        <div class="rig-actions"><button class="btn btn-sm btn-secondary" (click)="selectBone(constraint.targetBoneId)">Select target: {{boneName(constraint.targetBoneId)}}</button></div>
+        <p class="rig-hint">Animate the target to move this chain. Switch to Edit to change the constraint.</p>
+      </ng-container>
+      <ng-container *ngIf="!rig.isAnimating">
       <ng-container *ngIf="rig.activeIKConstraint as constraint; else create">
         <div class="rig-heading constraint-heading"><strong>{{constraint.name}}</strong><label class="toggle"><input type="checkbox" aria-label="Enable IK constraint" [checked]="constraint.enabled" (change)="enable(constraint.id, $event)" /> Enabled</label></div>
         <div *ngIf="issue(constraint) as issue" class="callout danger" role="alert"><p class="rig-hint">{{issue}} Posing this armature is paused until it is fixed.</p>
@@ -48,6 +54,7 @@ import { bindToolKeyboard } from '../../editor/tool-keyboard';
         <ng-template #selectChain><p *ngIf="chainHint as hint" class="rig-hint">{{hint.text}}</p>
           <div *ngIf="chainHint?.parent as parent" class="rig-actions"><button class="btn btn-sm btn-secondary" (click)="rig.moveJoint(rig.bone!.id)">Snap to {{parent}}’s tip</button></div></ng-template>
       </ng-template>
+      </ng-container>
       <div *ngIf="rows.length" class="constraint-list" role="group" aria-label="Armature IK constraints">
         <span class="list-title">In this armature</span>
         <button *ngFor="let row of rows" class="constraint-row" [class.current]="row.id === rig.activeIKConstraint?.id" [attr.aria-label]="'Select ' + row.name + ', ' + row.state" (click)="selectConstraint(row.constraint)">

@@ -6,6 +6,7 @@ import { SVG } from "../editor/objects/svg.object";
 import { AnimationPlaybackService } from "./animation-playback.service";
 import { DocumentMutationService } from "./document-mutation.service";
 import { EditorService } from "./editor.service";
+import { parseRigAnimationProperty } from '../editor/rig-animation';
 
 /** Repair operations for animation tracks whose persisted targets are no longer present. */
 @Injectable()
@@ -37,5 +38,9 @@ export class AnimationTrackCleanupService {
 }
 
 export function findOrphanedAnimationTracks(svg: SVG): AnimationTrack[] {
-    return allAnimationDocuments(svg.animation).flatMap(animation => animation.tracks).filter((track) => !findAnimationTarget(svg.elements, track.targetId));
+    return allAnimationDocuments(svg.animation).flatMap(animation => animation.tracks).filter(track => {
+        const property = parseRigAnimationProperty(track.property);
+        if(property) return !svg.rigs.armatures.some(rig => rig.id === track.targetId && rig.bones.some(bone => bone.id === property.boneId));
+        return !findAnimationTarget(svg.elements, track.targetId);
+    });
 }

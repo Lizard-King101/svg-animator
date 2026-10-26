@@ -16,7 +16,7 @@
          'hidden': !row.element.visible,
          'locked': row.element.locked,
          'dragging': commands.draggingLayer == row.element,
-         'clipping-mask': commands.isClippingMask(row.element),
+         'clipping-mask': commands.isClippingMask(row.element, row.parent || null),
          'drop-before': commands.dragTargetLayer == row.element && commands.dragTargetPosition == 'before',
          'drop-after': commands.dragTargetLayer == row.element && commands.dragTargetPosition == 'after',
          'drop-inside': commands.dragTargetLayer == row.element && commands.dragTargetPosition == 'inside'
@@ -47,16 +47,13 @@
       <span class="layer-expander-placeholder" *ngIf="!commands.asGroup(row.element)"></span>
       <fa-icon [icon]="commands.layerIcon(row.element)"></fa-icon>
       <span class="layer-name" *ngIf="commands.renamingLayer != row.element">{{ row.element.name }}</span>
-      <span class="layer-badge" *ngIf="commands.isClippingMask(row.element)">Clip</span>
+      <span class="layer-badge" *ngIf="commands.isClippingMask(row.element, row.parent || null)">Clip</span>
       <input class="layer-name-input"
              *ngIf="commands.renamingLayer == row.element"
-             [(ngModel)]="row.element.name"
-             (click)="$event.stopPropagation()"
-             (keydown.enter)="commands.finishLayerRename()"
-             (keydown.escape)="commands.finishLayerRename()"
-             (blur)="commands.finishLayerRename()"
-             maxlength="60"
-             autofocus />
+             [inlineRename]="row.element.name"
+             [attr.aria-label]="'Rename ' + row.element.name"
+             (renameComplete)="finishRename($event, row.element)"
+             maxlength="60" />
     </span>
     <span class="layer-actions">
       <app-rig-layer-badge [elementId]="row.element.id" />
@@ -67,7 +64,7 @@
               (pointerdown)="$event.stopPropagation()"
               (pointerup)="$event.stopPropagation()"
               (click)="commands.toggleLayerVisibility($event, row.element)"
-              [title]="row.element.visible ? 'Hide layer' : 'Show layer'">
+              [title]="commands.layerVisibilityTitle(row.element, row.parent || null)">
         <fa-icon [icon]="row.element.visible ? 'eye' : 'eye-slash'"></fa-icon>
       </button>
       <button class="layer-toggle"

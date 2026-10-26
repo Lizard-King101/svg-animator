@@ -9,6 +9,7 @@ import { PaintSave, restorePaint, serializePaint } from "../paint.object";
 import { DEFAULT_STROKE_STYLE, restoreStrokeStyle, StrokeAlignment } from "../stroke-style.object";
 import { RuntimeContourV1, RuntimePointV1 } from "../../../../../packages/runtime/src/contracts";
 import { buildRuntimePathData, contourClosingPoints, isStraightPathSegment } from "../../../../../packages/runtime/src/path-data";
+import type { OutlineSection } from "../../../../../packages/runtime/src/outline";
 
 export interface PathSave {
     type: 'path';
@@ -18,6 +19,7 @@ export interface PathSave {
     locked: boolean;
     opacity?: number;
     drawProgress?: number;
+    outlineSections?: OutlineSection[];
     transform?: TransformSave;
     motion?: MotionSave;
     closed?: boolean;
@@ -127,6 +129,8 @@ export class Path {
     locked: boolean = false;
     opacity: number = 1;
     drawProgress: number = 1;
+    /** Undefined retains the legacy full stroke; an empty array hides only the outline. */
+    outlineSections?: OutlineSection[];
     transform: TransformState = defaultTransform();
     motion: MotionState = defaultMotion();
     contours: PathContour[] = [];
@@ -262,6 +266,7 @@ export class Path {
             locked: this.locked,
             opacity: this.opacity,
             drawProgress: this.drawProgress,
+            ...(this.outlineSections !== undefined ? { outlineSections: structuredClone(this.outlineSections) } : {}),
             transform: serializeTransform(this.transform),
             motion: serializeMotion(this.motion),
             closed: this.closed,
@@ -295,6 +300,7 @@ export class Path {
         p.locked = s.locked;
         p.opacity = s.opacity ?? 1;
         p.drawProgress = clamp01(s.drawProgress ?? 1);
+        p.outlineSections = s.outlineSections === undefined ? undefined : structuredClone(s.outlineSections);
         p.transform = restoreTransform(s.transform);
         p.motion = restoreMotion(s.motion);
         p.fillRule = s.fillRule ?? 'evenodd';
@@ -576,15 +582,7 @@ function computeRoundedCorner(incoming: PathSegment | undefined, outgoing: PathS
 }
 
 function isEffectivelyClosed(contour: PathContour, lines: PathSegment[] = completeLines(contour)): boolean {
-    if(contour.closed) {
-        return true;
-    }
-
-    if(lines.length < 2) {
-        return false;
-    }
-
-    return samePoint(lines[0].points[0], lines[lines.length - 1].points[1]);
+    return contour.closed;
 }
 
 function samePoint(a?: Point, b?: Point): boolean {

@@ -1,10 +1,16 @@
 export const RUNTIME_BUNDLE_KIND = "svg-animator/runtime-bundle" as const;
 export const RUNTIME_BUNDLE_FORMAT_VERSION = 1 as const;
-export const RUNTIME_VERSION = "1.2.0" as const;
+import type { RigDocument } from './rig/armature';
+import type { OutlineSection } from './outline';
+export type { OutlinePosition, OutlineTaper, OutlineSection } from './outline';
+export type { Armature, Bone, BoneWeight, BoundPoint, PathBinding, RigidAttachment, TwoBoneIKConstraint, RigDocument, WeightPointRef } from './rig/armature';
+
+export const RUNTIME_VERSION = "1.5.0" as const;
 export const RUNTIME_BROWSER_GLOBAL = "SVGAnimatorRuntime" as const;
 
 export const RUNTIME_CAPABILITIES_V1 = [
     "tracks.numeric-v1",
+    "rig.pose-v1",
     "composition.action-windows-v1",
     "composition.action-timing-v1",
     "tracks.color-v1",
@@ -14,7 +20,9 @@ export const RUNTIME_CAPABILITIES_V1 = [
     "render.paint-v1",
     "render.gradient-v1",
     "render.path-v1",
+    "render.outline-sections-v1",
     "render.clipping-v1",
+    "render.visible-clipping-v1",
     "render.motion-path-v1",
 ] as const;
 
@@ -98,14 +106,17 @@ export interface RuntimeSceneTargetV1 {
     transform: RuntimeTransformV1;
     motion: RuntimeMotionV1;
     geometry: { x: number; y: number; width: number; height: number };
-    clipping?: { clipElementId: string; clipPathId: string };
-    path?: { contours: RuntimeContourV1[]; fillRule: "nonzero" | "evenodd"; drawProgress: number; rounded: boolean };
+    clipping?: { clipElementId: string; clipPathId: string; /** Source visibility affects paint only; clipping geometry stays active. */ sourceVisibility?: true };
+    path?: { contours: RuntimeContourV1[]; fillRule: "nonzero" | "evenodd"; drawProgress: number; rounded: boolean; outlineSections?: OutlineSection[]; explicitClosure?: boolean };
     paints: { fill?: RuntimePaintV1; stroke?: RuntimePaintV1; color?: RuntimePaintV1 };
     stroke?: {
         width: number;
         alignment: "inside" | "center" | "outside";
         dasharray: number[];
         dashoffset: number;
+        lineCap?: 'butt' | 'round' | 'square' | null;
+        lineJoin?: 'miter' | 'round' | 'bevel' | null;
+        miterLimit?: number;
     };
 }
 
@@ -117,6 +128,8 @@ export interface RuntimeBundleV1 {
     formatVersion: typeof RUNTIME_BUNDLE_FORMAT_VERSION;
     generator: { name: "SVG Animator"; version: string };
     requiredCapabilities: RuntimeCapabilityV1[];
+    /** Rest-space rig data for authored bone pose channels; requires rig.pose-v1. */
+    rigs?: RigDocument;
     artwork: {
         id: string;
         signature: string;

@@ -1,5 +1,9 @@
 import { IKTargetComponent } from './ik-target.component';
 import { Armature, TwoBoneIKConstraint } from '../../editor/objects/armature';
+import { TestBed } from '@angular/core/testing';
+import { RigEditingService } from '../../_services/rig-editing.service';
+import { DocumentMutationService } from '../../_services/document-mutation.service';
+import { RigBindingSessionService } from '../../_services/rig-binding-session.service';
 
 describe('persistent IK target gestures', () => {
     function setup() {
@@ -12,7 +16,7 @@ describe('persistent IK target gestures', () => {
         const rig = {editor:{selectedSVG:{id:'document',canvasBounds:{x:10,y:20,width:100,height:100}},activeTool:{}},
             active,displayedRig:active,activeId:'rig',boneId:'lower',bone:active.bones[1],activeIKConstraint:constraint as TwoBoneIKConstraint | undefined,
             ikChain:{upper:active.bones[0],lower:active.bones[1]},ikTargetPosition:{x:300,y:200},ikEndpoint:{x:90,y:0},
-            posePreview:undefined as Armature | undefined,clearPosePreview:jasmine.createSpy('clearPosePreview'),visible:true,canEdit:true,workspace:'pose',poseMethod:'fk',problem:undefined,
+            posePreview:undefined as Armature | undefined,clearPosePreview:jasmine.createSpy('clearPosePreview'),visible:true,canEdit:true,canPose:true,animationContext:'scene:0',workspace:'pose',poseMethod:'fk',problem:undefined,
             previewIK:jasmine.createSpy('previewIK').and.returnValue(active),setIKTarget:jasmine.createSpy('setIKTarget')};
         const mutations={revision:0}, session={pending:undefined as object | undefined};
         const component=new IKTargetComponent(rig as never,mutations as never,session as never);
@@ -53,6 +57,26 @@ describe('persistent IK target gestures', () => {
         expect(t.rig.setIKTarget).toHaveBeenCalledWith({x:300,y:201});
     });
 
+    it('renders a draggable target in Animate and discards it when the playhead changes', async () => {
+        const t = setup(); t.rig.canEdit = false;
+        await TestBed.configureTestingModule({ imports: [IKTargetComponent], providers: [
+            { provide: RigEditingService, useValue: t.rig }, { provide: DocumentMutationService, useValue: t.mutations }, { provide: RigBindingSessionService, useValue: t.session },
+        ] }).compileComponents();
+        const fixture = TestBed.createComponent(IKTargetComponent);
+        fixture.componentRef.setInput('artwork', t.component.artwork); fixture.componentRef.setInput('workspace', t.component.workspace); fixture.detectChanges();
+        const button: HTMLButtonElement = fixture.nativeElement.querySelector('.ik-target');
+        spyOn(button, 'setPointerCapture'); spyOn(button, 'hasPointerCapture').and.returnValue(false);
+        button.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 5, button: 0, clientX: 100, clientY: 100, bubbles: true }));
+        button.dispatchEvent(new PointerEvent('pointermove', { pointerId: 5, clientX: 120, clientY: 100, bubbles: true }));
+        expect(t.rig.previewIK).toHaveBeenCalledWith({x:310,y:200});
+        t.rig.animationContext = 'scene:1'; fixture.detectChanges();
+        button.dispatchEvent(new PointerEvent('pointerup', { pointerId: 5, clientX: 120, clientY: 100, bubbles: true }));
+        expect(t.rig.setIKTarget).not.toHaveBeenCalled();
+        button.dispatchEvent(new KeyboardEvent('keydown', { key:'ArrowRight', bubbles:true }));
+        expect(t.rig.setIKTarget).toHaveBeenCalledWith({x:301,y:200});
+        fixture.destroy();
+    });
+
     it('does not commit clicks, movements back to the origin, or other pointers', () => {
         const t=setup(); t.component.begin(t.event(100)); t.component.move(t.event(120,100,2));
         expect(t.rig.previewIK).not.toHaveBeenCalled();
@@ -64,7 +88,7 @@ describe('persistent IK target gestures', () => {
     });
 
     it('cancels drafts on history, constraint, selection, mode, binding, focus, and Escape changes', () => {
-        for(const reason of ['history','constraint','selection','mode','binding','focus','escape','disabled']) {
+        for(const reason of ['history','constraint','selection','mode','binding','focus','escape','disabled','time','playing']) {
             const t=setup(); t.component.begin(t.event(100)); t.component.move(t.event(120));
             if(reason==='history') t.mutations.revision++;
             if(reason==='constraint') t.rig.activeIKConstraint={...t.constraint,id:'another'};
@@ -74,6 +98,8 @@ describe('persistent IK target gestures', () => {
             if(reason==='focus') t.component.cancel();
             if(reason==='escape') t.component.key(new KeyboardEvent('keydown',{key:'Escape'}));
             if(reason==='disabled') t.constraint.enabled=false;
+            if(reason==='time') t.rig.animationContext='scene:1';
+            if(reason==='playing') t.rig.canPose=false;
             t.component.end(t.event(120));
             expect(t.rig.setIKTarget).withContext(reason).not.toHaveBeenCalled();
             expect(t.rig.clearPosePreview).withContext(reason).toHaveBeenCalled();

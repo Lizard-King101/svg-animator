@@ -126,6 +126,23 @@ describe('animation inspection', () => {
         animation.ngOnDestroy();
     });
 
+    it('isolates visible clipping paint in onion skins while retaining the clipping geometry', () => {
+        const { editor, svg, shape, animation } = setup();
+        const source = new Shape(editor, { type: 'ellipse', position: new Point(0, 0), width: 100, height: 60 });
+        const group = new Group(editor); group.elements = [source, shape]; group.clipElementId = source.id; svg.elements = [group];
+        const snapshot = new AnimationInspectionSnapshot(svg);
+        const ghost = (id: string) => new DOMParser().parseFromString(decodeURIComponent(snapshot.skins(.5, .1, [id])[0].image.split(',')[1]), 'image/svg+xml');
+        const pupilGhost = ghost(shape.id);
+        const sourceNodes = [...pupilGhost.querySelectorAll(`[data-render-target="${source.id}"]`)];
+        expect(sourceNodes.some(node => !!node.closest('clipPath'))).toBeTrue();
+        expect(sourceNodes.filter(node => !node.closest('defs')).length).toBe(0);
+        expect(pupilGhost.getElementById(shape.id)).not.toBeNull();
+        const sourceGhost = ghost(source.id);
+        expect([...sourceGhost.querySelectorAll(`[data-render-target="${source.id}"]`)].filter(node => !node.closest('defs')).length).toBe(2);
+        expect(sourceGhost.getElementById(shape.id)).toBeNull();
+        animation.ngOnDestroy();
+    });
+
     it('rejects sampling restoration into the live document', () => {
         const { animation, svg } = setup();
         animation.seek(0.5);

@@ -24,31 +24,40 @@
     </ng-container>
 </svg:defs>
 
-<ng-template #renderElements let-elements let-parentId="parentId" let-includeSource="includeSource" let-clipGeometry="clipGeometry">
+<ng-template #renderElements let-elements let-parentId="parentId" let-includeSource="includeSource" let-projection="projection">
 <ng-container *ngFor="let element of elements">
     <ng-container *ngIf="asGroup(element) as group">
         <svg:defs *ngIf="group.clipElement">
-            <svg:clipPath [id]="group.clipPathId">
-                <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: clipElementList(group), includeSource: false, clipGeometry: true }"></ng-container>
+            <svg:clipPath [id]="projectionId(group.clipPathId, projection)">
+                <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: clipElementList(group), includeSource: false, projection: clippingProjection(group.id, 'clip', projection) }"></ng-container>
             </svg:clipPath>
         </svg:defs>
-        <svg:g [id]="group.id" [style.display]="group.visible ? null : 'none'" [attr.clip-path]="clipUrl(group)" [attr.transform]="transformAttr(group)" [attr.opacity]="opacityAttr(group)">
-            <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: group.renderedElements, parentId: group.id, includeSource: true, clipGeometry: clipGeometry }"></ng-container>
+        <svg:g [id]="projectionId(group.id, projection)" [attr.data-render-target]="projection ? group.id : null" [attr.data-render-projection]="projection?.kind"
+               [style.display]="projectionVisible(group.visible, projection) ? null : 'none'" [attr.transform]="transformAttr(group)" [attr.opacity]="isClipProjection(projection) ? null : opacityAttr(group)">
+            <ng-container *ngIf="group.clipElement && projectionFill(projection)">
+                <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: clipElementList(group), includeSource: false, projection: clippingProjection(group.id, 'fill', projection) }"></ng-container>
+            </ng-container>
+            <svg:g [attr.clip-path]="clipUrl(group, projection)">
+                <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: group.renderedElements, parentId: group.id, includeSource: true, projection: childProjection(projection) }"></ng-container>
+            </svg:g>
+            <ng-container *ngIf="group.clipElement && projectionStroke(projection)">
+                <ng-container *ngTemplateOutlet="renderElements; context: { $implicit: clipElementList(group), includeSource: false, projection: clippingProjection(group.id, 'stroke', projection) }"></ng-container>
+            </ng-container>
         </svg:g>
     </ng-container>
     <ng-container *ngIf="asPath(element) as path">
-        <svg:path *ngIf="clipGeometry" [attr.d]="path.raw" [attr.transform]="transformAttr(path)" [attr.fill-rule]="path.fillRule" />
+        <svg:path *ngIf="isClipProjection(projection)" [id]="projectionId(path.id, projection)" [attr.data-render-target]="path.id" [attr.data-render-projection]="projection.kind" data-render-role="geometry" [style.display]="projectionVisible(path.visible, projection) ? null : 'none'" [attr.d]="path.raw" [attr.transform]="transformAttr(path)" [attr.fill-rule]="path.fillRule" />
         <svg:path
-        *ngIf="!clipGeometry && strokeAlignment(path) === 'center' && path.settings.stroke_dasharray.length === 0"
-        [id]="path.id"
-        [style.display]="path.visible ? null : 'none'"
+        *ngIf="!isClipProjection(projection) && (!projectionStroke(projection) || (!hasOutlineSections(path) && strokeAlignment(path) === 'center' && path.settings.stroke_dasharray.length === 0))"
+        [attr.data-render-role]="projectionRoles(projection)" [id]="projectionId(path.id, projection)" [attr.data-render-target]="projection ? path.id : null" [attr.data-render-projection]="projection?.kind"
+        [style.display]="projectionVisible(path.visible, projection) ? null : 'none'"
         [attr.d]="path.raw"
         [attr.transform]="transformAttr(path)"
-        [attr.opacity]="opacityAttr(path)"
-        [attr.fill]="path.settings.fill_enabled ? (paintValue(path.settings.fill) ?? 'none') : 'none'"
+        [attr.opacity]="isClipProjection(projection) ? null : opacityAttr(path)"
+        [attr.fill]="projectionFill(projection) && path.settings.fill_enabled ? (paintValue(path.settings.fill) ?? 'none') : 'none'"
         [attr.fill-opacity]="path.settings.fill_enabled ? paintOpacity(path.settings.fill) : null"
         [attr.fill-rule]="path.fillRule"
-        [attr.stroke]="paintValue(path.settings.stroke)"
+        [attr.stroke]="projectionStroke(projection) ? paintValue(path.settings.stroke) : 'none'"
         [attr.stroke-opacity]="pathStrokeOpacity(path)"
         [attr.stroke-width]="path.settings.stroke_width"
         [attr.stroke-linecap]="path.settings.line_cap"
@@ -58,19 +67,19 @@
         [attr.stroke-dasharray]="strokeDasharray(path)"
         [attr.stroke-dashoffset]="strokeDashoffset(path)"
         />
-        <svg:g *ngIf="!clipGeometry && (strokeAlignment(path) !== 'center' || path.settings.stroke_dasharray.length > 0)"
-               [id]="path.id" [style.display]="path.visible ? null : 'none'"
-               [attr.transform]="transformAttr(path)" [attr.opacity]="opacityAttr(path)">
+        <svg:g *ngIf="!isClipProjection(projection) && projectionStroke(projection) && !hasOutlineSections(path) && (strokeAlignment(path) !== 'center' || path.settings.stroke_dasharray.length > 0)"
+               [id]="projectionId(path.id, projection)" [attr.data-render-target]="projection ? path.id : null" [attr.data-render-projection]="projection?.kind" [style.display]="projectionVisible(path.visible, projection) ? null : 'none'"
+               [attr.transform]="transformAttr(path)" [attr.opacity]="isClipProjection(projection) ? null : opacityAttr(path)">
             <svg:defs>
-                <svg:clipPath *ngIf="strokeAlignment(path) === 'inside'" [id]="strokeEffectId(path)">
+                <svg:clipPath *ngIf="strokeAlignment(path) === 'inside'" [id]="strokeEffectId(path, projection)">
                     <svg:path data-render-role="geometry" [attr.d]="path.raw" [attr.fill-rule]="path.fillRule" />
                 </svg:clipPath>
-                <svg:mask *ngIf="strokeAlignment(path) === 'outside'" [id]="strokeEffectId(path)"
+                <svg:mask *ngIf="strokeAlignment(path) === 'outside'" [id]="strokeEffectId(path, projection)"
                           x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox">
                     <svg:rect x="-100%" y="-100%" width="300%" height="300%" fill="white" />
                     <svg:path data-render-role="geometry" [attr.d]="path.raw" [attr.fill-rule]="path.fillRule" fill="black" />
                 </svg:mask>
-                <svg:mask *ngIf="path.settings.stroke_dasharray.length" [id]="drawMaskId(path)"
+                <svg:mask *ngIf="path.settings.stroke_dasharray.length" [id]="drawMaskId(path, projection)" [attr.data-render-target]="projection ? drawMaskId(path) : null"
                           x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox">
                     <svg:path data-render-role="reveal geometry" [attr.d]="path.raw" fill="none" stroke="white"
                               [attr.stroke-opacity]="drawRevealOpacity(path)"
@@ -79,13 +88,13 @@
                               pathLength="1" stroke-dasharray="1 2" [attr.stroke-dashoffset]="drawOffsetAttr(path)" />
                 </svg:mask>
             </svg:defs>
-            <svg:path data-render-role="fill geometry" [attr.d]="path.raw"
-                      [attr.fill]="path.settings.fill_enabled ? (paintValue(path.settings.fill) ?? 'none') : 'none'"
+            <svg:path *ngIf="projectionFill(projection)" data-render-role="fill geometry" [attr.d]="path.raw"
+                      [attr.fill]="projectionFill(projection) && path.settings.fill_enabled ? (paintValue(path.settings.fill) ?? 'none') : 'none'"
                       [attr.fill-opacity]="path.settings.fill_enabled ? paintOpacity(path.settings.fill) : null"
                       [attr.fill-rule]="path.fillRule" />
-            <svg:g [attr.mask]="strokeAlignment(path) === 'outside' ? strokeEffectUrl(path) : null">
+            <svg:g [attr.mask]="strokeAlignment(path) === 'outside' ? strokeEffectUrl(path, projection) : null">
             <svg:path data-render-role="stroke geometry" [attr.d]="path.raw" fill="none"
-                      [attr.stroke]="paintValue(path.settings.stroke)"
+                      [attr.stroke]="projectionStroke(projection) ? paintValue(path.settings.stroke) : 'none'"
                       [attr.stroke-opacity]="pathStrokeOpacity(path)"
                       [attr.stroke-width]="path.settings.stroke_width * (strokeAlignment(path) === 'center' ? 1 : 2)"
                       [attr.stroke-linecap]="path.settings.line_cap"
@@ -93,29 +102,55 @@
                       [attr.stroke-miterlimit]="path.settings.stroke_miterlimit"
                       [attr.stroke-dasharray]="strokeDasharray(path)"
                       [attr.stroke-dashoffset]="strokeDashoffset(path)"
-                      [attr.clip-path]="strokeAlignment(path) === 'inside' ? strokeEffectUrl(path) : null"
-                      [attr.mask]="path.settings.stroke_dasharray.length ? drawMaskUrl(path) : null" />
+                      [attr.clip-path]="strokeAlignment(path) === 'inside' ? strokeEffectUrl(path, projection) : null"
+                      [attr.mask]="path.settings.stroke_dasharray.length ? drawMaskUrl(path, projection) : null" />
             </svg:g>
+        </svg:g>
+        <svg:g *ngIf="!isClipProjection(projection) && projectionStroke(projection) && hasOutlineSections(path)" [id]="projectionId(path.id, projection)" [attr.data-render-target]="projection ? path.id : null" [attr.data-render-projection]="projection?.kind" [style.display]="projectionVisible(path.visible, projection) ? null : 'none'"
+               [attr.transform]="transformAttr(path)" [attr.opacity]="isClipProjection(projection) ? null : opacityAttr(path)">
+            <svg:defs>
+                <svg:clipPath *ngIf="strokeAlignment(path) === 'inside'" [id]="strokeEffectId(path, projection)">
+                    <svg:path data-render-role="geometry" [attr.d]="path.raw" [attr.fill-rule]="path.fillRule" />
+                </svg:clipPath>
+                <svg:mask *ngIf="strokeAlignment(path) === 'outside'" [id]="strokeEffectId(path, projection)"
+                          x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox">
+                    <svg:rect x="-100%" y="-100%" width="300%" height="300%" fill="white" />
+                    <svg:path data-render-role="geometry" [attr.d]="path.raw" [attr.fill-rule]="path.fillRule" fill="black" />
+                </svg:mask>
+                <ng-container *ngIf="outlineGradient(path) as gradient">
+                    <svg:linearGradient *ngIf="gradient.type === 'linear-gradient'" [id]="projectionId('outline-paint-' + path.id, projection)" [attr.data-render-target]="projection ? 'outline-paint-' + path.id : null"
+                        [attr.href]="'#' + gradient.id" gradientUnits="userSpaceOnUse" [attr.gradientTransform]="outlineGradientTransform(path)" />
+                    <svg:radialGradient *ngIf="gradient.type === 'radial-gradient'" [id]="projectionId('outline-paint-' + path.id, projection)" [attr.data-render-target]="projection ? 'outline-paint-' + path.id : null"
+                        [attr.href]="'#' + gradient.id" gradientUnits="userSpaceOnUse" [attr.gradientTransform]="outlineGradientTransform(path)" />
+                </ng-container>
+            </svg:defs>
+            <svg:path *ngIf="projectionFill(projection)" data-render-role="geometry fill" [attr.d]="path.raw"
+                [attr.fill]="projectionFill(projection) && path.settings.fill_enabled ? (paintValue(path.settings.fill) ?? 'none') : 'none'"
+                [attr.fill-opacity]="path.settings.fill_enabled ? paintOpacity(path.settings.fill) : null" [attr.fill-rule]="path.fillRule" />
+            <svg:path data-render-role="outline" [attr.d]="outlineData(path)" [attr.fill]="outlinePaint(path, projection) ?? 'none'"
+                [attr.fill-opacity]="paintOpacity(path.settings.stroke)" fill-rule="nonzero"
+                [attr.clip-path]="strokeAlignment(path) === 'inside' ? strokeEffectUrl(path, projection) : null"
+                [attr.mask]="strokeAlignment(path) === 'outside' ? strokeEffectUrl(path, projection) : null" />
         </svg:g>
     </ng-container>
     <ng-container *ngIf="asShape(element) as shape">
-        <svg:rect *ngIf="clipGeometry && editor.shapeIsRectangle(shape)" [attr.transform]="transformAttr(shape)" [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.width" [attr.height]="shape.height" [attr.rx]="shape.settings.corner_radius || null" [attr.ry]="shape.settings.corner_radius || null" />
-        <svg:ellipse *ngIf="clipGeometry && editor.shapeIsEllipse(shape)" [attr.transform]="transformAttr(shape)" [attr.cx]="shape.centerX" [attr.cy]="shape.centerY" [attr.rx]="shape.radiusX" [attr.ry]="shape.radiusY" />
+        <svg:rect [id]="projectionId(shape.id, projection)" [attr.data-render-target]="shape.id" [attr.data-render-projection]="projection?.kind" data-render-role="geometry" [style.display]="projectionVisible(shape.visible, projection) ? null : 'none'" *ngIf="isClipProjection(projection) && editor.shapeIsRectangle(shape)" [attr.transform]="transformAttr(shape)" [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.width" [attr.height]="shape.height" [attr.rx]="shape.settings.corner_radius || null" [attr.ry]="shape.settings.corner_radius || null" />
+        <svg:ellipse [id]="projectionId(shape.id, projection)" [attr.data-render-target]="shape.id" [attr.data-render-projection]="projection?.kind" data-render-role="geometry" [style.display]="projectionVisible(shape.visible, projection) ? null : 'none'" *ngIf="isClipProjection(projection) && editor.shapeIsEllipse(shape)" [attr.transform]="transformAttr(shape)" [attr.cx]="shape.centerX" [attr.cy]="shape.centerY" [attr.rx]="shape.radiusX" [attr.ry]="shape.radiusY" />
         <svg:rect
-        *ngIf="!clipGeometry && editor.shapeIsRectangle(shape) && strokeAlignment(shape) === 'center'"
-        [id]="shape.id"
-        [style.display]="shape.visible ? null : 'none'"
+        *ngIf="!isClipProjection(projection) && editor.shapeIsRectangle(shape) && (!projectionStroke(projection) || strokeAlignment(shape) === 'center')"
+        [attr.data-render-role]="projectionRoles(projection)" [id]="projectionId(shape.id, projection)" [attr.data-render-target]="projection ? shape.id : null" [attr.data-render-projection]="projection?.kind"
+        [style.display]="projectionVisible(shape.visible, projection) ? null : 'none'"
         [attr.transform]="transformAttr(shape)"
-        [attr.opacity]="opacityAttr(shape)"
+        [attr.opacity]="isClipProjection(projection) ? null : opacityAttr(shape)"
         [attr.x]="shape.x"
         [attr.y]="shape.y"
         [attr.width]="shape.width"
         [attr.height]="shape.height"
         [attr.rx]="shape.settings.corner_radius || null"
         [attr.ry]="shape.settings.corner_radius || null"
-        [attr.fill]="paintValue(shape.settings.fill) ?? 'none'"
+        [attr.fill]="projectionFill(projection) ? paintValue(shape.settings.fill) ?? 'none' : 'none'"
         [attr.fill-opacity]="paintOpacity(shape.settings.fill)"
-        [attr.stroke]="paintValue(shape.settings.stroke)"
+        [attr.stroke]="projectionStroke(projection) ? paintValue(shape.settings.stroke) : 'none'"
         [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)"
         [attr.stroke-width]="shape.settings.stroke_width"
         [attr.stroke-linecap]="shape.settings.line_cap"
@@ -125,18 +160,18 @@
         [attr.stroke-dashoffset]="strokeDashoffset(shape)"
         />
         <svg:ellipse
-        *ngIf="!clipGeometry && editor.shapeIsEllipse(shape) && strokeAlignment(shape) === 'center'"
-        [id]="shape.id"
-        [style.display]="shape.visible ? null : 'none'"
+        *ngIf="!isClipProjection(projection) && editor.shapeIsEllipse(shape) && (!projectionStroke(projection) || strokeAlignment(shape) === 'center')"
+        [attr.data-render-role]="projectionRoles(projection)" [id]="projectionId(shape.id, projection)" [attr.data-render-target]="projection ? shape.id : null" [attr.data-render-projection]="projection?.kind"
+        [style.display]="projectionVisible(shape.visible, projection) ? null : 'none'"
         [attr.transform]="transformAttr(shape)"
-        [attr.opacity]="opacityAttr(shape)"
+        [attr.opacity]="isClipProjection(projection) ? null : opacityAttr(shape)"
         [attr.cx]="shape.centerX"
         [attr.cy]="shape.centerY"
         [attr.rx]="shape.radiusX"
         [attr.ry]="shape.radiusY"
-        [attr.fill]="paintValue(shape.settings.fill) ?? 'none'"
+        [attr.fill]="projectionFill(projection) ? paintValue(shape.settings.fill) ?? 'none' : 'none'"
         [attr.fill-opacity]="paintOpacity(shape.settings.fill)"
-        [attr.stroke]="paintValue(shape.settings.stroke)"
+        [attr.stroke]="projectionStroke(projection) ? paintValue(shape.settings.stroke) : 'none'"
         [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)"
         [attr.stroke-width]="shape.settings.stroke_width"
         [attr.stroke-linecap]="shape.settings.line_cap"
@@ -145,39 +180,39 @@
         [attr.stroke-dasharray]="strokeDasharray(shape)"
         [attr.stroke-dashoffset]="strokeDashoffset(shape)"
         />
-        <svg:g *ngIf="!clipGeometry && strokeAlignment(shape) !== 'center'"
-               [id]="shape.id" [style.display]="shape.visible ? null : 'none'"
-               [attr.transform]="transformAttr(shape)" [attr.opacity]="opacityAttr(shape)">
+        <svg:g *ngIf="!isClipProjection(projection) && projectionStroke(projection) && strokeAlignment(shape) !== 'center'"
+               [id]="projectionId(shape.id, projection)" [attr.data-render-target]="projection ? shape.id : null" [attr.data-render-projection]="projection?.kind" [style.display]="projectionVisible(shape.visible, projection) ? null : 'none'"
+               [attr.transform]="transformAttr(shape)" [attr.opacity]="isClipProjection(projection) ? null : opacityAttr(shape)">
             <svg:defs>
-                <svg:clipPath *ngIf="strokeAlignment(shape) === 'inside'" [id]="strokeEffectId(shape)">
+                <svg:clipPath *ngIf="strokeAlignment(shape) === 'inside'" [id]="strokeEffectId(shape, projection)">
                     <svg:rect data-render-role="geometry-effect" *ngIf="editor.shapeIsRectangle(shape)" [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.width" [attr.height]="shape.height" [attr.rx]="shape.settings.corner_radius || null" [attr.ry]="shape.settings.corner_radius || null" />
                     <svg:ellipse data-render-role="geometry-effect" *ngIf="editor.shapeIsEllipse(shape)" [attr.cx]="shape.centerX" [attr.cy]="shape.centerY" [attr.rx]="shape.radiusX" [attr.ry]="shape.radiusY" />
                 </svg:clipPath>
-                <svg:mask *ngIf="strokeAlignment(shape) === 'outside'" [id]="strokeEffectId(shape)" x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox">
+                <svg:mask *ngIf="strokeAlignment(shape) === 'outside'" [id]="strokeEffectId(shape, projection)" x="-100%" y="-100%" width="300%" height="300%" maskUnits="objectBoundingBox">
                     <svg:rect x="-100%" y="-100%" width="300%" height="300%" fill="white" />
                     <svg:rect data-render-role="geometry-effect" *ngIf="editor.shapeIsRectangle(shape)" [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.width" [attr.height]="shape.height" [attr.rx]="shape.settings.corner_radius || null" [attr.ry]="shape.settings.corner_radius || null" fill="black" />
                     <svg:ellipse data-render-role="geometry-effect" *ngIf="editor.shapeIsEllipse(shape)" [attr.cx]="shape.centerX" [attr.cy]="shape.centerY" [attr.rx]="shape.radiusX" [attr.ry]="shape.radiusY" fill="black" />
                 </svg:mask>
             </svg:defs>
-            <svg:rect data-render-role="fill" *ngIf="editor.shapeIsRectangle(shape)" [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.width" [attr.height]="shape.height" [attr.rx]="shape.settings.corner_radius || null" [attr.ry]="shape.settings.corner_radius || null" [attr.fill]="paintValue(shape.settings.fill) ?? 'none'" [attr.fill-opacity]="paintOpacity(shape.settings.fill)" />
-            <svg:ellipse data-render-role="fill" *ngIf="editor.shapeIsEllipse(shape)" [attr.cx]="shape.centerX" [attr.cy]="shape.centerY" [attr.rx]="shape.radiusX" [attr.ry]="shape.radiusY" [attr.fill]="paintValue(shape.settings.fill) ?? 'none'" [attr.fill-opacity]="paintOpacity(shape.settings.fill)" />
-            <svg:rect data-render-role="stroke" *ngIf="editor.shapeIsRectangle(shape)" [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.width" [attr.height]="shape.height" [attr.rx]="shape.settings.corner_radius || null" [attr.ry]="shape.settings.corner_radius || null" fill="none" [attr.stroke]="paintValue(shape.settings.stroke)" [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)" [attr.stroke-width]="shape.settings.stroke_width * 2" [attr.stroke-linecap]="shape.settings.line_cap" [attr.stroke-linejoin]="shape.settings.line_join" [attr.stroke-miterlimit]="shape.settings.stroke_miterlimit" [attr.stroke-dasharray]="strokeDasharray(shape)" [attr.stroke-dashoffset]="strokeDashoffset(shape)" [attr.clip-path]="strokeAlignment(shape) === 'inside' ? strokeEffectUrl(shape) : null" [attr.mask]="strokeAlignment(shape) === 'outside' ? strokeEffectUrl(shape) : null" />
-            <svg:ellipse data-render-role="stroke" *ngIf="editor.shapeIsEllipse(shape)" [attr.cx]="shape.centerX" [attr.cy]="shape.centerY" [attr.rx]="shape.radiusX" [attr.ry]="shape.radiusY" fill="none" [attr.stroke]="paintValue(shape.settings.stroke)" [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)" [attr.stroke-width]="shape.settings.stroke_width * 2" [attr.stroke-linecap]="shape.settings.line_cap" [attr.stroke-linejoin]="shape.settings.line_join" [attr.stroke-miterlimit]="shape.settings.stroke_miterlimit" [attr.stroke-dasharray]="strokeDasharray(shape)" [attr.stroke-dashoffset]="strokeDashoffset(shape)" [attr.clip-path]="strokeAlignment(shape) === 'inside' ? strokeEffectUrl(shape) : null" [attr.mask]="strokeAlignment(shape) === 'outside' ? strokeEffectUrl(shape) : null" />
+            <svg:rect data-render-role="fill" *ngIf="projectionFill(projection) && editor.shapeIsRectangle(shape)" [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.width" [attr.height]="shape.height" [attr.rx]="shape.settings.corner_radius || null" [attr.ry]="shape.settings.corner_radius || null" [attr.fill]="projectionFill(projection) ? paintValue(shape.settings.fill) ?? 'none' : 'none'" [attr.fill-opacity]="paintOpacity(shape.settings.fill)" />
+            <svg:ellipse data-render-role="fill" *ngIf="projectionFill(projection) && editor.shapeIsEllipse(shape)" [attr.cx]="shape.centerX" [attr.cy]="shape.centerY" [attr.rx]="shape.radiusX" [attr.ry]="shape.radiusY" [attr.fill]="projectionFill(projection) ? paintValue(shape.settings.fill) ?? 'none' : 'none'" [attr.fill-opacity]="paintOpacity(shape.settings.fill)" />
+            <svg:rect data-render-role="stroke" *ngIf="editor.shapeIsRectangle(shape)" [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.width" [attr.height]="shape.height" [attr.rx]="shape.settings.corner_radius || null" [attr.ry]="shape.settings.corner_radius || null" fill="none" [attr.stroke]="projectionStroke(projection) ? paintValue(shape.settings.stroke) : 'none'" [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)" [attr.stroke-width]="shape.settings.stroke_width * 2" [attr.stroke-linecap]="shape.settings.line_cap" [attr.stroke-linejoin]="shape.settings.line_join" [attr.stroke-miterlimit]="shape.settings.stroke_miterlimit" [attr.stroke-dasharray]="strokeDasharray(shape)" [attr.stroke-dashoffset]="strokeDashoffset(shape)" [attr.clip-path]="strokeAlignment(shape) === 'inside' ? strokeEffectUrl(shape, projection) : null" [attr.mask]="strokeAlignment(shape) === 'outside' ? strokeEffectUrl(shape, projection) : null" />
+            <svg:ellipse data-render-role="stroke" *ngIf="editor.shapeIsEllipse(shape)" [attr.cx]="shape.centerX" [attr.cy]="shape.centerY" [attr.rx]="shape.radiusX" [attr.ry]="shape.radiusY" fill="none" [attr.stroke]="projectionStroke(projection) ? paintValue(shape.settings.stroke) : 'none'" [attr.stroke-opacity]="paintOpacity(shape.settings.stroke)" [attr.stroke-width]="shape.settings.stroke_width * 2" [attr.stroke-linecap]="shape.settings.line_cap" [attr.stroke-linejoin]="shape.settings.line_join" [attr.stroke-miterlimit]="shape.settings.stroke_miterlimit" [attr.stroke-dasharray]="strokeDasharray(shape)" [attr.stroke-dashoffset]="strokeDashoffset(shape)" [attr.clip-path]="strokeAlignment(shape) === 'inside' ? strokeEffectUrl(shape, projection) : null" [attr.mask]="strokeAlignment(shape) === 'outside' ? strokeEffectUrl(shape, projection) : null" />
         </svg:g>
     </ng-container>
     <ng-container *ngIf="asText(element) as text">
-        <svg:text
-        [id]="text.id"
-        [style.display]="text.visible ? null : 'none'"
+        <svg:text *ngIf="projection?.kind !== 'stroke'"
+        [id]="projectionId(text.id, projection)" [attr.data-render-target]="projection ? text.id : null" [attr.data-render-projection]="projection?.kind"
+        [style.display]="projectionVisible(text.visible, projection) ? null : 'none'"
         [attr.transform]="transformAttr(text)"
-        [attr.opacity]="opacityAttr(text)"
+        [attr.opacity]="isClipProjection(projection) ? null : opacityAttr(text)"
         [attr.x]="text.x"
         [attr.y]="text.y"
         [attr.font-size]="text.settings.font_size"
         [attr.font-family]="text.settings.font_family"
         [attr.font-weight]="text.settings.font_weight"
         [attr.text-anchor]="text.textAnchor"
-        [attr.fill]="paintValue(text.settings.color) ?? '#000000'"
+        [attr.fill]="isClipProjection(projection) ? '#000000' : paintValue(text.settings.color) ?? '#000000'"
         [attr.fill-opacity]="paintOpacity(text.settings.color)"
         dominant-baseline="hanging">
             <svg:tspan
@@ -187,7 +222,7 @@
         </svg:text>
     </ng-container>
 </ng-container>
-<ng-container *ngIf="includeSource">
+<ng-container *ngIf="includeSource && !isClipProjection(projection) && projection?.kind !== 'stroke'">
     <svg:g *ngFor="let source of sourceNodesFor(parentId ?? null)"
            class="imported-source-node"
            [attr.data-imported-source-id]="source.id"
@@ -195,7 +230,7 @@
 </ng-container>
 </ng-template>
 
-<ng-container *ngTemplateOutlet="renderElements; context: { $implicit: editor.selectedSVG?.elements, parentId: null, includeSource: true, clipGeometry: false }"></ng-container>
+<ng-container *ngTemplateOutlet="renderElements; context: { $implicit: editor.selectedSVG?.elements, parentId: null, includeSource: true }"></ng-container>
 
 <ng-container *ngFor="let element of editor.selectedSVG?.tempElements">
     <ng-container *ngIf="editor.elementIsPath(element)">

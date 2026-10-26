@@ -7,9 +7,10 @@ import { AfterViewChecked, Component, DoCheck, ElementRef, HostListener, OnDestr
 import { NgFor, NgIf } from '@angular/common';
 import { RigEditingService } from '../../_services/rig-editing.service';
 import { RigBindingSessionService } from '../../_services/rig-binding-session.service';
+import { InlineRenameDirective } from '../../editor/inline-rename.directive';
 
 @Component({
-    selector: 'app-rig-layers', standalone: true, imports: [NgFor, NgIf, FaIconComponent],
+    selector: 'app-rig-layers', standalone: true, imports: [NgFor, NgIf, FaIconComponent, InlineRenameDirective],
     template: `<div class="rig-heading"><span>Bones</span><button class="btn btn-sm btn-secondary" (click)="rig.create()">New armature</button></div>
       <div role="tree" aria-label="Bones">
         <div *ngFor="let row of rows; trackBy: track" role="treeitem" [attr.aria-level]="row.depth + 1" [attr.aria-expanded]="row.children ? !collapsed.has(row.id) : null" [attr.aria-selected]="selected(row)" [attr.aria-label]="row.name" [attr.data-bone-row]="row.id" tabindex="0"
@@ -18,7 +19,7 @@ import { RigBindingSessionService } from '../../_services/rig-binding-session.se
           <button class="drag-handle row-control" [attr.aria-label]="'Drag ' + row.name" title="Drag bone layer" (pointerdown)="beginDrag($event,row)" (click)="$event.stopPropagation()" (dblclick)="$event.stopPropagation()"><fa-icon [icon]="gripIcon" /></button>
           <button *ngIf="row.children" class="expander" [attr.aria-label]="(collapsed.has(row.id) ? 'Expand ' : 'Collapse ') + row.name" (click)="$event.stopPropagation(); toggle(row.id)">{{collapsed.has(row.id) ? '▸' : '▾'}}</button>
           <span *ngIf="!row.children" class="expander"></span><span class="glyph">{{row.point ? '⊕' : '◇'}}</span><span *ngIf="renaming?.id !== row.id" class="name">{{row.name}}</span>
-          <input *ngIf="renaming?.id === row.id" class="rename" [attr.aria-label]="'Rename ' + row.name" [value]="row.name" maxlength="60" (click)="$event.stopPropagation()" (dblclick)="$event.stopPropagation()" (keydown)="renameKey($event)" (blur)="finishRename($any($event.target).value)" />
+          <input *ngIf="renaming?.id === row.id" class="rename" [attr.aria-label]="'Rename ' + row.name" [inlineRename]="row.name" maxlength="60" (renameComplete)="finishRename($event.value, $event.restoreFocus)" />
           <button class="row-menu row-control" [attr.aria-label]="'Actions for ' + row.name" title="Bone actions" (click)="menu($event, row)" (dblclick)="$event.stopPropagation()">⋯</button>
           <button class="row-control trash" [attr.aria-label]="'Delete ' + row.name" [title]="row.depth === 0 ? 'Delete armature' : 'Delete bone'" (click)="$event.stopPropagation(); remove(row)" (dblclick)="$event.stopPropagation()"><fa-icon [icon]="trashIcon" /></button>
         </div>
@@ -35,7 +36,7 @@ export class RigLayersComponent implements AfterViewChecked, DoCheck, OnDestroy 
     private suppressClick = false;
     renaming?: BoneRow;
     private renameDocument?: object;
-    private focusRename = false;
+    private renameRevision = 0;
     private focusAfterDelete?: string;
     collapsed = new Set<string>();
     constructor(public rig: RigEditingService, public session: RigBindingSessionService, private host: ElementRef<HTMLElement>, private mutations: DocumentMutationService) {}
@@ -90,33 +91,25 @@ export class RigLayersComponent implements AfterViewChecked, DoCheck, OnDestroy 
     ngOnDestroy(): void { this.cancelDrag(); }
     beginRename(row: BoneRow): void {
         if(this.session.pending || !this.rig.canEdit) return;
-        this.renaming = row; this.renameDocument = this.rig.editor.selectedSVG; this.focusRename = true;
+        this.renaming = row; this.renameDocument = this.rig.editor.selectedSVG; this.renameRevision = this.mutations.revision;
     }
     ngAfterViewChecked(): void {
         if(this.focusAfterDelete) { const id = this.focusAfterDelete; this.focusAfterDelete = undefined; this.focus(id); }
-        if(!this.focusRename) return;
-        const input = this.host.nativeElement.querySelector<HTMLInputElement>('input.rename');
-        if(input) { this.focusRename = false; input.focus(); input.select(); }
     }
     ngDoCheck(): void {
         if(this.drag.pending && (this.dragDocument !== this.rig.editor.selectedSVG || this.dragRevision !== this.mutations.revision || !this.rig.canEdit || !!this.session.pending)) this.cancelDrag();
-        if(this.renaming && (this.renameDocument !== this.rig.editor.selectedSVG || !this.rows.some(row => row.id === this.renaming!.id && row.name === this.renaming!.name))) this.renaming = undefined;
+        if(this.renaming && (this.renameDocument !== this.rig.editor.selectedSVG || this.renameRevision !== this.mutations.revision || !this.rows.some(row => row.id === this.renaming!.id && row.name === this.renaming!.name))) this.renaming = undefined;
     }
     finishRename(name?: string, restoreFocus = false): void {
         const row = this.renaming; this.renaming = undefined;
         if(!row) return;
         const current = this.rows.find(item => item.id === row.id);
-        if(name !== undefined && this.renameDocument === this.rig.editor.selectedSVG && current?.name === row.name) {
+        if(name !== undefined && name.trim() !== row.name && this.renameDocument === this.rig.editor.selectedSVG
+            && this.renameRevision === this.mutations.revision && current?.name === row.name) {
             this.rig.selectBone(row.rigId,row.boneId);
             if(row.depth === 0) this.rig.rename(name); else this.rig.renameBone(name);
         }
         if(restoreFocus) this.focus(row.id);
-    }
-    renameKey(event: KeyboardEvent): void {
-        event.stopPropagation();
-        if(event.key === 'Escape' || event.key === 'Enter') {
-            event.preventDefault(); this.finishRename(event.key === 'Escape' ? undefined : (event.target as HTMLInputElement).value, true);
-        }
     }
     private focus(id: string): void { this.host.nativeElement.querySelector<HTMLElement>('[data-bone-row="' + CSS.escape(id) + '"]')?.focus(); }
     menu(event: MouseEvent, row: BoneRow): void {

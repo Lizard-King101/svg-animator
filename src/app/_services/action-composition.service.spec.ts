@@ -17,7 +17,7 @@ import { AnimationEvaluationPlan } from '../editor/animation/animation-evaluatio
 import { expectRuntimeDomParity, parseFixtureSvg } from '../editor/animation/runtime-dom-parity.spec-support';
 import { createPlayer, validateRuntimeBundle } from '../../../packages/runtime/src/player';
 import { buildSVGMarkup } from '../editor/svg-markup';
-import { createDocumentEnvelope, migrateDocument } from '../editor/migrations/document-migrations';
+import { CURRENT_DOCUMENT_VERSION, createDocumentEnvelope, migrateDocument } from '../editor/migrations/document-migrations';
 import { AnimationInspectionService } from './animation-inspection.service';
 import { ElementFactory } from './element-factory.service';
 import showcase from '../../../fixtures/runtime-showcase-v1/document-v5.json';
@@ -298,7 +298,7 @@ describe('action composition', () => {
     it('migrates v7 and rejects malformed or future composition instead of discarding it', () => {
         const t = setup(); const action = t.actions.create('Blink')!;
         const envelope = createDocumentEnvelope(t.mutations.captureSave()!);
-        expect(envelope.version).toBe(14); expect(migrateDocument(envelope).status).toBe('ok');
+        expect(envelope.version).toBe(CURRENT_DOCUMENT_VERSION); expect(migrateDocument(envelope).status).toBe('ok');
         expect(migrateDocument({ ...envelope, version: 7, data: { ...envelope.data, animation: createDefaultAnimation() } }).status).toBe('ok');
         expect(validComposition({ ...t.svg.animation.composition, version: 2 })).toBeFalse();
         action.animation.composition = { version: 1, actions: [], placements: [] };

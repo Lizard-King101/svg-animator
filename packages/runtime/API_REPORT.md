@@ -20,9 +20,13 @@ export declare function bootstrapAnimatedSVG(options?: AnimatedSvgBootstrapOptio
 ```ts
 export declare const RUNTIME_BUNDLE_KIND: "svg-animator/runtime-bundle";
 export declare const RUNTIME_BUNDLE_FORMAT_VERSION: 1;
-export declare const RUNTIME_VERSION: "1.2.0";
+import type { RigDocument } from './rig/armature';
+import type { OutlineSection } from './outline';
+export type { OutlinePosition, OutlineTaper, OutlineSection } from './outline';
+export type { Armature, Bone, BoneWeight, BoundPoint, PathBinding, RigidAttachment, TwoBoneIKConstraint, RigDocument, WeightPointRef } from './rig/armature';
+export declare const RUNTIME_VERSION: "1.5.0";
 export declare const RUNTIME_BROWSER_GLOBAL: "SVGAnimatorRuntime";
-export declare const RUNTIME_CAPABILITIES_V1: readonly ["tracks.numeric-v1", "composition.action-windows-v1", "composition.action-timing-v1", "tracks.color-v1", "tracks.discrete-v1", "render.transforms-v1", "render.geometry-v1", "render.paint-v1", "render.gradient-v1", "render.path-v1", "render.clipping-v1", "render.motion-path-v1"];
+export declare const RUNTIME_CAPABILITIES_V1: readonly ["tracks.numeric-v1", "rig.pose-v1", "composition.action-windows-v1", "composition.action-timing-v1", "tracks.color-v1", "tracks.discrete-v1", "render.transforms-v1", "render.geometry-v1", "render.paint-v1", "render.gradient-v1", "render.path-v1", "render.outline-sections-v1", "render.clipping-v1", "render.visible-clipping-v1", "render.motion-path-v1"];
 export type RuntimeCapabilityV1 = typeof RUNTIME_CAPABILITIES_V1[number];
 export type RuntimeSegmentMode = "linear" | "hold" | "ease-in" | "ease-out" | "ease-in-out" | "temporal";
 export interface CompiledNumericTrackV1 {
@@ -140,13 +144,16 @@ export interface RuntimeSceneTargetV1 {
     };
     clipping?: {
         clipElementId: string;
-        clipPathId: string;
+        clipPathId: string; /** Source visibility affects paint only; clipping geometry stays active. */
+        sourceVisibility?: true;
     };
     path?: {
         contours: RuntimeContourV1[];
         fillRule: "nonzero" | "evenodd";
         drawProgress: number;
         rounded: boolean;
+        outlineSections?: OutlineSection[];
+        explicitClosure?: boolean;
     };
     paints: {
         fill?: RuntimePaintV1;
@@ -158,6 +165,9 @@ export interface RuntimeSceneTargetV1 {
         alignment: "inside" | "center" | "outside";
         dasharray: number[];
         dashoffset: number;
+        lineCap?: 'butt' | 'round' | 'square' | null;
+        lineJoin?: 'miter' | 'round' | 'bevel' | null;
+        miterLimit?: number;
     };
 }
 export interface RuntimeMarkerV1 {
@@ -177,6 +187,8 @@ export interface RuntimeBundleV1 {
         version: string;
     };
     requiredCapabilities: RuntimeCapabilityV1[];
+    /** Rest-space rig data for authored bone pose channels; requires rig.pose-v1. */
+    rigs?: RigDocument;
     artwork: {
         id: string;
         signature: string;
@@ -208,6 +220,33 @@ export interface RuntimeCompileResultV1 {
     bundle: RuntimeBundleV1;
     diagnostics: RuntimeCompileDiagnostic[];
 }
+```
+
+## curve-range.d.ts
+
+```ts
+/** Framework-free curve primitives shared by authoring and derived rendering. */
+export interface CurvePoint {
+    x: number;
+    y: number;
+}
+export interface CurveLengthSample {
+    t: number;
+    length: number;
+}
+export interface CurveLine {
+    type: 'line' | 'bezier';
+    points: readonly CurvePoint[];
+    controlStart?: CurvePoint;
+    controlEnd?: CurvePoint;
+}
+export declare function lerpCurvePoint(a: CurvePoint, b: CurvePoint, t: number): CurvePoint;
+export declare function cubicPoint(a: CurvePoint, b: CurvePoint, c: CurvePoint, d: CurvePoint, t: number): CurvePoint;
+export declare function splitCubic(a: CurvePoint, b: CurvePoint, c: CurvePoint, d: CurvePoint, t: number): [[CurvePoint, CurvePoint, CurvePoint, CurvePoint], [CurvePoint, CurvePoint, CurvePoint, CurvePoint]];
+export declare function cubicRange(a: CurvePoint, b: CurvePoint, c: CurvePoint, d: CurvePoint, start: number, end: number): [CurvePoint, CurvePoint, CurvePoint, CurvePoint];
+export declare function curvePoint(line: CurveLine, t: number): CurvePoint;
+export declare function curveLengthSamples(line: CurveLine, steps?: number): CurveLengthSample[];
+export declare function curveTAtLength(samples: CurveLengthSample[], target: number): number;
 ```
 
 ## errors.d.ts
@@ -243,10 +282,79 @@ export * from "./player";
 export * from "./bootstrap";
 ```
 
+## outline.d.ts
+
+```ts
+import type { RuntimeContourV1, RuntimeLineV1 } from './contracts';
+import { CurvePoint } from './curve-range';
+export interface OutlinePosition {
+    segmentId: string;
+    t: number;
+}
+export interface OutlineTaper {
+    length: number;
+    tipWidth: number;
+}
+export interface OutlineSection {
+    id: string;
+    contourId: string;
+    start: OutlinePosition;
+    end: OutlinePosition;
+    startTaper?: OutlineTaper;
+    endTaper?: OutlineTaper;
+    /** Distinguishes a whole closed contour from an intentionally empty range. */
+    fullContour?: boolean;
+}
+export interface OutlineStyle {
+    width: number;
+    alignment?: 'center' | 'inside' | 'outside';
+    lineCap?: 'butt' | 'round' | 'square' | null;
+    lineJoin?: 'miter' | 'round' | 'bevel' | null;
+    miterLimit?: number;
+    dasharray?: readonly number[];
+    dashoffset?: number;
+    drawProgress?: number;
+    rounded?: boolean;
+}
+export interface OutlineProjectionSection {
+    id: string;
+    data: string;
+    length: number;
+    start: CurvePoint;
+    end: CurvePoint;
+}
+export interface OutlineProjection {
+    strokeData: string;
+    sections: OutlineProjectionSection[];
+    sourceBounds: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    };
+    problem?: string;
+}
+/** Includes the implicit Z edge without ever adding an editable point. */
+export declare function outlineContourSegments(contour: RuntimeContourV1): RuntimeLineV1[];
+export declare function outlinePositionPoint(contour: RuntimeContourV1, position: OutlinePosition, rounded?: boolean): CurvePoint | undefined;
+/** Nearest source-local address, used by endpoint dragging without changing topology. */
+export declare function closestOutlinePosition(contour: RuntimeContourV1, point: CurvePoint, rounded?: boolean): OutlinePosition | undefined;
+export declare function outlineSectionLines(contour: RuntimeContourV1, section: OutlineSection, rounded?: boolean): RuntimeLineV1[];
+export declare function outlineSectionPathData(contour: RuntimeContourV1, section: OutlineSection, rounded?: boolean): string;
+/** The only stroke projection used by editor, export and portable playback. */
+export declare function projectOutlineSections(contours: RuntimeContourV1[], sections: readonly OutlineSection[], style: OutlineStyle): OutlineProjection;
+export declare function fullOutlineSections(contours: RuntimeContourV1[]): OutlineSection[];
+/** Validates authored addresses without projecting or silently repairing their geometry. */
+export declare function outlineSectionsProblem(contours: RuntimeContourV1[], sections: readonly OutlineSection[]): string | undefined;
+/** Prevent authoring or importing patterns that would create unbounded per-frame geometry. */
+export declare function outlineDashComplexityProblem(length: number, input: readonly number[]): string | undefined;
+export declare function outlineProjectionProblem(contours: RuntimeContourV1[], sections: readonly OutlineSection[], style: OutlineStyle): string | undefined;
+```
+
 ## path-data.d.ts
 
 ```ts
-import { RuntimeContourV1, RuntimePointV1 } from "./contracts";
+import { RuntimeContourV1, RuntimeLineV1, RuntimePointV1 } from "./contracts";
 /** Shared framework-free path reconstruction used by authoring and playback. */
 export declare function buildRuntimePathData(contours: RuntimeContourV1[], rounded?: boolean): string;
 /** The implicit Z edge, retaining the caller's endpoint identities without changing saved geometry. */
@@ -269,6 +377,13 @@ export declare function isStraightPathSegment(line: {
         y: number;
     };
 }): boolean;
+export interface Corner {
+    before: RuntimePointV1;
+    after: RuntimePointV1;
+    controlBefore: RuntimePointV1;
+    controlAfter: RuntimePointV1;
+}
+export declare function roundedCorner(incoming: RuntimeLineV1, outgoing: RuntimeLineV1): Corner | null;
 ```
 
 ## player.d.ts
@@ -368,15 +483,19 @@ export declare function validateRuntimeBundle(value: unknown): asserts value is 
 
 ```ts
 import { RuntimeSceneTargetV1 } from "./contracts";
+import { RigDocument } from './rig/armature';
 export declare class RuntimeScene {
     private readonly root;
     readonly targets: RuntimeSceneTargetV1[];
     private readonly targetById;
-    private readonly nodeById;
-    constructor(root: SVGSVGElement, sourceTargets: RuntimeSceneTargetV1[]);
+    private readonly targetNodesById;
+    private readonly rigs?;
+    constructor(root: SVGSVGElement, sourceTargets: RuntimeSceneTargetV1[], rigs?: RigDocument);
     write(targetId: string, property: string, value: unknown): boolean;
     render(): void;
     clear(): void;
+    /** Recompute from captured rest points on every seek; solved FK never replaces authored channels. */
+    private applyRigs;
     private writeGeometryPosition;
     private writeGeometrySize;
     /** Mirrors the editor's native-geometry mutation contract for pinned origins and user-space paints. */
@@ -394,6 +513,16 @@ export declare class RuntimeScene {
     private parentMatrix;
     private chain;
     private ownMatrix;
-    private node;
+    private nodes;
 }
+```
+
+## stroke-expansion.d.ts
+
+```ts
+import { CurvePoint } from './curve-range';
+/** Shared offset/join primitives for generated stroke geometry and Stroke to Path. */
+export declare function strokeNormal(direction: CurvePoint, side: number): CurvePoint;
+export declare function strokeOffset(point: CurvePoint, normal: CurvePoint, distance: number): CurvePoint;
+export declare function strokeIntersection(a: CurvePoint, directionA: CurvePoint, b: CurvePoint, directionB: CurvePoint, epsilon?: number): CurvePoint | null;
 ```

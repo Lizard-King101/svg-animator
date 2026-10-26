@@ -219,6 +219,7 @@ describe("editor model characterization", () => {
         path.transform.translateX = 3;
         const mask = new Shape(editor, { type: "rectangle", position: new Point(0, 0), width: 5, height: 5 });
         (mask as any).id = "mask-id";
+        mask.visible = false;
         const group = new Group(editor);
         (group as any).id = "group-id";
         group.elements = [path, mask];
@@ -230,7 +231,7 @@ describe("editor model characterization", () => {
         expect(markup).toContain('<clipPath id="clip-group-id">');
         expect(markup).toContain('clip-path="url(#clip-group-id)"');
         expect(markup).toContain('transform="matrix(1 0 0 1 3 0)"');
-        expect(markup.match(/id="mask-id"/g)?.length).toBe(1);
+        expect(markup.match(/id="mask-id--clip-group-id"/g)?.length).toBe(1);
     });
 
     it("records only changed snapshots and restores elements and animation", () => {

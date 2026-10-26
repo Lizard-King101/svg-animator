@@ -14,6 +14,8 @@ import { evaluateTemporalCubic } from "../../../../packages/runtime/src/temporal
 import { animationPropertyKey, AppliedAnimationValue, readAnimationProperty } from "../objects/animation-targets";
 import { Group } from "../objects/elements/group.object";
 import { AnyElement } from "../objects/svg.object";
+import { RigDocument } from '../objects/armature';
+import { readRigAnimationProperty } from '../../../../packages/runtime/src/rig/channels';
 
 export interface EvaluatedAnimationValue {
     targetId: string;
@@ -51,7 +53,7 @@ export class AnimationEvaluationPlan {
     tracks: CompiledAnimationTrack[] = [];
     private output: EvaluatedAnimationValue[] = [];
 
-    constructor(public animation: AnimationDocument, elements: readonly AnyElement[]) {
+    constructor(public animation: AnimationDocument, elements: readonly AnyElement[], public rigs?: RigDocument) {
         this.rebuildTargets(elements);
         this.rebuild(animation);
     }
@@ -62,7 +64,7 @@ export class AnimationEvaluationPlan {
         this.tracksByTargetProperty.clear();
         this.tracks = compositionChannels(animation, track => {
             const target = this.targetMap.get(track.targetId);
-            return target ? readAnimationProperty(target, track.property) : undefined;
+            return target ? readAnimationProperty(target, track.property) : readRigAnimationProperty(this.rigs, track.targetId, track.property);
         }).map(channel => ({ ...this.compileTrack(channel.base),
             windows: channel.windows.map(window => ({ ...window, track: this.compileTrack(window.track) })) }));
         this.tracks.forEach((track) => {
@@ -81,7 +83,8 @@ export class AnimationEvaluationPlan {
         append(elements);
     }
 
-    invalidateStructure(elements: readonly AnyElement[]): void {
+    invalidateStructure(elements: readonly AnyElement[], rigs = this.rigs): void {
+        this.rigs = rigs;
         this.rebuildTargets(elements);
         this.rebuild(this.animation);
     }
@@ -164,7 +167,8 @@ export class AnimationEvaluationPlan {
             property: track.property,
             valueType: track.valueType,
             target,
-            applicable: !!target && readAnimationProperty(target, track.property) !== undefined,
+            applicable: target ? readAnimationProperty(target, track.property) !== undefined
+                : track.valueType === 'number' && readRigAnimationProperty(this.rigs, track.targetId, track.property) !== undefined,
             times,
             numericValues,
             values: keyframes.map((keyframe) => keyframe.value),

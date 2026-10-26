@@ -1,8 +1,8 @@
-import { ChangeDetectorRef, ElementRef, EventEmitter, Injectable, NgZone, OnDestroy } from "@angular/core";
+import { ChangeDetectorRef, ElementRef, EventEmitter, Injectable, NgZone, OnDestroy, Optional } from "@angular/core";
 import { AnimationPlaybackService } from "src/app/_services/animation-playback.service";
 import { EditorService } from "src/app/_services/editor.service";
 import { EditorPreferencesService } from "src/app/_services/editor-preferences.service";
-import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, AnimationTrack, applyEasingPresetToSelection, EasingType, evaluateTemporalSpeed, Keyframe, makeAnimationId, temporalTangentsForPreset, TemporalHandle } from "src/app/editor/objects/animation.object";
+import { ANIMATABLE_PROPERTIES, AnimatablePropertyDefinition, AnimationDocument, AnimationTrack, applyEasingPresetToSelection, EasingType, evaluateTemporalSpeed, Keyframe, makeAnimationId, temporalTangentsForPreset, TemporalHandle } from "src/app/editor/objects/animation.object";
 import { findAnimationTarget, matchingAnimationProperty, parsePathPointProperty, pathPointAnimationProperty, readAnimationProperty } from "src/app/editor/objects/animation-targets";
 import { Color } from "src/app/editor/objects/color.object";
 import { DocumentMutationService } from "src/app/_services/document-mutation.service";
@@ -17,11 +17,18 @@ import { PaintEditingService } from "src/app/_services/paint-editing.service";
 import { IconProp } from "@fortawesome/fontawesome-svg-core";
 import { keyframeEasingIcon } from "src/app/_components/animation-timeline/keyframe-easing-icons";
 import { isEditableEventTarget } from "src/app/editor/editable-event-target";
+import { RigEditingService } from './rig-editing.service';
+import { parseRigAnimationProperty, readDocumentAnimationProperty, rigAnimationProperty } from '../editor/rig-animation';
 import {
     clampKeyframeTimeDelta,
     clampTimelineScale,
     KeyframeEntry,
     PropertyTimelineRow,
+    NumericTimelineRow,
+    RigPropertyTimelineRow,
+    timelineRowTargetId,
+    timelineRowId,
+    rigTimelineProperties,
     snapKeyframeTimeDelta,
     snapTimelineTime,
     TimelineEditingService,
@@ -132,6 +139,7 @@ export class TimelineEditorService implements OnDestroy {
         private mutations: DocumentMutationService,
         private changeDetector: ChangeDetectorRef,
         private paintEditing: PaintEditingService,
+        @Optional() public rig?: RigEditingService,
     ) {
         this.contextSubscription = this.animation.contextChanging?.subscribe(() => {
             this.cancelContextGestures();
@@ -143,6 +151,7 @@ export class TimelineEditorService implements OnDestroy {
         });
         this.timelineHeight = this.clampTimelineHeight(this.preferences.timelineHeight);
         this.historyRestoreSubscription = this.mutations.historyRestored.subscribe(() => {
+            this.cancelNumberDrag(false);
             this.rowCacheKey = "";
             this.layerSummaryCache.clear();
             this.speedCurveCache.clear();
@@ -153,6 +162,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     ngOnDestroy(): void {
+        this.cancelNumberDrag();
         this.historyRestoreSubscription.unsubscribe();
         this.contextSubscription?.unsubscribe();
         this.clearGlobalPointerTracking();
@@ -164,16 +174,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private cancelContextGestures(): void {
-        if(this.numberDragFrame != null) cancelAnimationFrame(this.numberDragFrame);
-        this.numberDragFrame = undefined;
-        const number = this.numberDrag;
-        if(number) {
-            this.animation.restorePreview();
-            if(this.activeAnimation) this.activeAnimation.tracks = number.startTracks;
-            try { number.capture.releasePointerCapture(number.pointerId); } catch {}
-            this.numberDrag = undefined;
-            this.animation.invalidate();
-        }
+        this.cancelNumberDrag();
         const area = this.workAreaDrag;
         if(area) {
             this.animation.setWorkArea(area.start, area.end);
@@ -190,23 +191,41 @@ export class TimelineEditorService implements OnDestroy {
 
     get rows(): TimelineRow[] {
         const elements = this.editor.selectedSVG?.elements ?? [];
-        const cacheKey = `${this.editor.selectedSVG?.id ?? ""}|${this.animation.revision}|${[...this.expandedLayerIds].sort().join(",")}|${this.rowStructureKey(elements)}`;
+        const rigs = this.editor.selectedSVG?.rigs.armatures ?? [];
+        const rigKey = rigs.map(rig => `${rig.id}:${rig.name}:${rig.bones.map(bone => `${bone.id}:${bone.parentId}:${bone.name}`).join(',')}`).join('|');
+        const cacheKey = `${this.editor.selectedSVG?.id ?? ""}|${this.animation.revision}|${[...this.expandedLayerIds].sort().join(",")}|${this.rowStructureKey(elements)}|${rigKey}`;
         if(cacheKey === this.rowCacheKey) return this.rowCache;
         this.rowCacheKey = cacheKey;
-        this.rowCache = this.editing.projectRows(
+        this.rowCache = [...this.editing.projectRigRows(rigs.filter(rig => !this.animation.allowsTarget || this.animation.allowsTarget(rig.id)), this.expandedLayerIds), ...this.editing.projectRows(
             elements,
             this.expandedLayerIds,
             this.properties,
             (element, property) => this.propertySupported(element, property),
             PATH_SHAPE_PROPERTY,
-        ).filter(row => row.type === 'layer' || !this.animation.allowsTarget || this.animation.allowsTarget(row.element.id));
+        ).filter(row => row.type === 'layer' || !this.animation.allowsTarget || this.animation.allowsTarget(row.element.id))];
         return this.rowCache;
     }
 
     trackRow(_index: number, row: TimelineRow): string {
-        return row.type === "layer"
-            ? `layer:${row.element.id}`
-            : `property:${row.element.id}:${row.property.property}`;
+        return 'property' in row ? `property:${timelineRowTargetId(row)}:${row.property.property}` : `${row.type}:${timelineRowId(row)}`;
+    }
+
+    isPropertyRow(row: TimelineRow): row is NumericTimelineRow { return 'property' in row; }
+    rowExpanded(row: TimelineRow): boolean { return this.expandedLayerIds.has(timelineRowId(row)); }
+    toggleRow(row: TimelineRow): void {
+        const id = timelineRowId(row);
+        if(this.expandedLayerIds.has(id)) this.expandedLayerIds.delete(id); else this.expandedLayerIds.add(id);
+    }
+    rowLabel(row: TimelineRow): string { return 'property' in row ? row.property.label : row.type === 'rig' ? row.rig.name : row.type === 'bone' ? row.bone.name : row.element.name; }
+    rowSelected(row: TimelineRow): boolean { return 'rig' in row ? this.rig?.activeId === row.rig.id && (row.type === 'rig' || this.rig?.boneId === row.bone.id) : this.editor.selectedElements.includes(row.element); }
+    rowDisabledReason(row: TimelineRow): string {
+        if(row.type !== 'rig-property') return '';
+        if(this.animation.playing) return 'Pause playback to edit pose keys.';
+        const constraint = row.rig.constraints?.find(item => item.enabled && [item.upperBoneId, item.lowerBoneId].includes(row.bone.id));
+        return constraint ? `Posed by IK. Animate ${row.rig.bones.find(bone => bone.id === constraint.targetBoneId)?.name ?? 'the target'} instead.` : '';
+    }
+    private rowTrack(row: NumericTimelineRow, property = row.property.property): AnimationTrack | undefined {
+        return this.activeAnimation?.tracks.find(track => track.targetId === timelineRowTargetId(row) && track.property === property);
     }
 
     toggleLayer(element: AnyElement) {
@@ -225,6 +244,19 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     selectTimelineRow(row: TimelineRow) {
+        if('rig' in row) {
+            this.editor.selectedElements = [];
+            if(row.type === 'rig') this.rig?.select(row.rig.id); else this.rig?.selectBone(row.rig.id, row.bone.id);
+            if(row.type === 'rig-property') {
+                this.selectedRowKey = `${row.rig.id}:${row.property.property}`;
+                this.selectedGraphTargetId = row.rig.id; this.selectedGraphProperty = row.property.property;
+            } else {
+                const track = this.rigRowTracks(row)[0];
+                if(track) { this.selectedGraphTargetId = row.rig.id; this.selectedGraphProperty = track.property; }
+            }
+            if(this.surfaceMode === 'graph') this.fitSpeed();
+            return;
+        }
         this.selectLayer(row.element);
         if(row.type === "layer" && this.surfaceMode === "graph") {
             const first = this.animation.tracksForElement(row.element).find((track) => track.valueType === "number");
@@ -295,6 +327,17 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     keyframes(row: TimelineRow): TimelineKeyframe[] {
+        if(row.type === 'rig-property') return this.rowTrack(row)?.keyframes ?? [];
+        if(row.type === 'rig' || row.type === 'bone') {
+            if(this.rowExpanded(row)) return [];
+            const summaries: TimelineKeyframe[] = [];
+            this.rigRowTracks(row).flatMap(track => track.keyframes).sort((a,b) => a.time - b.time).forEach(key => {
+                const previous = summaries.at(-1);
+                if(previous && this.timesMatch(previous.time, key.time)) previous.summaryCount = (previous.summaryCount ?? 1) + 1;
+                else summaries.push({ id: `summary:${timelineRowId(row)}:${key.time}`, time: key.time, value: undefined, summaryCount: 1 });
+            });
+            return summaries;
+        }
         if(row.type === "property") {
             if(this.isUniformScaleRow(row)) return this.uniformScaleKeyframes(row.element);
             if(this.isPathShapeRow(row)) {
@@ -329,6 +372,17 @@ export class TimelineEditorService implements OnDestroy {
             });
         this.layerSummaryCache.set(cacheKey, { revision: this.animation.revision, keyframes: summaries });
         return summaries;
+    }
+
+    private rigRowTracks(row: Extract<TimelineRow, {type: 'rig' | 'bone'}>): AnimationTrack[] {
+        const ids = new Set(row.type === 'rig' ? row.rig.bones.map(bone => bone.id) : [row.bone.id]);
+        if(row.type === 'bone') {
+            for(let changed = true; changed;) {
+                changed = false;
+                row.rig.bones.forEach(bone => { if(bone.parentId && ids.has(bone.parentId) && !ids.has(bone.id)) { ids.add(bone.id); changed = true; } });
+            }
+        }
+        return this.activeAnimation?.tracks.filter(track => track.targetId === row.rig.id && ids.has(parseRigAnimationProperty(track.property)?.boneId ?? '')) ?? [];
     }
 
     private summaryElements(element: AnyElement): AnyElement[] {
@@ -406,11 +460,11 @@ export class TimelineEditorService implements OnDestroy {
         this.virtualStart = 0;
         if(mode === "graph") {
             if(!this.selectedNumericRow()) {
-                const first = this.rows.find((row): row is PropertyTimelineRow => row.type === "property" && row.property.valueType === "number"
-                    && !!this.animation.trackFor(row.element, row.property.property));
-                if(first) this.selectedRowKey = `${first.element.id}:${first.property.property}`;
+                const first = this.rows.find((row): row is NumericTimelineRow => 'property' in row && row.property.valueType === "number"
+                    && !!this.rowTrack(row));
+                if(first) this.selectedRowKey = `${timelineRowTargetId(first)}:${first.property.property}`;
                 if(first) {
-                    this.selectedGraphTargetId = first.element.id;
+                    this.selectedGraphTargetId = timelineRowTargetId(first);
                     this.selectedGraphProperty = first.property.property;
                 } else {
                     const track = this.activeAnimation?.tracks.find((candidate) => candidate.valueType === "number");
@@ -426,12 +480,16 @@ export class TimelineEditorService implements OnDestroy {
         }
     }
 
-    selectedNumericRow(): PropertyTimelineRow | undefined {
-        const direct = this.rows.find((row): row is PropertyTimelineRow => row.type === "property"
+    selectedNumericRow(): NumericTimelineRow | undefined {
+        const direct = this.rows.find((row): row is NumericTimelineRow => 'property' in row
             && row.property.valueType === "number"
-            && row.element.id === this.selectedGraphTargetId
+            && timelineRowTargetId(row) === this.selectedGraphTargetId
             && row.property.property === this.selectedGraphProperty);
         if(direct) return direct;
+        const rig = this.editor.selectedSVG?.rigs.armatures.find(rig => rig.id === this.selectedGraphTargetId);
+        const parsed = parseRigAnimationProperty(this.selectedGraphProperty ?? '');
+        const bone = parsed && rig?.bones.find(bone => bone.id === parsed.boneId);
+        if(rig && bone) return { type: 'rig-property', rig, bone, depth: 1, property: rigTimelineProperties(bone).find(property => property.property === this.selectedGraphProperty)! };
         const element = findAnimationTarget(this.editor.selectedSVG?.elements ?? [], this.selectedGraphTargetId ?? "");
         const track = this.activeAnimation?.tracks.find((candidate) => candidate.targetId === this.selectedGraphTargetId
             && candidate.property === this.selectedGraphProperty && candidate.valueType === "number");
@@ -450,14 +508,14 @@ export class TimelineEditorService implements OnDestroy {
     graphTracks(): GraphTrack[] {
         const row = this.selectedNumericRow();
         if(!row) return [];
-        if(this.isUniformScaleRow(row)) {
+        if(row.type === 'property' && this.isUniformScaleRow(row)) {
             const track = this.animation.trackFor(row.element, "transform.scaleX")
                 ?? this.animation.trackFor(row.element, "transform.scaleY");
             return track ? [{ track, label: UNIFORM_SCALE_PROPERTY.label, axis: "scalar", selected: true, color: "#a78bfa" }] : [];
         }
-        const primary = this.animation.trackFor(row.element, row.property.property);
+        const primary = this.rowTrack(row);
         const partnerProperty = semanticPartnerProperty(row.property.property);
-        const partner = partnerProperty ? this.animation.trackFor(row.element, partnerProperty) : undefined;
+        const partner = partnerProperty ? this.rowTrack(row, partnerProperty) : undefined;
         return [primary, partner].flatMap((track) => track ? [this.graphTrackDescriptor(track, track === primary
             ? row.property.label : this.propertyLabel(track.property), track === primary)] : []);
     }
@@ -957,6 +1015,12 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     toggleKey(row: TimelineRow) {
+        if(row.type === 'rig-property') {
+            if(this.hasKeyAtTime(row)) this.animation.removeTargetKeyframeAtCurrentTime(row.rig.id, row.property.property);
+            else if(!this.rowDisabledReason(row)) this.animation.upsertTargetKeyframe(row.rig.id, row.property.property, 'number', this.propertyValue(row));
+            else return;
+            this.pruneKeyframeSelection(); this.animationChange.emit(); return;
+        }
         if(row.type !== "property") {
             return;
         }
@@ -1174,15 +1238,31 @@ export class TimelineEditorService implements OnDestroy {
 
     pasteKeyframes(): boolean {
         const svg = this.editor.selectedSVG;
+        const rigSelected = this.editor.selectedElements.length === 0 && this.rig?.visible ? this.rig.active : undefined;
+        const copiedBones = new Set(this.editing.copiedChannels.map(channel => parseRigAnimationProperty(channel.property)?.boneId).filter(Boolean));
+        const destination = rigSelected ?? this.editor.selectedElement;
         if(!svg || !this.editing.paste(
             this.activeAnimation!,
             this.animation.currentTime,
-            this.editor.selectedElement,
+            destination,
             (element, property, sourceTargetId) => {
+                const parsed = parseRigAnimationProperty(property);
+                if(rigSelected) {
+                    if(!parsed) return undefined;
+                    // Reuse channels on their original bones; an explicitly selected destination bone remaps one bone's keys.
+                    return copiedBones.size === 1 && this.rig?.boneId ? rigAnimationProperty(this.rig.boneId, parsed.field) : property;
+                }
+                if(parsed) return undefined;
                 const source = findAnimationTarget(svg.elements, sourceTargetId);
-                return source ? matchingAnimationProperty(source, element, property) : undefined;
+                return source ? matchingAnimationProperty(source, element as AnyElement, property) : undefined;
             },
             id => !this.animation.allowsTarget || this.animation.allowsTarget(id),
+            (id, property) => {
+                const parsed = parseRigAnimationProperty(property);
+                if(!parsed) return !!findAnimationTarget(svg.elements, id);
+                const rig = svg.rigs.armatures.find(rig => rig.id === id), bone = rig?.bones.find(bone => bone.id === parsed.boneId);
+                return !!rig && !!bone && !this.rowDisabledReason({ type: 'rig-property', rig, bone, depth: 0, property: rigTimelineProperties(bone).find(p => p.property === property)! });
+            },
         )) {
             return false;
         }
@@ -1204,6 +1284,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     hasKeyAtTime(row: TimelineRow): boolean {
+        if(row.type === 'rig-property') return this.keyframes(row).some(key => this.timesMatch(key.time, this.animation.currentTime));
         if(row.type !== "property") {
             return false;
         }
@@ -1221,7 +1302,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     previousKeyframeTime(row: TimelineRow): number | undefined {
-        if(row.type !== "property") {
+        if(!('property' in row)) {
             return undefined;
         }
 
@@ -1233,7 +1314,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     nextKeyframeTime(row: TimelineRow): number | undefined {
-        if(row.type !== "property") {
+        if(!('property' in row)) {
             return undefined;
         }
 
@@ -1258,6 +1339,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     propertyValue(row: TimelineRow): unknown {
+        if(row.type === 'rig-property') return this.editor.selectedSVG && readDocumentAnimationProperty(this.editor.selectedSVG, row.rig.id, row.property.property);
         if(row.type === "property" && this.isUniformScaleRow(row)) {
             return readAnimationProperty(row.element, "transform.scaleX");
         }
@@ -1306,9 +1388,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     colorRowKey(row: TimelineRow): string {
-        return row.type === "property"
-            ? `${row.element.id}:${row.property.property}`
-            : row.element.id;
+        return 'property' in row ? `${timelineRowTargetId(row)}:${row.property.property}` : timelineRowId(row);
     }
 
     toggleColorEditor(row: TimelineRow, event: MouseEvent | PointerEvent) {
@@ -1376,7 +1456,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     beginNumberDrag(row: TimelineRow, event: PointerEvent) {
-        if(row.type !== "property" || row.property.valueType !== "number" || event.button !== 0) {
+        if(!('property' in row) || row.property.valueType !== "number" || event.button !== 0 || this.rowDisabledReason(row)) {
             return;
         }
 
@@ -1390,6 +1470,7 @@ export class TimelineEditorService implements OnDestroy {
         const capture = event.currentTarget as HTMLInputElement;
         this.numberDrag = {
             startTracks: this.cloneValue(this.activeAnimation?.tracks ?? []),
+            animation: this.activeAnimation!, documentId: this.editor.selectedSVG?.id, revision: this.mutations.revision,
             row,
             pointerId: event.pointerId,
             startX: event.clientX,
@@ -1404,6 +1485,7 @@ export class TimelineEditorService implements OnDestroy {
             event.pointerId,
             (pointerEvent) => this.updateNumberDrag(pointerEvent),
             (pointerEvent) => this.zone.run(() => this.endNumberDrag(pointerEvent)),
+            () => this.zone.run(() => this.cancelNumberDrag()),
         );
     }
 
@@ -1411,6 +1493,7 @@ export class TimelineEditorService implements OnDestroy {
         if(!this.numberDrag || this.numberDrag.pointerId !== event.pointerId) {
             return;
         }
+        if(!this.numberDragCurrent()) { this.cancelNumberDrag(false); return; }
 
         const deltaX = event.clientX - this.numberDrag.startX;
         if(!this.numberDrag.moved && Math.abs(deltaX) <= 3) return;
@@ -1429,6 +1512,8 @@ export class TimelineEditorService implements OnDestroy {
         if(!this.numberDrag || this.numberDrag.pointerId !== event.pointerId) {
             return;
         }
+        if(event.type === 'pointercancel') { this.cancelNumberDrag(); return; }
+        if(!this.numberDragCurrent()) { this.cancelNumberDrag(false); return; }
 
         const drag = this.numberDrag;
         if(this.numberDragFrame != null) {
@@ -1439,6 +1524,7 @@ export class TimelineEditorService implements OnDestroy {
         const moved = drag.moved;
         if(moved) event.preventDefault();
         if(moved) event.stopPropagation();
+        if(moved && Number(this.propertyValue(drag.row)) === drag.startValue) { this.cancelNumberDrag(); return; }
         this.numberDrag = undefined;
         try { drag.capture.releasePointerCapture(event.pointerId); } catch {}
         this.clearGlobalPointerTracking();
@@ -1451,7 +1537,37 @@ export class TimelineEditorService implements OnDestroy {
         }
     }
 
+    private numberDragCurrent(): boolean {
+        const drag = this.numberDrag;
+        return !!drag && drag.documentId === this.editor.selectedSVG?.id && drag.animation === this.activeAnimation && drag.revision === this.mutations.revision;
+    }
+    private cancelNumberDrag(restore = true): void {
+        const drag = this.numberDrag;
+        if(!drag) return;
+        if(this.numberDragFrame != null) cancelAnimationFrame(this.numberDragFrame);
+        this.numberDragFrame = undefined;
+        if(restore && this.numberDragCurrent()) {
+            this.animation.restorePreview();
+            drag.animation.tracks = drag.startTracks;
+            this.animation.invalidate();
+            this.animation.previewAt(this.animation.currentTime);
+            drag.capture.value = String(drag.startValue);
+        }
+        this.numberDrag = undefined;
+        try { drag.capture.releasePointerCapture(drag.pointerId); } catch {}
+        this.clearGlobalPointerTracking();
+        this.changeDetector.markForCheck();
+    }
+
     private setPropertyValueInternal(row: TimelineRow, value: unknown, emitChange: boolean) {
+        if(row.type === 'rig-property') {
+            if(this.rowDisabledReason(row)) return;
+            const normalized = this.normalizeValue(row.property, value);
+            if(typeof normalized !== 'number' || !Number.isFinite(normalized)) return;
+            this.animation.setAnimatedTargetPropertyValue(row.rig.id, row.property.property, 'number', normalized);
+            if(emitChange) this.animationChange.emit();
+            return;
+        }
         if(row.type !== "property") {
             return;
         }
@@ -1667,6 +1783,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     handleTimelineShortcut(event: KeyboardEvent) {
+        if(event.key === 'Escape' && this.numberDrag) { this.cancelNumberDrag(); this.consumeShortcut(event); return; }
         if(event.key === "Escape" && this.keyframeDrag) {
             this.cancelKeyframeDrag();
             this.consumeShortcut(event);
@@ -1765,6 +1882,11 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private propertyLabel(property: string): string {
+        const parsed = parseRigAnimationProperty(property);
+        if(parsed) {
+            const bone = this.editor.selectedSVG?.rigs.armatures.flatMap(rig => rig.bones).find(bone => bone.id === parsed.boneId);
+            return `${bone?.name ?? 'Bone'} · ${parsed.field === 'pose' ? 'Rotation' : parsed.field === 'poseX' ? 'Offset X' : 'Offset Y'}`;
+        }
         return this.properties.find((definition) => definition.property === property)?.label
             ?? property.split(".").at(-1) ?? property;
     }
@@ -2127,6 +2249,7 @@ export class TimelineEditorService implements OnDestroy {
         this.numberDragFrame = undefined;
         const drag = this.numberDrag;
         if(!drag?.moved) return;
+        if(!this.numberDragCurrent()) { this.cancelNumberDrag(false); return; }
         const deltaX = drag.latestX - drag.startX;
         const value = this.normalizeDraggedNumber(drag.row.property, drag.startValue + (deltaX * drag.step));
         this.setPropertyValueInternal(drag.row, value, false);
@@ -2137,6 +2260,7 @@ export class TimelineEditorService implements OnDestroy {
         pointerId: number,
         moveCallback: (event: PointerEvent) => void,
         endCallback: (event: PointerEvent) => void,
+        cancelCallback?: () => void,
     ): void {
         this.clearGlobalPointerTracking();
         this.zone.runOutsideAngular(() => {
@@ -2145,10 +2269,12 @@ export class TimelineEditorService implements OnDestroy {
             document.addEventListener("pointermove", move, { capture: true, passive: false });
             document.addEventListener("pointerup", end, true);
             document.addEventListener("pointercancel", end, true);
+            if(cancelCallback) window.addEventListener('blur', cancelCallback);
             this.globalPointerCleanup = () => {
                 document.removeEventListener("pointermove", move, true);
                 document.removeEventListener("pointerup", end, true);
                 document.removeEventListener("pointercancel", end, true);
+                if(cancelCallback) window.removeEventListener('blur', cancelCallback);
                 this.globalPointerCleanup = undefined;
             };
         });
@@ -2552,7 +2678,10 @@ interface KeyframeDrag {
 
 interface NumberDrag {
     startTracks: AnimationTrack[];
-    row: PropertyTimelineRow;
+    animation: AnimationDocument;
+    documentId?: string;
+    revision: number;
+    row: NumericTimelineRow;
     pointerId: number;
     startX: number;
     latestX: number;
