@@ -6,6 +6,13 @@ import { DocumentMutationService } from '../../_services/document-mutation.servi
 import { RigBindingSessionService } from '../../_services/rig-binding-session.service';
 
 describe('persistent IK target gestures', () => {
+    let frames: FrameRequestCallback[];
+    const frame = () => { const queued = frames; frames = []; queued.forEach(callback => callback(16)); };
+    beforeEach(() => {
+        frames = [];
+        spyOn(window, 'requestAnimationFrame').and.callFake(callback => { frames.push(callback); return frames.length; });
+        spyOn(window, 'cancelAnimationFrame');
+    });
     function setup() {
         const constraint: TwoBoneIKConstraint = {id:'ik',name:'Left leg',type:'two-bone-ik',enabled:true,upperBoneId:'upper',lowerBoneId:'lower',targetBoneId:'foot',bend:1};
         const active: Armature = {id:'rig',name:'Character',bindings:[],constraints:[constraint],bones:[
@@ -39,6 +46,7 @@ describe('persistent IK target gestures', () => {
 
     it('previews a target-point move in canvas coordinates and commits once on release', () => {
         const t=setup(); t.component.begin(t.event(100)); t.component.move(t.event(120));
+        frame();
         expect(t.rig.previewIK).toHaveBeenCalledWith({x:310,y:200});
         expect(t.rig.ikTargetPosition).toEqual({x:300,y:200});
         expect(t.rig.setIKTarget).not.toHaveBeenCalled();
@@ -68,6 +76,7 @@ describe('persistent IK target gestures', () => {
         spyOn(button, 'setPointerCapture'); spyOn(button, 'hasPointerCapture').and.returnValue(false);
         button.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 5, button: 0, clientX: 100, clientY: 100, bubbles: true }));
         button.dispatchEvent(new PointerEvent('pointermove', { pointerId: 5, clientX: 120, clientY: 100, bubbles: true }));
+        frame();
         expect(t.rig.previewIK).toHaveBeenCalledWith({x:310,y:200});
         t.rig.animationContext = 'scene:1'; fixture.detectChanges();
         button.dispatchEvent(new PointerEvent('pointerup', { pointerId: 5, clientX: 120, clientY: 100, bubbles: true }));

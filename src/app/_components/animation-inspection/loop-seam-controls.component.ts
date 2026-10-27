@@ -3,7 +3,6 @@ import { NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TimelineEditorService } from '../../_services/timeline-editor.service';
 import { DocumentMutationService } from '../../_services/document-mutation.service';
-import { AnimationInspectionService } from '../../_services/animation-inspection.service';
 import { linkLoopSeam, loopEndpoints } from '../../editor/animation/loop-seam';
 import { AnimationTrack } from '../../editor/objects/animation.object';
 import { Group } from '../../editor/objects/elements/group.object';
@@ -28,7 +27,6 @@ import { parseRigAnimationProperty } from '../../editor/rig-animation';
         <label><input type="checkbox" [(ngModel)]="smooth" />Match seam speed</label>
         <button type="button" [disabled]="!tracks.length" (click)="link()" title="Create or update boundary keys at the work-area edges, then keep their values linked. Matching replaces the other endpoint's value.">Link endpoints</button>
         <button type="button" [disabled]="!linkedCount" (click)="unlink()">Unlink ({{linkedCount}})</button>
-        <label title="Wrapped onion skins and a dashed graph continuation across the work-area seam. Preview only."><input type="checkbox" [(ngModel)]="inspection.loopGhosts" />Loop ghosts</label>
         <span class="hint">{{tracks.length}} channels · {{timeline.animation.workArea.start}}–{{timeline.animation.workArea.end}}s work area</span>
         <span *ngIf="message" role="status">{{message}}</span>`,
 })
@@ -37,8 +35,7 @@ export class LoopSeamControlsComponent {
     source: 'start' | 'end' = 'start';
     smooth = false;
     message = '';
-    constructor(public timeline: TimelineEditorService, private mutations: DocumentMutationService,
-        public inspection: AnimationInspectionService) {}
+    constructor(public timeline: TimelineEditorService, private mutations: DocumentMutationService) {}
 
     get tracks(): AnimationTrack[] {
         const animation = this.timeline.activeAnimation;

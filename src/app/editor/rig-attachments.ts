@@ -3,7 +3,7 @@ import { findAnimationTarget } from './objects/animation-targets';
 import { findElementChain, ownMatrix, parentMatrixFor } from './objects/element-bounds';
 import { isGeometryVisible } from './objects/element-availability';
 import { SVG } from './objects/svg.object';
-import { Matrix } from './objects/transform.object';
+import { Matrix, TransformState } from './objects/transform.object';
 import type { RigArtworkValidationOptions } from './rig-binding';
 
 export { attachmentMatrix, attachmentTransforms } from '../../../packages/runtime/src/rig/attachments';
@@ -18,8 +18,8 @@ export function attachmentProblem(svg: SVG, rig: Armature, options: RigArtworkVa
     }
     return undefined;
 }
-export function applyAttachments(svg: SVG, rig: Armature): void {
-    for(const [id, transform] of attachmentTransforms(rig)) {
+export function applyAttachments(svg: SVG, rig: Armature, transforms?: ReadonlyMap<string, TransformState>): void {
+    for(const [id, transform] of transforms ?? attachmentTransforms(rig)) {
         const element = findAnimationTarget(svg.elements, id); if(element) element.transform = transform;
     }
 }

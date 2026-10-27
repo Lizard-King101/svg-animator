@@ -26,12 +26,9 @@
            [ngModel]="timeline.animation.duration"
            (ngModelChange)="timeline.setDuration($event)" />
   </label>
-  <label class="timeline-check">
-    <input type="checkbox"
-           [ngModel]="timeline.animation.loop"
-           (ngModelChange)="timeline.setLoop($event)" />
-    <span>Loop</span>
-  </label>
+  <app-icon-button label="Loop" [icon]="loopIcon" [pressed]="timeline.animation.loop"
+    tooltip="Loop playback · Repeat the work area"
+    (activated)="timeline.setLoop(!timeline.animation.loop)" />
   <div class="timeline-toolbar-sep"></div>
   <button class="timeline-icon" (click)="timeline.zoomTimeline(-20)" title="Zoom out">
     <fa-icon icon="minus"></fa-icon>
@@ -42,19 +39,16 @@
   <button class="timeline-icon" (click)="timeline.zoomTimeline(20)" title="Zoom in">
     <fa-icon icon="plus"></fa-icon>
   </button>
-  <label class="timeline-zoom-field" title="Time zoom in pixels per second">
-    <span>Time zoom</span>
-    <input type="range" min="10" max="2000" step="10" [ngModel]="timeline.pixelsPerSecond" (ngModelChange)="timeline.setTimelineZoom($event)" />
-    <output>{{ timeline.pixelsPerSecond }}</output>
-  </label>
   <div class="timeline-toolbar-sep"></div>
   <div class="surface-switch" aria-label="Timeline surface">
-    <button class="surface-button" [class.active]="timeline.surfaceMode == 'timeline'" (click)="timeline.toggleSurfaceMode('timeline')">Timeline</button>
-    <button class="surface-button" [class.active]="timeline.surfaceMode == 'graph'" (click)="timeline.toggleSurfaceMode('graph')">Graph</button>
+    <button class="surface-button" [class.active]="timeline.surfaceMode == 'timeline'" [attr.aria-pressed]="timeline.surfaceMode == 'timeline'" (click)="timeline.toggleSurfaceMode('timeline')">Timeline</button>
+    <button class="surface-button" [class.active]="timeline.surfaceMode == 'graph'" [attr.aria-pressed]="timeline.surfaceMode == 'graph'" (click)="timeline.toggleSurfaceMode('graph')">Graph</button>
   </div>
   <ng-container *ngIf="timeline.surfaceMode == 'graph'">
     <select class="graph-track-select" [ngModel]="timeline.selectedGraphProperty" (ngModelChange)="timeline.selectGraphProperty($event)" title="Speed graph property">
-      <option *ngFor="let option of timeline.graphTrackOptions()" [ngValue]="option.property">{{ option.label }}</option>
+      @for (option of timeline.graphTrackOptions(); track option.property) {
+        <option [ngValue]="option.property">{{ option.label }}</option>
+      }
     </select>
     <button class="timeline-icon" (click)="timeline.fitSpeed()" title="Fit Speed">Fit</button>
     <button class="timeline-icon" (click)="timeline.zoomSpeed(1.25)" title="Zoom speed out"><fa-icon icon="minus"></fa-icon></button>
@@ -66,19 +60,36 @@
       <button class="surface-button" [class.active]="timeline.activeHandleLinked()" (click)="timeline.relinkActiveHandle()">Link</button>
     </ng-container>
   </ng-container>
-  <div class="timeline-toolbar-sep"></div>
-  <div class="easing-switch" title="Selected keyframe easing">
+  <div class="timeline-toolbar-sep" *ngIf="timeline.selectedKeyframeIds.size"></div>
+  <div class="easing-switch" title="Selected keyframe easing" *ngIf="timeline.selectedKeyframeIds.size">
     <button class="timeline-icon easing-button"
             *ngFor="let option of timeline.easingOptions"
             [disabled]="timeline.selectedKeyframeIds.size == 0"
             [ngClass]="{'active': timeline.selectedEasingType() == option.type}"
             (click)="timeline.setSelectedEasing(option.type)"
+            [attr.aria-label]="option.label" [attr.aria-pressed]="timeline.selectedEasingType() == option.type"
             [title]="option.label">
       <fa-icon [icon]="option.icon"></fa-icon>
     </button>
   </div>
+  <div class="timeline-toolbar-sep"></div>
+  <app-animation-inspection-controls />
+  <app-icon-button label="View options" [icon]="settingsIcon" [expanded]="panel === 'view'" controls="timeline-view-options"
+    tooltip="View options · Time zoom and ghost spacing" (activated)="togglePanel('view', $event)" />
+  <app-icon-button label="Loop tools" [icon]="linkIcon" [expanded]="panel === 'loop'" controls="timeline-loop-tools"
+    tooltip="Loop tools · Link endpoint poses and match seam speed" (activated)="togglePanel('loop', $event)" />
 </div>
+<section *ngIf="panel === 'view'" id="timeline-view-options" class="timeline-options" aria-label="View options" (keydown.escape)="closePanel($event)">
+  <label class="timeline-zoom-field"><span>Time zoom</span>
+    <input aria-label="Time zoom" type="range" min="10" max="2000" step="10" [ngModel]="timeline.pixelsPerSecond" (ngModelChange)="timeline.setTimelineZoom($event)" />
+    <output>{{timeline.pixelsPerSecond}} px/s</output>
+  </label>
+  <label class="timeline-field"><span>Ghost spacing (s)</span><input aria-label="Onion skin spacing in seconds" type="number"
+    min="0.01" max="10" step="0.05" [ngModel]="inspection.step" (ngModelChange)="inspection.setStep($event)" /></label>
+  <span class="ghost-legend"><i class="past"></i>Before <i class="future"></i>After</span>
+  <button type="button" class="surface-button" (click)="closePanel($event)">Done</button>
+</section>
+<section *ngIf="panel === 'loop'" id="timeline-loop-tools" aria-label="Loop tools" (keydown.escape)="closePanel($event)">
+  <app-loop-seam-controls />
+</section>
 <app-timeline-navigation />
-<app-animation-inspection-controls />
-
-<app-loop-seam-controls />

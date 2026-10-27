@@ -1,3 +1,4 @@
+import { LatestFrame } from '../../editor/latest-frame';
 import { RigBindingSessionService } from '../../_services/rig-binding-session.service';
 import { Component, DoCheck, HostListener, Input, OnDestroy } from '@angular/core';
 import { NgIf } from '@angular/common';
@@ -45,7 +46,13 @@ export class IKTargetComponent implements DoCheck, OnDestroy {
             constraintId:this.rig.activeIKConstraint?.id,inverse:invertMatrix(this.projection),left:rect.left,top:rect.top,startX:event.clientX,startY:event.clientY,origin,target:origin,moved:false};
         capture.setPointerCapture(event.pointerId);
     }
+    private readonly previewFrame = new LatestFrame<PointerEvent>(event => this.previewMove(event));
     move(event:PointerEvent):void {
+        if(this.drag?.pointerId !== event.pointerId) return;
+        event.preventDefault(); event.stopPropagation();
+        this.previewFrame.queue(event);
+    }
+    private previewMove(event:PointerEvent):void {
         this.ngDoCheck();
         const drag=this.drag; if(!drag || drag.pointerId !== event.pointerId) return;
         event.preventDefault(); event.stopPropagation();
@@ -58,7 +65,8 @@ export class IKTargetComponent implements DoCheck, OnDestroy {
     end(event:PointerEvent):void {
         if(this.drag?.pointerId !== event.pointerId) return;
         this.ngDoCheck(); if(!this.drag) return;
-        this.move(event); const drag=this.drag; this.cancel();
+        this.move(event); this.previewFrame.flush(); const drag=this.drag;
+        if(!drag) return; this.cancel();
         if(drag.moved) this.rig.setIKTarget(drag.target);
     }
     key(event:KeyboardEvent):void {
@@ -69,6 +77,7 @@ export class IKTargetComponent implements DoCheck, OnDestroy {
         this.rig.setIKTarget({x:point.x+(event.key==='ArrowLeft' ? -step : event.key==='ArrowRight' ? step : 0),y:point.y+(event.key==='ArrowUp' ? -step : event.key==='ArrowDown' ? step : 0)});
     }
     @HostListener('window:blur') cancel():void {
+        this.previewFrame.cancel();
         const drag=this.drag; this.drag=undefined;
         if(drag) this.rig.clearPosePreview();
         if(drag?.capture.hasPointerCapture(drag.pointerId)) drag.capture.releasePointerCapture(drag.pointerId);

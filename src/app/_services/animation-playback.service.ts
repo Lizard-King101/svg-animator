@@ -1,3 +1,6 @@
+import { PlaybackTimelineView } from '../editor/animation/playback-timeline-view';
+import { PlaybackDiagnostics } from '../editor/animation/playback-diagnostics';
+import { DocumentRigEvaluationPlan } from '../editor/rig-evaluation';
 import { syncLoopSeam, loopEndpoints } from '../editor/animation/loop-seam';
 import { compositionHasOverlap, restoreAnimation, placementTiming } from '../editor/objects/animation.object';
 import { Subject } from 'rxjs';
@@ -16,7 +19,7 @@ import { ImperativeSvgRenderer } from "../editor/animation/imperative-svg-render
 import { AnyElement, SVG } from "../editor/objects/svg.object";
 import { EditorService } from "./editor.service";
 import { EditorPreferencesService } from "./editor-preferences.service";
-import { applyDocumentRigAnimation, parseRigAnimationProperty, readDocumentAnimationProperty, rigAnimationBaseProblem, writeDocumentAnimationProperty } from '../editor/rig-animation';
+import { parseRigAnimationProperty, readDocumentAnimationProperty, rigAnimationBaseProblem, writeDocumentAnimationProperty } from '../editor/rig-animation';
 import { captureRigAnimationPreview, restoreRigAnimationPreview, RigAnimationPreviewSnapshot } from '../editor/rig-animation-preview';
 import { documentRigChannelProblem } from '../editor/rig-animation-conflicts';
 
@@ -81,6 +84,8 @@ export class AnimationPlaybackService implements OnDestroy {
         if(this.mode === 'animate') this.previewAt(this.currentTime);
     }
 
+    readonly diagnostics = new PlaybackDiagnostics();
+    private diagnosticInterval?: number;
     private frameId?: number;
     private lastFrameTime?: number;
     private previewSVG?: SVG;
@@ -89,7 +94,9 @@ export class AnimationPlaybackService implements OnDestroy {
     private previewedRigs = new Set<string>();
     isRigPreviewed(id: string): boolean { return this.previewedRigs.has(id); }
     private evaluationPlan?: AnimationEvaluationPlan;
+    private timelineView?: PlaybackTimelineView;
     private renderer?: ImperativeSvgRenderer;
+    private rigPlan?: DocumentRigEvaluationPlan;
 
     constructor(
         private editor: EditorService,
@@ -97,11 +104,19 @@ export class AnimationPlaybackService implements OnDestroy {
         private preferences: EditorPreferencesService,
     ) {
         this.mode = this.preferences.mode;
+        if(new URLSearchParams(location.search).has('performance')) {
+            (window as unknown as { svgAnimatorPerformance: PlaybackDiagnostics }).svgAnimatorPerformance = this.diagnostics;
+        }
     }
 
     ngOnDestroy() {
+        this.diagnostics.stop();
+        this.timelineView?.destroy();
+        const host = window as unknown as { svgAnimatorPerformance?: PlaybackDiagnostics };
+        if(host.svgAnimatorPerformance === this.diagnostics) delete host.svgAnimatorPerformance;
         this.pause();
         this.restorePreview();
+        this.renderer?.destroy();
         this.contextChanging.complete();
     }
 
@@ -357,6 +372,9 @@ export class AnimationPlaybackService implements OnDestroy {
         this.playing = true;
         this.setOverlaysVisible(false);
         this.ensureEvaluationPlan(true);
+        // Prepare setup and the first exact pose before starting the display clock.
+        this.previewAt(this.currentTime);
+        this.diagnostics.resetClock();
         this.lastFrameTime = undefined;
         if(this.playing) {
             this.zone.runOutsideAngular(() => this.frameId = requestAnimationFrame((time) => this.tick(time)));
@@ -372,6 +390,7 @@ export class AnimationPlaybackService implements OnDestroy {
         }
 
         this.playing = false;
+        this.diagnostics.resetClock();
         this.lastFrameTime = undefined;
         this.setOverlaysVisible(true);
     }
@@ -405,11 +424,12 @@ export class AnimationPlaybackService implements OnDestroy {
         }
 
         if(this.previewSVG && this.previewSVG !== svg) this.restorePreview();
+        const started = this.diagnostics.active ? performance.now() : 0;
         const plan = this.ensureEvaluationPlan();
         const appliedValues = plan.evaluate(time);
         this.previewSVG = svg;
         const renderer = this.renderer!;
-        const rigIds = new Set(plan.tracks.filter((track, index) => appliedValues[index]?.applied && parseRigAnimationProperty(track.property)).map(track => track.targetId));
+        const rigIds = new Set(plan.tracks.filter((track, index) => appliedValues[index]?.applied && track.rigChannel).map(track => track.targetId));
         this.previewedRigs = rigIds;
         if(rigIds.size && !this.previewRigBase) {
             const problem = rigAnimationBaseProblem(svg, rigIds);
@@ -431,13 +451,16 @@ export class AnimationPlaybackService implements OnDestroy {
                     applied: true,
                 });
             }
-            if(parseRigAnimationProperty(track.property)) writeDocumentAnimationProperty(svg, track.targetId, track.property, appliedValue.value);
+            if(track.rigChannel) {
+                if(typeof appliedValue.value === 'number' && Number.isFinite(appliedValue.value)) track.rigChannel.bone[track.rigChannel.field] = appliedValue.value;
+            }
             else renderer.apply(track, appliedValue.value);
         });
+        const evaluatedAt = this.diagnostics.active ? performance.now() : 0;
         if(rigIds.size) {
             try {
-                for(const id of applyDocumentRigAnimation(svg, rigIds)) {
-                    const target = findAnimationTarget(svg.elements, id);
+                for(const id of (this.rigPlan ??= new DocumentRigEvaluationPlan(svg)).apply(rigIds)) {
+                    const target = plan.targetMap.get(id);
                     if(target) renderer.markDirty(target);
                 }
             } catch(error) {
@@ -446,12 +469,19 @@ export class AnimationPlaybackService implements OnDestroy {
                 return [];
             }
         }
+        const riggedAt = this.diagnostics.active ? performance.now() : 0;
         renderer.flush();
         this.updateImperativeTimeline();
+        if(this.diagnostics.active) {
+            const ended = performance.now();
+            this.diagnostics.record({ time, evaluation: evaluatedAt - started, rigs: riggedAt - evaluatedAt, render: ended - riggedAt, total: ended - started, interval: this.diagnosticInterval });
+            this.diagnosticInterval = undefined;
+        }
         return appliedValues;
     }
 
     restorePreview() {
+        this.rigPlan = undefined;
         this.previewedRigs.clear();
         const svg = this.previewSVG ?? this.editor.selectedSVG;
         if(!svg) {
@@ -510,6 +540,7 @@ export class AnimationPlaybackService implements OnDestroy {
             this.evaluationPlan.invalidateTracks(trackIds);
         } else {
             this.evaluationPlan = undefined;
+            this.renderer?.destroy();
             this.renderer = undefined;
         }
     }
@@ -545,6 +576,7 @@ export class AnimationPlaybackService implements OnDestroy {
     }
 
     private tick(frameTime: number) {
+        this.diagnosticInterval = this.diagnostics.frame(frameTime);
         if(!this.playing) {
             return;
         }
@@ -595,28 +627,15 @@ export class AnimationPlaybackService implements OnDestroy {
         if(force || !this.evaluationPlan || this.evaluationPlan.animation !== this.activeAnimation) {
             this.restorePreview();
             this.evaluationPlan = new AnimationEvaluationPlan(this.activeAnimation!, svg.elements, svg.rigs);
-            this.renderer = new ImperativeSvgRenderer(svg);
+            this.renderer?.destroy();
+            this.renderer = this.zone.runOutsideAngular(() => new ImperativeSvgRenderer(svg));
         }
         return this.evaluationPlan;
     }
 
     private updateImperativeTimeline(): void {
-        document.querySelectorAll<HTMLElement>(".animation-playhead").forEach((playhead) => {
-            const padding = Number(playhead.dataset["timePadding"] ?? 28);
-            const scale = Number(playhead.dataset["pixelsPerSecond"] ?? 120);
-            const domainStart = Number(playhead.dataset["domainStart"] ?? 0);
-            playhead.style.left = `${padding + (this.currentTime - domainStart) * scale}px`;
-        });
-        document.querySelectorAll<SVGLineElement>(".animation-graph-playhead").forEach((playhead) => {
-            const padding = Number(playhead.dataset["timePadding"] ?? 28);
-            const scale = Number(playhead.dataset["pixelsPerSecond"] ?? 120);
-            const domainStart = Number(playhead.dataset["domainStart"] ?? 0);
-            const x = padding + (this.currentTime - domainStart) * scale;
-            playhead.setAttribute("x1", String(x));
-            playhead.setAttribute("x2", String(x));
-        });
-        const input = document.querySelector<HTMLInputElement>(".timeline-current-time");
-        if(input && document.activeElement !== input) input.value = String(Math.round(this.currentTime * 1000) / 1000);
+        // Cache invalidation observes DOM writes; it must never schedule another Angular render.
+        (this.timelineView ??= this.zone.runOutsideAngular(() => new PlaybackTimelineView(document))).update(this.currentTime);
     }
 
     private setOverlaysVisible(visible: boolean): void {

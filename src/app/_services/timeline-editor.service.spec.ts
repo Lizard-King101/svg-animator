@@ -1,6 +1,7 @@
+import { TimelineGraphComponent } from '../_components/timeline-graph/timeline-graph.component';
 import { linkLoopSeam } from '../editor/animation/loop-seam';
 import { ChangeDetectorRef, ElementRef, EventEmitter, NgZone } from "@angular/core";
-import { fakeAsync, tick } from "@angular/core/testing";
+import { TestBed, fakeAsync, tick } from "@angular/core/testing";
 import { AnimationPlaybackService } from "./animation-playback.service";
 import { DocumentMutationService } from "./document-mutation.service";
 import { EditorPreferencesService } from "./editor-preferences.service";
@@ -15,6 +16,21 @@ import { Point } from "../editor/objects/point.object";
 import { SVG } from "../editor/objects/svg.object";
 
 describe("TimelineEditorService scale and viewport policy", () => {
+    it('opens and renders the graph for an animated collapsed layer', () => {
+        const { timeline, shape } = setup();
+        timeline.editor.selectedSVG!.animation.tracks = matchingScaleTracks(shape);
+        TestBed.configureTestingModule({ imports: [TimelineGraphComponent], providers: [
+            { provide: TimelineEditorService, useValue: timeline },
+        ] });
+        timeline.toggleSurfaceMode('graph');
+        const fixture = TestBed.createComponent(TimelineGraphComponent);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelectorAll('.speed-curve').length).toBe(1);
+        expect(fixture.nativeElement.querySelectorAll('.speed-key').length).toBe(2);
+        fixture.destroy();
+        timeline.ngOnDestroy();
+    });
+
     it('retimes selected scale channels together with stable identities and one completion', () => {
         const { timeline, shape } = setup();
         const tracks = matchingScaleTracks(shape); timeline.editor.selectedSVG!.animation.tracks = tracks;

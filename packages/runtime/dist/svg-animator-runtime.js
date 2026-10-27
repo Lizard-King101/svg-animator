@@ -513,6 +513,9 @@ var SVGAnimatorRuntime = (() => {
   function isConnectedBoneJoint(upper, lower) {
     return Math.abs(lower.x + (lower.poseX ?? 0) - upper.length) <= 0.05 && Math.abs(lower.y + (lower.poseY ?? 0)) <= 0.05;
   }
+  function boneLocalMatrix(bone, posed = true) {
+    return multiplyMatrix(translationMatrix(bone.x + (posed ? bone.poseX ?? 0 : 0), bone.y + (posed ? bone.poseY ?? 0 : 0)), rotationMatrix(bone.angle % 360 + (posed ? bone.pose % 360 : 0)));
+  }
   function boneMatrices(rig, posed = true) {
     const result = /* @__PURE__ */ new Map(), visiting = /* @__PURE__ */ new Set();
     const visit = (bone) => {
@@ -522,7 +525,7 @@ var SVGAnimatorRuntime = (() => {
       visiting.add(bone.id);
       const parent = rig.bones.find((candidate) => candidate.id === bone.parentId);
       if (bone.parentId && !parent) throw new Error("Bone parent is missing.");
-      const local = multiplyMatrix(translationMatrix(bone.x + (posed ? bone.poseX ?? 0 : 0), bone.y + (posed ? bone.poseY ?? 0 : 0)), rotationMatrix(bone.angle % 360 + (posed ? bone.pose % 360 : 0)));
+      const local = boneLocalMatrix(bone, posed);
       const matrix = multiplyMatrix(parent ? visit(parent) : identityMatrix(), local);
       if (!Object.values(matrix).every(Number.isFinite)) throw new Error("Bone transform exceeds the supported numeric range.");
       visiting.delete(bone.id);
@@ -670,67 +673,115 @@ var SVGAnimatorRuntime = (() => {
   function solveTwoBoneIK(rig, endId, target, bend) {
     const chain = twoBoneChain(rig, endId);
     if (!chain || ![target.x, target.y].every(Number.isFinite)) return;
-    const { upper, lower } = chain, matrices = boneMatrices(rig);
+    const solved = structuredClone(rig);
+    const bones = new Map(solved.bones.map((bone) => [bone.id, bone]));
+    return solveTwoBoneIKInto(bones.get(chain.upper.id), bones.get(chain.lower.id), boneMatrices(rig), target, bend) ? solved : void 0;
+  }
+  function solveTwoBoneIKInto(upper, lower, matrices, target, bend) {
+    if (!isConnectedBoneJoint(upper, lower) || ![target.x, target.y].every(Number.isFinite)) return false;
     const parent = upper.parentId ? matrices.get(upper.parentId) : void 0;
     const local = parent ? applyMatrix(invertMatrix(parent), target.x, target.y) : target;
     const x = local.x - upper.x - (upper.poseX ?? 0), y = local.y - upper.y - (upper.poseY ?? 0);
     const jointX = lower.x + (lower.poseX ?? 0), jointY = lower.y + (lower.poseY ?? 0);
     const a = Math.hypot(jointX, jointY), b = lower.length, offset = Math.atan2(jointY, jointX);
-    if (a < 1e-8) return;
+    if (a < 1e-8) return false;
     const distance3 = Math.max(Math.abs(a - b), Math.min(a + b, Math.hypot(x, y)));
     const elbow = bend * Math.acos(Math.max(-1, Math.min(1, (distance3 * distance3 - a * a - b * b) / (2 * a * b))));
     const heading = Math.hypot(x, y) > 1e-8 ? Math.atan2(y, x) : (upper.angle + upper.pose) * Math.PI / 180 + offset;
     const shoulder = distance3 < 1e-8 ? heading : heading - Math.atan2(b * Math.sin(elbow), a + b * Math.cos(elbow));
-    const solved = structuredClone(rig);
     const nearest = (angle, reference) => reference + ((angle - reference + 180) % 360 + 360) % 360 - 180;
-    solved.bones.find((bone) => bone.id === upper.id).pose = nearest((shoulder - offset) * 180 / Math.PI - upper.angle, upper.pose);
-    solved.bones.find((bone) => bone.id === lower.id).pose = nearest((elbow + offset) * 180 / Math.PI - lower.angle, lower.pose);
-    return solved;
+    upper.pose = nearest((shoulder - offset) * 180 / Math.PI - upper.angle, upper.pose);
+    lower.pose = nearest((elbow + offset) * 180 / Math.PI - lower.angle, lower.pose);
+    return true;
   }
 
-  // src/rig/constraints.ts
-  function constraintJointGap(rig, constraint) {
-    const upper = rig.bones.find((bone) => bone.id === constraint.upperBoneId), lower = rig.bones.find((bone) => bone.id === constraint.lowerBoneId);
-    return upper && lower && lower.parentId === upper.id && !isConnectedBoneJoint(upper, lower) ? { upper: upper.name, lower: lower.name, lowerId: lower.id } : void 0;
-  }
-  function constraintIssue(rig, constraint) {
-    const problem = constraintChainProblem(rig, constraint);
-    if (problem) return problem[0].toUpperCase() + problem.slice(1);
-    const gap = constraintJointGap(rig, constraint);
-    return gap && `${gap.lower} must start at ${gap.upper}'s tip.`;
-  }
-  function evaluateRigConstraints(rig) {
-    const plan = constraintPlan(rig);
-    if (plan.problem) throw new Error(plan.problem);
-    let result = structuredClone(rig);
-    if (rig.constraintsActive === false) return result;
-    for (const constraint of plan.ordered) {
-      if (!twoBoneChain(result, constraint.lowerBoneId)) {
-        throw new Error(`${constraint.name}: ${constraintIssue(result, constraint)} Use Reconnect joint in Bone setup before posing.`);
+  // src/rig/evaluation-plan.ts
+  var RigEvaluationPlan = class {
+    constructor(source) {
+      this.paths = /* @__PURE__ */ new Map();
+      this.transforms = /* @__PURE__ */ new Map();
+      this.order = [];
+      this.matrices = /* @__PURE__ */ new Map();
+      this.skin = /* @__PURE__ */ new Map();
+      const plan = constraintPlan(source);
+      if (plan.problem) throw new Error(plan.problem);
+      this.pose = structuredClone(source);
+      this.bones = new Map(this.pose.bones.map((bone) => [bone.id, bone]));
+      const rest = boneMatrices(this.pose, false);
+      this.restInverse = new Map([...rest].map(([id2, matrix]) => [id2, invertMatrix(matrix)]));
+      this.order = [...rest.keys()].map((id2) => this.bones.get(id2));
+      this.constraints = plan.ordered.map((constraint) => ({
+        ...constraint,
+        upper: this.bones.get(constraint.upperBoneId),
+        lower: this.bones.get(constraint.lowerBoneId)
+      }));
+      this.bindings = this.pose.bindings.map((binding) => {
+        const output = /* @__PURE__ */ new Map();
+        this.paths.set(binding.pathId, output);
+        return { inverse: invertMatrix(binding.matrix), points: binding.points.map((point) => {
+          const value = { x: point.x, y: point.y };
+          output.set(point.id, value);
+          return {
+            value,
+            rest: { x: point.x, y: point.y },
+            world: applyMatrix(binding.matrix, point.x, point.y),
+            weights: effectivePointWeights(this.pose, binding, point)
+          };
+        }) };
+      });
+      this.attachments = (this.pose.attachments ?? []).map((link) => ({ ...link, inverse: invertMatrix(link.parentMatrix) }));
+    }
+    evaluate(source, constraintsActive = source.constraintsActive !== false) {
+      for (const bone of source.bones) {
+        const output = this.bones.get(bone.id);
+        if (!output) throw new Error("Rig setup changed; rebuild its evaluation plan.");
+        output.pose = bone.pose;
+        output.poseX = bone.poseX;
+        output.poseY = bone.poseY;
       }
-      const targetMatrix = boneMatrices(result).get(constraint.targetBoneId);
-      const target = applyMatrix(targetMatrix, 0, 0);
-      const solved = solveTwoBoneIK(result, constraint.lowerBoneId, target, constraint.bend);
-      if (!solved) throw new Error(`${constraint.name}: this two-bone chain cannot reach a valid pose.`);
-      result = solved;
+      this.pose.constraintsActive = constraintsActive;
+      this.updateMatrices();
+      if (constraintsActive) for (const constraint of this.constraints) {
+        const target = applyMatrix(this.matrices.get(constraint.targetBoneId), 0, 0);
+        if (!solveTwoBoneIKInto(constraint.upper, constraint.lower, this.matrices, target, constraint.bend)) {
+          throw new Error(`${constraint.name}: this two-bone chain cannot reach a valid pose. Use Reconnect joint in Bone setup before posing.`);
+        }
+        this.updateMatrices(/* @__PURE__ */ new Set([constraint.upper.id, constraint.lower.id]));
+      }
+      for (const bone of this.order) this.skin.set(bone.id, multiplyMatrix(this.matrices.get(bone.id), this.restInverse.get(bone.id)));
+      for (const binding of this.bindings) for (const point of binding.points) {
+        if (!point.weights.length) {
+          Object.assign(point.value, point.rest);
+          continue;
+        }
+        let x = 0, y = 0;
+        for (const weight of point.weights) {
+          const matrix = this.skin.get(weight.boneId);
+          if (!matrix) throw new Error("A weighted bone is missing.");
+          x += (matrix.a * point.world.x + matrix.c * point.world.y + matrix.e) * weight.weight;
+          y += (matrix.b * point.world.x + matrix.d * point.world.y + matrix.f) * weight.weight;
+        }
+        Object.assign(point.value, applyMatrix(binding.inverse, x, y));
+        if (!Number.isFinite(point.value.x) || !Number.isFinite(point.value.y)) throw new Error("This pose exceeds the supported coordinate range.");
+      }
+      const posed = this.pose.bones.some(hasBonePose);
+      for (const link of this.attachments) {
+        const transform = posed ? decomposeTransform(multiplyMatrix(link.inverse, multiplyMatrix(this.skin.get(link.boneId), link.worldMatrix))) : { ...link.restTransform };
+        if (!transform) throw new Error("This pose would introduce skew under a scaled parent. Use a uniformly scaled parent for rigid attachments, or bind path points instead.");
+        this.transforms.set(link.elementId, transform);
+      }
+      return this;
     }
-    return result;
-  }
-
-  // src/rig/attachments.ts
-  function attachmentMatrix(rig, attachment) {
-    const rest = boneMatrices(rig, false).get(attachment.boneId), posed = boneMatrices(rig).get(attachment.boneId);
-    return multiplyMatrix(invertMatrix(attachment.parentMatrix), multiplyMatrix(multiplyMatrix(posed, invertMatrix(rest)), attachment.worldMatrix));
-  }
-  function attachmentTransforms(rig) {
-    const transforms = /* @__PURE__ */ new Map();
-    for (const attachment of rig.attachments ?? []) {
-      const transform = !rig.bones.some(hasBonePose) ? structuredClone(attachment.restTransform) : decomposeTransform(attachmentMatrix(rig, attachment));
-      if (!transform) throw new Error("This pose would introduce skew under a scaled parent. Use a uniformly scaled parent for rigid attachments, or bind path points instead.");
-      transforms.set(attachment.elementId, transform);
+    updateMatrices(changed) {
+      for (const bone of this.order) {
+        if (changed && !changed.has(bone.id) && !(bone.parentId && changed.has(bone.parentId))) continue;
+        changed?.add(bone.id);
+        const matrix = multiplyMatrix(bone.parentId ? this.matrices.get(bone.parentId) : identityMatrix(), boneLocalMatrix(bone));
+        if (!Object.values(matrix).every(Number.isFinite)) throw new Error("Bone transform exceeds the supported numeric range.");
+        this.matrices.set(bone.id, matrix);
+      }
     }
-    return transforms;
-  }
+  };
 
   // src/rig/channels.ts
   function parseRigAnimationProperty(property) {
@@ -806,12 +857,15 @@ var SVGAnimatorRuntime = (() => {
     return result;
   }
   function projectOutlineSections(contours, sections, style) {
+    const completeSamples = /* @__PURE__ */ new Map();
     const projected = sections.flatMap((section) => {
       const contour = contours.find((contour2) => contour2.id === section.contourId);
       if (!contour) return [];
       const lines = outlineSectionLines(contour, section, style.rounded !== false), samples = flatten(lines);
       if (samples.length < 2 || samples[samples.length - 1].distance <= EPSILON) return [];
       const length = samples[samples.length - 1].distance;
+      const full = fullSection(contour);
+      if (section.start.segmentId === full.start.segmentId && section.start.t === 0 && section.end.segmentId === full.end.segmentId && section.end.t === 1 && !!section.fullContour === !!full.fullContour) completeSamples.set(contour, samples);
       return [{ section, contour, lines, samples: taperSamples(samples, section, length), length }];
     });
     const total = projected.reduce((sum, item) => sum + item.length, 0);
@@ -833,7 +887,7 @@ var SVGAnimatorRuntime = (() => {
         stroke.push(expandStroke(samples, item.length, item.section, style, closed));
       });
     });
-    const source = contours.flatMap((contour) => flatten(outlineSectionLines(contour, fullSection(contour), style.rounded !== false)));
+    const source = contours.flatMap((contour) => completeSamples.get(contour) ?? flatten(outlineSectionLines(contour, fullSection(contour), style.rounded !== false)));
     return {
       strokeData: stroke.filter(Boolean).join(" "),
       sections: projected.map((item) => ({ id: item.section.id, data: buildRuntimePathData([{ id: item.section.id, closed: !!item.section.fullContour && item.contour.closed, lines: item.lines }], false), length: item.length, start: item.samples[0], end: item.samples[item.samples.length - 1] })),
@@ -919,7 +973,7 @@ var SVGAnimatorRuntime = (() => {
           if (delta <= EPSILON) continue;
           length += delta;
         }
-        result.push({ ...point, distance: length });
+        result.push({ x: point.x, y: point.y, distance: length });
       }
     }
     return result;
@@ -929,11 +983,21 @@ var SVGAnimatorRuntime = (() => {
     return [sampleAtDistance(source, start), ...source.filter((point) => point.distance > start + EPSILON && point.distance < end - EPSILON), sampleAtDistance(source, end)];
   }
   function sampleAtDistance(source, desired) {
-    const after = source.findIndex((point) => point.distance >= desired);
-    if (after < 0) return { ...source[source.length - 1], distance: desired, tangent: direction(source[source.length - 2] ?? source[0], source[source.length - 1]) };
-    if (after === 0) return { ...source[0], distance: desired, tangent: direction(source[0], source[1] ?? source[0]) };
+    let low = 0, high = source.length;
+    while (low < high) {
+      const middle = low + high >>> 1;
+      if (source[middle].distance < desired) low = middle + 1;
+      else high = middle;
+    }
+    const after = low === source.length ? -1 : low;
+    if (after < 0) {
+      const last = source[source.length - 1];
+      return { x: last.x, y: last.y, distance: desired, tangent: direction(source[source.length - 2] ?? source[0], last) };
+    }
+    if (after === 0) return { x: source[0].x, y: source[0].y, distance: desired, tangent: direction(source[0], source[1] ?? source[0]) };
     const a = source[after - 1], b = source[after], t = (desired - a.distance) / (b.distance - a.distance);
-    return { ...lerpCurvePoint(a, b, t), distance: desired, tangent: direction(a, b) };
+    const point = lerpCurvePoint(a, b, t);
+    return { x: point.x, y: point.y, distance: desired, tangent: direction(a, b) };
   }
   function taperSamples(source, section, length) {
     const distances = source.map((point) => point.distance);
@@ -1093,6 +1157,7 @@ var SVGAnimatorRuntime = (() => {
       this.targetNodesById = /* @__PURE__ */ new Map();
       this.targets = clone(sourceTargets);
       this.rigs = rigs && clone(rigs);
+      this.rigPlans = this.rigs?.armatures.map((rig) => new RigEvaluationPlan(rig)) ?? [];
       this.targets.forEach((target) => this.targetById.set(target.id, target));
     }
     write(targetId, property, value) {
@@ -1202,15 +1267,12 @@ var SVGAnimatorRuntime = (() => {
     }
     /** Recompute from captured rest points on every seek; solved FK never replaces authored channels. */
     applyRigs() {
-      const evaluated = this.rigs?.armatures.map((rig) => {
-        const posed = evaluateRigConstraints({ ...rig, constraintsActive: true });
-        return { paths: posed.bindings.map((binding) => ({ id: binding.pathId, points: deformBinding(posed, binding) })), transforms: attachmentTransforms(posed) };
-      }) ?? [];
+      const evaluated = this.rigPlans.map((plan, index) => plan.evaluate(this.rigs.armatures[index], true));
       for (const rig of evaluated) {
-        for (const binding of rig.paths) {
-          const target = this.targetById.get(binding.id);
+        for (const [id2, points] of rig.paths) {
+          const target = this.targetById.get(id2);
           forEachPathPoint(target.path.contours, (point) => {
-            const posed = binding.points.get(point.id);
+            const posed = points.get(point.id);
             if (posed) {
               point.x = posed.x;
               point.y = posed.y;
@@ -1577,8 +1639,10 @@ var SVGAnimatorRuntime = (() => {
     return { x: x * c - y * s, y: x * s + y * c };
   }
   function setAttribute(node, name, value) {
-    if (value == null || value === "") node.removeAttribute(name);
-    else node.setAttribute(name, String(value));
+    const next = value == null || value === "" ? null : String(value);
+    if (node.getAttribute(name) === next) return;
+    if (next === null) node.removeAttribute(name);
+    else node.setAttribute(name, next);
   }
   function assignNumber(target, key, value) {
     if (value == null) return false;
@@ -1615,6 +1679,50 @@ var SVGAnimatorRuntime = (() => {
     const root = typeof value === "string" ? document.querySelector(value) : value;
     if (!isSvgRoot(root)) throw new RuntimePlayerError("svg-root-not-found", `Could not resolve an SVG root from ${String(value)}.`);
     return root;
+  }
+
+  // src/rig/constraints.ts
+  function constraintJointGap(rig, constraint) {
+    const upper = rig.bones.find((bone) => bone.id === constraint.upperBoneId), lower = rig.bones.find((bone) => bone.id === constraint.lowerBoneId);
+    return upper && lower && lower.parentId === upper.id && !isConnectedBoneJoint(upper, lower) ? { upper: upper.name, lower: lower.name, lowerId: lower.id } : void 0;
+  }
+  function constraintIssue(rig, constraint) {
+    const problem = constraintChainProblem(rig, constraint);
+    if (problem) return problem[0].toUpperCase() + problem.slice(1);
+    const gap = constraintJointGap(rig, constraint);
+    return gap && `${gap.lower} must start at ${gap.upper}'s tip.`;
+  }
+  function evaluateRigConstraints(rig) {
+    const plan = constraintPlan(rig);
+    if (plan.problem) throw new Error(plan.problem);
+    let result = structuredClone(rig);
+    if (rig.constraintsActive === false) return result;
+    for (const constraint of plan.ordered) {
+      if (!twoBoneChain(result, constraint.lowerBoneId)) {
+        throw new Error(`${constraint.name}: ${constraintIssue(result, constraint)} Use Reconnect joint in Bone setup before posing.`);
+      }
+      const targetMatrix = boneMatrices(result).get(constraint.targetBoneId);
+      const target = applyMatrix(targetMatrix, 0, 0);
+      const solved = solveTwoBoneIK(result, constraint.lowerBoneId, target, constraint.bend);
+      if (!solved) throw new Error(`${constraint.name}: this two-bone chain cannot reach a valid pose.`);
+      result = solved;
+    }
+    return result;
+  }
+
+  // src/rig/attachments.ts
+  function attachmentMatrix(rig, attachment) {
+    const rest = boneMatrices(rig, false).get(attachment.boneId), posed = boneMatrices(rig).get(attachment.boneId);
+    return multiplyMatrix(invertMatrix(attachment.parentMatrix), multiplyMatrix(multiplyMatrix(posed, invertMatrix(rest)), attachment.worldMatrix));
+  }
+  function attachmentTransforms(rig) {
+    const transforms = /* @__PURE__ */ new Map();
+    for (const attachment of rig.attachments ?? []) {
+      const transform = !rig.bones.some(hasBonePose) ? structuredClone(attachment.restTransform) : decomposeTransform(attachmentMatrix(rig, attachment));
+      if (!transform) throw new Error("This pose would introduce skew under a scaled parent. Use a uniformly scaled parent for rigid attachments, or bind path points instead.");
+      transforms.set(attachment.elementId, transform);
+    }
+    return transforms;
   }
 
   // src/rig/runtime-rigs.ts

@@ -142,6 +142,7 @@ Multi-object scaling is proportional. Rotation across differently scaled parent 
 
 - Loop seam controls link animated channels at the work-area boundaries in scene or action time, with explicit start/end value matching, bidirectional pose editing, optional seam-speed matching, range badges and unlinking. Keys, artwork scopes and authored rig controls are supported; IK-driven channels are excluded.
 - Wrapped onion skins and dashed graph continuations expose the next/previous cycle without extending duration or changing exports. Trimmed placements warn when their playback range differs from linked source endpoints.
+- The Loop repeat button controls playback looping and graph continuations, following the active scene/action through undo, reload and context changes. Onion skins have an always-available independent toggle; enabled samples wrap at the work-area seam when Loop is on. Motion trails remain independent. Endpoint linking is still an explicit command under Loop tools.
 - Graph gestures restore every affected tangent on cancel/no-op; Alt-unlink, pointer/focus interruption, current-handle targeting, Hold speed and domain caching are corrected. Numeric handle edits commit on blur/Enter and cancel with Escape. Scrubbing retains the selected graph; graph height follows the available pane.
 - Document v18 persists authoring links with independent-copy remapping and unchanged runtime interpolation. Boundary retiming requires unlinking first; whole-cycle retiming and rotation winding links remain planned.
 
@@ -150,6 +151,7 @@ Multi-object scaling is proportional. Rotation across differently scaled parent 
 - Search object, rig, bone and channel names; combine Selected only and Animated only filters. Matching hierarchy is temporarily expanded, with original expansion restored on clearing. Reveal selection expands and scrolls to the selected artwork or bone branch.
 - Fit selected keys or the work area in either timeline view. Previous/next pose buttons and Alt+Left/Right use selected key channels, then selected artwork/bone branches, otherwise the active scene/action.
 - Preview speed ranges from 0.25× to 2× without retiming keys or exports. Navigation pauses playback; filtering clears key selection and protects newly hidden keys from selection commands. Toolbar controls wrap within the timeline.
+- Compact icon toggles have hover/focus tooltips, accessible names and visible pressed states. View options and Loop tools expand on demand, selected-key easing is contextual, and New action reveals creation fields while preserving visible scene/action context. Escape dismisses panels and restores focus.
 
 ## Pose blocking
 

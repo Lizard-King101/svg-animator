@@ -115,7 +115,10 @@ describe('layer rename interaction', () => {
         const t = await setup(), input = t.begin();
         input.value = 'Eyelash';
         const destination: HTMLButtonElement = t.fixture.nativeElement.querySelector(`[data-layer-id="${t.other.id}"] .layer-toggle`);
-        destination.focus(); t.fixture.detectChanges();
+        destination.focus();
+        // Headless Karma can keep its document unfocused while activeElement changes.
+        // Deliver the browser blur contract explicitly; completion remains idempotent.
+        input.dispatchEvent(new FocusEvent('blur')); t.fixture.detectChanges();
         expect(t.source.name).toBe('Eyelash');
         expect(t.commit).toHaveBeenCalledOnceWith('metadata');
         expect(document.activeElement).toBe(destination);
@@ -129,7 +132,7 @@ describe('layer rename interaction', () => {
         const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
         input.dispatchEvent(tab);
         expect(tab.defaultPrevented).toBeFalse();
-        input.blur(); t.fixture.detectChanges();
+        input.blur(); input.dispatchEvent(new FocusEvent('blur')); t.fixture.detectChanges();
         expect(t.source.name).toBe('Layer');
         expect(t.commit).toHaveBeenCalledOnceWith('metadata');
     });

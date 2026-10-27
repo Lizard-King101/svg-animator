@@ -1,8 +1,9 @@
+import { DocumentRigEvaluationPlan } from './rig-evaluation';
 import { Armature } from './objects/armature';
 import { findAnimationTarget, readAnimationProperty, writeAnimationProperty } from './objects/animation-targets';
 import type { SVG } from './objects/svg.object';
-import { applyRigPose, bindingProblem } from './rig-binding';
-import { attachmentProblem, attachmentTransforms } from './rig-attachments';
+import { bindingProblem } from './rig-binding';
+import { attachmentProblem } from './rig-attachments';
 import { evaluateRigConstraints } from './rig-constraints';
 import { parseRigAnimationProperty, readRigAnimationProperty } from '../../../packages/runtime/src/rig/channels';
 export type { RigAnimationField, RigAnimationProperty } from '../../../packages/runtime/src/rig/channels';
@@ -51,20 +52,5 @@ export function rigAnimationBaseProblem(svg: SVG, rigIds: ReadonlySet<string>): 
  * leave a frame partially updated. The authored bone poses remain unsolved.
  */
 export function applyDocumentRigAnimation(svg: SVG, rigIds?: ReadonlySet<string>): Set<string> {
-    const evaluated = svg.rigs.armatures.filter(rig => !rigIds || rigIds.has(rig.id)).map(rig => {
-        // Rest/setup may suspend solving; playback always evaluates enabled IK.
-        // Keep that session-facing authored flag untouched when sampling a frame.
-        const pose = evaluateRigConstraints({ ...rig, constraintsActive: true });
-        return { pose, transforms: attachmentTransforms(pose) };
-    });
-    const affected = new Set<string>();
-    for(const { pose, transforms } of evaluated) {
-        applyRigPose(svg, pose);
-        for(const [id, transform] of transforms) {
-            const target = findAnimationTarget(svg.elements, id);
-            if(target) target.transform = transform;
-        }
-        rigArtworkIds(pose).forEach(id => affected.add(id));
-    }
-    return affected;
+    return new DocumentRigEvaluationPlan(svg).apply(rigIds);
 }

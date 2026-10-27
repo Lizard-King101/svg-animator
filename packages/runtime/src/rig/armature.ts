@@ -17,6 +17,10 @@ export function isConnectedBoneJoint(upper: Bone, lower: Bone): boolean {
     return Math.abs(lower.x + (lower.poseX ?? 0) - upper.length) <= .05 && Math.abs(lower.y + (lower.poseY ?? 0)) <= .05;
 }
 
+export function boneLocalMatrix(bone: Bone, posed = true): Matrix {
+    return multiplyMatrix(translationMatrix(bone.x + (posed ? bone.poseX ?? 0 : 0), bone.y + (posed ? bone.poseY ?? 0 : 0)), rotationMatrix((bone.angle % 360) + (posed ? bone.pose % 360 : 0)));
+}
+
 export function boneMatrices(rig: Armature, posed = true): Map<string, Matrix> {
     const result = new Map<string, Matrix>(), visiting = new Set<string>();
     const visit = (bone: Bone): Matrix => {
@@ -25,7 +29,7 @@ export function boneMatrices(rig: Armature, posed = true): Map<string, Matrix> {
         visiting.add(bone.id);
         const parent = rig.bones.find(candidate => candidate.id === bone.parentId);
         if(bone.parentId && !parent) throw new Error('Bone parent is missing.');
-        const local = multiplyMatrix(translationMatrix(bone.x + (posed ? bone.poseX ?? 0 : 0), bone.y + (posed ? bone.poseY ?? 0 : 0)), rotationMatrix((bone.angle % 360) + (posed ? bone.pose % 360 : 0)));
+        const local = boneLocalMatrix(bone, posed);
         const matrix = multiplyMatrix(parent ? visit(parent) : identityMatrix(), local);
         if(!Object.values(matrix).every(Number.isFinite)) throw new Error('Bone transform exceeds the supported numeric range.');
         visiting.delete(bone.id); result.set(bone.id, matrix); return matrix;

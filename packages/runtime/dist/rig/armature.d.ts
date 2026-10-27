@@ -71,6 +71,7 @@ export interface RigDocument {
 }
 /** Drawing may leave subpixel joint differences; IK requires the same connected joint. */
 export declare function isConnectedBoneJoint(upper: Bone, lower: Bone): boolean;
+export declare function boneLocalMatrix(bone: Bone, posed?: boolean): Matrix;
 export declare function boneMatrices(rig: Armature, posed?: boolean): Map<string, Matrix>;
 export declare function normalizeWeights(weights: readonly BoneWeight[]): BoneWeight[];
 /** Preserve the other influences' relative proportions when changing one normalized weight. */

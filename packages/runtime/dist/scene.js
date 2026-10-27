@@ -1,9 +1,7 @@
 import { packedColorValue } from "./evaluator";
 import { buildRuntimePathData } from "./path-data";
 import { geometryRoleNodes, isClippingGeometry, paintRoleNodes, pathRevealNodes, projectedDefinitionId, renderTargetNodes } from "./render-roles.internal";
-import { deformBinding } from './rig/armature';
-import { evaluateRigConstraints } from './rig/constraints';
-import { attachmentTransforms } from './rig/attachments';
+import { RigEvaluationPlan } from './rig/evaluation-plan';
 import { parseRigAnimationProperty } from './rig/channels';
 import { outlineProjectionProblem, projectOutlineSections } from './outline';
 import { RuntimePlayerError } from './errors';
@@ -15,6 +13,7 @@ export class RuntimeScene {
         this.targetNodesById = new Map();
         this.targets = clone(sourceTargets);
         this.rigs = rigs && clone(rigs);
+        this.rigPlans = this.rigs?.armatures.map(rig => new RigEvaluationPlan(rig)) ?? [];
         this.targets.forEach((target) => this.targetById.set(target.id, target));
     }
     write(targetId, property, value) {
@@ -117,15 +116,12 @@ export class RuntimeScene {
     clear() { this.targetNodesById.clear(); }
     /** Recompute from captured rest points on every seek; solved FK never replaces authored channels. */
     applyRigs() {
-        const evaluated = this.rigs?.armatures.map(rig => {
-            const posed = evaluateRigConstraints({ ...rig, constraintsActive: true });
-            return { paths: posed.bindings.map(binding => ({ id: binding.pathId, points: deformBinding(posed, binding) })), transforms: attachmentTransforms(posed) };
-        }) ?? [];
+        const evaluated = this.rigPlans.map((plan, index) => plan.evaluate(this.rigs.armatures[index], true));
         for (const rig of evaluated) {
-            for (const binding of rig.paths) {
-                const target = this.targetById.get(binding.id);
+            for (const [id, points] of rig.paths) {
+                const target = this.targetById.get(id);
                 forEachPathPoint(target.path.contours, point => {
-                    const posed = binding.points.get(point.id);
+                    const posed = points.get(point.id);
                     if (posed) {
                         point.x = posed.x;
                         point.y = posed.y;
@@ -507,10 +503,15 @@ function invert(matrix) { const d = matrix.a * matrix.d - matrix.b * matrix.c; r
 function applyMatrix(matrix, x, y) { return { x: matrix.a * x + matrix.c * y + matrix.e, y: matrix.b * x + matrix.d * y + matrix.f }; }
 function matrixToSvg(matrix) { return [matrix.a - 1, matrix.b, matrix.c, matrix.d - 1, matrix.e, matrix.f].every((v) => Math.abs(v) < 1e-6) ? null : `matrix(${[matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f].map(round).join(" ")})`; }
 function rotateVector(x, y, degrees) { const r = degrees * Math.PI / 180, c = Math.cos(r), s = Math.sin(r); return { x: x * c - y * s, y: x * s + y * c }; }
-function setAttribute(node, name, value) { if (value == null || value === "")
-    node.removeAttribute(name);
-else
-    node.setAttribute(name, String(value)); }
+function setAttribute(node, name, value) {
+    const next = value == null || value === '' ? null : String(value);
+    if (node.getAttribute(name) === next)
+        return;
+    if (next === null)
+        node.removeAttribute(name);
+    else
+        node.setAttribute(name, next);
+}
 function assignNumber(target, key, value) { if (value == null)
     return false; target[key] = value; return true; }
 function finite(value) { const n = typeof value === "number" ? value : Number(value); return Number.isFinite(n) ? n : null; }

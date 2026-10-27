@@ -1,4 +1,5 @@
-import { writeAnimationProperty } from "../objects/animation-targets";
+import { RenderNodeCache } from './render-node-cache';
+import { readAnimationProperty, writeAnimationProperty } from "../objects/animation-targets";
 import { Group } from "../objects/elements/group.object";
 import { Path } from "../objects/elements/path.object";
 import { Shape } from "../objects/elements/shape.object";
@@ -9,20 +10,26 @@ import { AnyElement, SVG } from "../objects/svg.object";
 import { matrixToSvg } from "../objects/transform.object";
 import { drawProgressVisible, effectiveStrokeAlignment } from "../objects/stroke-style.object";
 import { CompiledAnimationTrack } from "./animation-evaluation-plan";
-import { geometryRoleNodes, isClippingGeometry, paintRoleNodes, pathRevealNodes, projectedDefinitionId, renderTargetNodes } from "../../../../packages/runtime/src/render-roles.internal";
+import { isClippingGeometry, projectedDefinitionId, renderTargetNodes } from "../../../../packages/runtime/src/render-roles.internal";
 import { outlineGradientTransform, outlineStrokePaint, projectPathOutline } from '../path-outline';
 
 type RenderDomain = "transform" | "geometry" | "appearance" | "visibility" | "gradient";
 
 /** Retained direct-DOM adapter used only while previewing animation. */
 export class ImperativeSvgRenderer {
+    private nodeRevision = -1;
     private nodes = new Map<string, SVGElement[]>();
     private dirty = new Map<AnyElement, Set<RenderDomain>>();
 
-    constructor(private svg: SVG, private root: ParentNode = document) {}
+    private readonly roles: RenderNodeCache;
+    constructor(private svg: SVG, private root: ParentNode = document) { this.roles = new RenderNodeCache(root); }
+
+    destroy(): void { this.clear(); this.roles.destroy(); }
 
     apply(track: CompiledAnimationTrack, value: unknown): boolean {
         const target = track.target;
+        if(target && (track.property.startsWith('transform.') || track.property === 'opacity' || track.property === 'visible')
+            && Object.is(readAnimationProperty(target, track.property), value)) return true;
         if(!target || !writeAnimationProperty(target, track.property, value)) return false;
         this.markDirty(target, [renderDomain(track.property)]);
         return true;
@@ -54,13 +61,14 @@ export class ImperativeSvgRenderer {
     clear(): void {
         this.dirty.clear();
         this.nodes.clear();
+        this.roles.clear();
     }
 
     private writeAppearance(node: SVGElement, target: AnyElement): void {
         setAttribute(node, "opacity", target.opacity === 1 ? null : target.opacity);
         const settings = target.settings as Record<string, unknown>;
-        const fillNodes = paintRoleNodes(node, 'fill');
-        const strokeNodes = paintRoleNodes(node, 'stroke');
+        const fillNodes = this.roles.paint(node, 'fill');
+        const strokeNodes = this.roles.paint(node, 'stroke');
         if("fill" in settings) {
             fillNodes.forEach((item) => {
                 setAttribute(item, "fill", paintSVGValue(settings["fill"] as never) ?? "none");
@@ -72,7 +80,7 @@ export class ImperativeSvgRenderer {
                 setAttribute(item, "stroke", paintSVGValue(settings["stroke"] as never));
                 setAttribute(item, "stroke-opacity", paintOpacity(settings["stroke"] as never));
             });
-            if(target instanceof Path && target.outlineSections !== undefined) node.querySelectorAll<SVGElement>('[data-render-role~="outline"]').forEach(item => {
+            if(target instanceof Path && target.outlineSections !== undefined) this.roles.query(node, '[data-render-role~="outline"]').forEach(item => {
                 const paint = outlineStrokePaint(target);
                 setAttribute(item, 'fill', paint === `url(#outline-paint-${target.id})` ? `url(#${projectedDefinitionId(node, `outline-paint-${target.id}`)})` : paint ?? 'none');
                 setAttribute(item, 'fill-opacity', paintOpacity(target.settings.stroke));
@@ -85,7 +93,7 @@ export class ImperativeSvgRenderer {
         if("stroke_width" in settings) strokeNodes.forEach((item) => setAttribute(item, "stroke-width",
             Number(settings["stroke_width"]) * ((target instanceof Path || target instanceof Shape) && effectiveStrokeAlignment(target) !== 'center' ? 2 : 1)));
         if("stroke_width" in settings && target instanceof Path) {
-            pathRevealNodes(this.root, node, target.id).forEach((item) => setAttribute(item, "stroke-width", Number(settings["stroke_width"]) * 4));
+            this.roles.reveal(node, target.id).forEach((item) => setAttribute(item, "stroke-width", Number(settings["stroke_width"]) * 4));
         }
         if("stroke_dashoffset" in settings && (!(target instanceof Path) || target.settings.stroke_dasharray.length > 0)) {
             strokeNodes.forEach((item) => setAttribute(item, "stroke-dashoffset", settings["stroke_dashoffset"] as number));
@@ -95,17 +103,19 @@ export class ImperativeSvgRenderer {
 
     private writeGeometry(node: SVGElement, target: AnyElement): void {
         if(target instanceof Path) {
-            geometryRoleNodes(this.root, node, target.id).forEach(geometry => setAttribute(geometry, 'd', target.raw));
+            const data = target.raw;
+            this.roles.geometry(node, target.id).forEach(geometry => setAttribute(geometry, 'd', data));
             if(isClippingGeometry(node)) return;
             if(target.outlineSections !== undefined) {
-                node.querySelectorAll<SVGElement>('[data-render-role~="outline"]').forEach(item => setAttribute(item, 'd', projectPathOutline(target).strokeData));
+                const outline = projectPathOutline(target).strokeData;
+                this.roles.query(node, '[data-render-role~="outline"]').forEach(item => setAttribute(item, 'd', outline));
                 this.targetNodes(`outline-paint-${target.id}`).forEach(gradient => setAttribute(gradient, 'gradientTransform', outlineGradientTransform(target)));
                 return;
             }
             const progress = Math.max(0, Math.min(1, target.drawProgress));
-            if(target.settings.stroke_dasharray.length > 0) pathRevealNodes(this.root, node, target.id).forEach((reveal) => setAttribute(reveal, "stroke-dashoffset", 1 - progress));
+            if(target.settings.stroke_dasharray.length > 0) this.roles.reveal(node, target.id).forEach((reveal) => setAttribute(reveal, "stroke-dashoffset", 1 - progress));
             else {
-                const strokeNodes = paintRoleNodes(node, 'stroke');
+                const strokeNodes = this.roles.paint(node, 'stroke');
                 strokeNodes.forEach((stroke) => {
                     setAttribute(stroke, "pathLength", progress < 1 ? 1 : null);
                     setAttribute(stroke, "stroke-dasharray", progress < 1 ? "1 2" : null);
@@ -116,7 +126,7 @@ export class ImperativeSvgRenderer {
             return;
         }
         if(target instanceof Shape) {
-            const geometry = geometryRoleNodes(this.root, node, target.id);
+            const geometry = this.roles.geometry(node, target.id);
             geometry.forEach((item) => {
                 if(target.type === "rectangle") {
                     setAttribute(item, "x", target.x);
@@ -135,7 +145,7 @@ export class ImperativeSvgRenderer {
         if(target instanceof TextElement) {
             setAttribute(node, "x", target.x);
             setAttribute(node, "y", target.y);
-            node.querySelectorAll<SVGElement>("tspan").forEach((span) => setAttribute(span, "x", target.x));
+            this.roles.query(node, "tspan").forEach((span) => setAttribute(span, "x", target.x));
         }
     }
 
@@ -161,16 +171,18 @@ export class ImperativeSvgRenderer {
 
     private writePathDrawVisibility(node: SVGElement, target: Path): void {
         const progress = Math.max(0, Math.min(1, target.drawProgress));
-        const reveal = pathRevealNodes(this.root, node, target.id);
+        const reveal = this.roles.reveal(node, target.id);
         if(reveal.length > 0) {
             reveal.forEach((item) => setAttribute(item, "stroke-opacity", drawProgressVisible(progress) ? null : 0));
             return;
         }
-        const strokeNodes = paintRoleNodes(node, 'stroke');
+        const strokeNodes = this.roles.paint(node, 'stroke');
         strokeNodes.forEach((item) => setAttribute(item, "stroke-opacity", drawProgressVisible(progress) ? paintOpacity(target.settings.stroke) : 0));
     }
 
     private targetNodes(id: string): SVGElement[] {
+        const revision = this.roles.revision;
+        if(this.nodeRevision !== revision) { this.nodes.clear(); this.nodeRevision = revision; }
         if(this.nodes.has(id)) return this.nodes.get(id)!;
         const nodes = renderTargetNodes(this.root, id);
         this.nodes.set(id, nodes);
@@ -187,6 +199,7 @@ function renderDomain(property: string): RenderDomain {
 }
 
 function setAttribute(node: SVGElement, name: string, value: string | number | null | undefined): void {
-    if(value == null || value === "") node.removeAttribute(name);
-    else node.setAttribute(name, String(value));
+    const next = value == null || value === '' ? null : String(value);
+    if(node.getAttribute(name) === next) return;
+    if(next === null) node.removeAttribute(name); else node.setAttribute(name, next);
 }

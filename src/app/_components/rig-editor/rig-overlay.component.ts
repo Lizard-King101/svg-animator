@@ -1,3 +1,4 @@
+import { LatestFrame } from '../../editor/latest-frame';
 import { moveBoneJoint, restSkeleton } from '../../editor/rig-rest-edit';
 import { BoneDrawingService } from '../../_services/bone-drawing.service';
 import { RigBindingSessionService } from '../../_services/rig-binding-session.service';
@@ -90,7 +91,14 @@ export class RigOverlayComponent implements DoCheck, OnDestroy {
             jointStart: this.rig.workspace === 'rest' && part === 'body' && this.rig.isJointConnected(id) ? this.jointWorld(id) : undefined };
         capture.focus(); capture.setPointerCapture(event.pointerId);
     }
+    private readonly previewFrame = new LatestFrame<PointerEvent>(event => this.previewMove(event));
     move(event: PointerEvent): void {
+        if(this.creation) { if(this.creation.pointerId === event.pointerId) this.drawing.move(event); return; }
+        if(this.drag?.pointerId !== event.pointerId) return;
+        event.preventDefault(); event.stopPropagation();
+        this.previewFrame.queue(event);
+    }
+    private previewMove(event: PointerEvent): void {
         if(this.creation) { if(this.creation.pointerId === event.pointerId) this.drawing.move(event); return; }
         this.ngDoCheck();
         const drag = this.drag; if(!drag || drag.pointerId !== event.pointerId) return;
@@ -127,7 +135,7 @@ export class RigOverlayComponent implements DoCheck, OnDestroy {
         if(this.creation) { if(this.creation.pointerId !== event.pointerId) return; this.drawing.up(event); this.suppressClick = true; this.cancel(); return; }
         const drag = this.drag; if(!drag || drag.pointerId !== event.pointerId) return;
         event.stopPropagation(); this.ngDoCheck(); if(!this.drag) return;
-        this.move(event); this.cancel(); this.rig.boneId = drag.id;
+        this.move(event); this.previewFrame.flush(); this.cancel(); this.rig.boneId = drag.id;
         if(drag.mode === 'rest') { if(drag.jointTo) this.rig.moveJoint(drag.id, drag.jointTo); else if(Object.keys(drag.changes).length) this.rig.editBone(drag.changes); }
         else if(drag.part === 'body') { if(Object.keys(drag.changes).length) this.rig.setPosePosition(drag.changes.poseX!, drag.changes.poseY!, drag.id); }
         else this.rig.setPose(drag.angle, drag.id);
@@ -150,6 +158,7 @@ export class RigOverlayComponent implements DoCheck, OnDestroy {
         this.rig.setPose((this.rig.bone?.pose ?? 0) + (['ArrowLeft','ArrowDown'].includes(event.key) ? -1 : 1) * (event.shiftKey ? 10 : 1));
     }
     @HostListener('window:blur') cancel(): void {
+        this.previewFrame.cancel();
         const creation = this.creation; this.creation = undefined;
         if(creation) { this.drawing.cancel(); if(creation.capture.hasPointerCapture(creation.pointerId)) creation.capture.releasePointerCapture(creation.pointerId); }
         const drag = this.drag; this.drag = undefined;

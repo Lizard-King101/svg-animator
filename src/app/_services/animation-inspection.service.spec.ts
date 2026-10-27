@@ -39,9 +39,34 @@ function track(targetId: string, property: string, from: number | boolean, to: n
 }
 
 describe('animation inspection', () => {
+    it('keeps onion visibility independent of Loop and active animation context', () => {
+        const { animation, inspection, svg } = setup();
+        expect(inspection.loopGhosts).toBeFalse(); expect(inspection.display).toBeUndefined();
+        animation.setLoop(true);
+        expect(inspection.loopGhosts).toBeTrue(); expect(inspection.display).toBeUndefined();
+        expect(inspection.onionSkinsEnabled).toBeFalse();
+        inspection.onions = true;
+        expect(inspection.display!.skins.length).toBe(4);
+        inspection.onions = false;
+        expect(inspection.display).toBeUndefined();
+        inspection.motionTrails = true;
+        expect(inspection.display!.skins).toEqual([]);
+        inspection.motionTrails = false;
+        expect(svg.animation.tracks[0].loopSeam).toBeUndefined();
+        const scene = animation.activeAnimation!;
+        let current: typeof scene = { ...scene, loop: false };
+        Object.defineProperty(animation, 'activeAnimation', { get: () => current });
+        expect(inspection.loopGhosts).toBeFalse();
+        current = scene; expect(inspection.loopGhosts).toBeTrue();
+        expect(inspection.display).toBeUndefined();
+        inspection.onions = true; animation.setLoop(false);
+        expect(inspection.loopGhosts).toBeFalse(); expect(inspection.onionSkinsEnabled).toBeTrue();
+        expect(inspection.display!.skins.length).toBe(2);
+        animation.ngOnDestroy();
+    });
     it('wraps seam ghosts with display-time direction without changing live state or duration', () => {
         const {animation,inspection,svg}=setup();
-        animation.setWorkArea(.2,.8); animation.seek(.8); inspection.loopGhosts=true;
+        animation.setWorkArea(.2,.8); animation.seek(.8); animation.setLoop(true); inspection.onions = true;
         const before=JSON.stringify(svg.save());
         const skins=inspection.display!.skins;
         expect(skins.map(skin=>skin.direction)).toEqual(['past','past','future','future']);

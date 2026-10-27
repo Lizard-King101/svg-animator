@@ -1,7 +1,6 @@
 import { LoopSeamControlsComponent } from './loop-seam-controls.component';
 import { TimelineEditorService } from '../../_services/timeline-editor.service';
 import { DocumentMutationService } from '../../_services/document-mutation.service';
-import { AnimationInspectionService } from '../../_services/animation-inspection.service';
 import { AnimationTrack, createDefaultAnimation } from '../../editor/objects/animation.object';
 
 describe('LoopSeamControlsComponent', () => {
@@ -20,7 +19,7 @@ describe('LoopSeamControlsComponent', () => {
                 pause: jasmine.createSpy('pause'), invalidate: jasmine.createSpy('invalidate'), previewAt: jasmine.createSpy('previewAt') },
         } as unknown as TimelineEditorService;
         const mutate = jasmine.createSpy('mutate').and.callFake((callback: () => void) => callback());
-        const component = new LoopSeamControlsComponent(timeline, { mutate } as unknown as DocumentMutationService, {} as AnimationInspectionService);
+        const component = new LoopSeamControlsComponent(timeline, { mutate } as unknown as DocumentMutationService);
         return { component, timeline, x, y, offset, mutate };
     }
 

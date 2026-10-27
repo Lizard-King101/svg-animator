@@ -1,3 +1,4 @@
+import { TimelineDopeSheetComponent } from '../_components/timeline-dope-sheet/timeline-dope-sheet.component';
 import { ChangeDetectorRef, ElementRef, NgZone } from '@angular/core';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { FaIconLibrary } from '@fortawesome/angular-fontawesome';
@@ -46,7 +47,7 @@ function setup() {
     const row = (boneId = 'foot', field = 'poseX') => timeline.rows.find((row): row is RigPropertyTimelineRow => row.type === 'rig-property' && row.bone.id === boneId && row.property.property.endsWith('.' + field))!;
     const actions = new ActionCompositionService(editor, playback, mutations, rig);
     const destroy = () => { subscription.unsubscribe(); timeline.ngOnDestroy(); playback.ngOnDestroy(); mutations.ngOnDestroy(); };
-    return { editor, svg, shape, rig, playback, mutations, projects, timeline, row, actions, destroy };
+    return { editor, svg, shape, rig, playback, mutations, projects, timeline, row, actions, zone, destroy };
 }
 function pointer(clientX: number, capture: HTMLElement, type = 'pointermove'): PointerEvent {
     return { pointerId: 1, button: 0, clientX, currentTarget: capture, type, preventDefault() {}, stopPropagation() {} } as unknown as PointerEvent;
@@ -56,6 +57,53 @@ function track(property: string, id = property): AnimationTrack {
 }
 
 describe('bone timeline and reusable actions', () => {
+    it('registers playback cache observers outside Angular when opening an animated rig', () => {
+        const Observer = window.MutationObserver;
+        const zones: boolean[] = [];
+        spyOn(window, 'MutationObserver').and.callFake(function(callback: MutationCallback) {
+            zones.push(NgZone.isInAngularZone());
+            return new Observer(callback);
+        });
+        const t = setup();
+        const zone = t.zone;
+        try {
+            zone.run(() => {
+                t.svg.animation.tracks = [track('bones.foot.poseX')];
+                t.playback.invalidate();
+                t.playback.seek(.5);
+            });
+            expect(zones.length).toBeGreaterThan(0);
+            expect(zones).not.toContain(true);
+        } finally { t.destroy(); }
+    });
+
+    it('retains summary markers while expanding and selecting animated armature rows', () => {
+        const t = setup();
+        t.svg.animation.tracks = [track('bones.foot.poseX')]; t.playback.invalidate();
+        t.timeline.expandedLayerIds.clear();
+        TestBed.configureTestingModule({ imports: [TimelineDopeSheetComponent], providers: [
+            { provide: TimelineEditorService, useValue: t.timeline },
+            { provide: ActionCompositionService, useValue: t.actions },
+        ] });
+        TestBed.inject(FaIconLibrary).addIcons(faAngleDown, faAngleRight, faChevronLeft, faChevronRight, faDiamond);
+        const fixture = TestBed.createComponent(TimelineDopeSheetComponent);
+        try {
+            fixture.detectChanges();
+            for(const label of ['Expand Character', 'Expand Root']) {
+                fixture.nativeElement.querySelector(`button[aria-label="${label}"]`).click();
+                fixture.detectChanges();
+            }
+            const foot = Array.from(fixture.nativeElement.querySelectorAll('.timeline-left-cell'))
+                .find((node: any) => node.textContent.includes('Foot')) as HTMLElement;
+            foot.click(); fixture.detectChanges();
+            expect(t.rig.boneId).toBe('foot');
+            const markers = Array.from(fixture.nativeElement.querySelectorAll('.key-summary-diamond'));
+            expect(markers.length).toBe(2);
+            fixture.detectChanges();
+            const next = fixture.nativeElement.querySelectorAll('.key-summary-diamond');
+            markers.forEach((marker, index) => expect(next[index]).toBe(marker));
+        } finally { fixture.destroy(); t.destroy(); }
+    });
     it('filters and navigates a selected bone branch while preserving its hierarchy', () => {
         const t = setup();
         t.editor.selectedElements = []; t.rig.selectBone('character', 'upper');

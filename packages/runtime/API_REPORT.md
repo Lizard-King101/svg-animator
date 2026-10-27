@@ -490,6 +490,7 @@ export declare class RuntimeScene {
     private readonly targetById;
     private readonly targetNodesById;
     private readonly rigs?;
+    private readonly rigPlans;
     constructor(root: SVGSVGElement, sourceTargets: RuntimeSceneTargetV1[], rigs?: RigDocument);
     write(targetId: string, property: string, value: unknown): boolean;
     render(): void;

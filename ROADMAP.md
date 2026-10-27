@@ -6,6 +6,13 @@ The October 24, 2026 scene-composition direction adds reusable actions, animated
 
 This is the source of truth for planned work and delivery order. [FEATURES.md](FEATURES.md) records shipped behavior, [ARCHITECTURE.md](ARCHITECTURE.md) defines ownership, and [SVG_COMPATIBILITY.md](SVG_COMPATIBILITY.md) tracks SVG coverage. Novelty modes and the earlier silly-feature category are excluded. Useful techniques such as springs, squash/stretch, stagger, and follow constraints remain ordinary animation tools.
 
+## Timeline UI cleanup — October 27, 2026
+
+- The active scene/action's **Loop** toggle now enables repeating playback, wrapped onion skins and graph ghosts together. Ghost helpers derive from that single saved setting through history, reload and context changes. Ordinary onion skins retain their independent session preference with Loop off; motion trails remain independent. Endpoint links and matched speeds still require explicit authoring.
+- Common toggles and filter/reveal commands use compact icons, pressed states and hover/focus tooltips. **View options** and **Loop tools** expose details on demand, with one panel open at a time and Escape focus return. Easing appears with selected keys. **New action** reveals creation controls while scene/action and time context stay visible.
+- Reduced persistent helper rows, improved small-label contrast, and preserved explicit flex layout leave more height for tracks and the speed graph. Pose/properties panel cleanup and broader action-management layout remain later UI sweep slices.
+- Validation: 85 focused UI, timeline, loop-helper, work-area and action checks pass, plus production build and diff checks. Browser checks covered paired canvas/graph ghost toggling, undo, action creation/context switching, filters, focus tooltips, Escape focus return and the populated timeline/graph layout.
+
 ## Selected-key retiming — October 26, 2026
 
 - **Retime keys** stretches/compresses a selected range around Start, Center, End or Playhead, or reverses the range. Percentage/anchor fields are staged; Enter/Apply commits once and Escape/Cancel discards. Selection/context/revision changes invalidate drafts.
@@ -54,7 +61,7 @@ This source/UI audit reconciles the earlier plan with the delivered rigging work
 
 | Mechanic area | Genuine remaining work | Existing foundation / boundary |
 |---|---|---|
-| Keyframe timing | Stretch/compress and reverse a selected key range | Moving/offsetting selected keys is already supported; temporal handles must retain the intended motion under scaling/reversal |
+| Keyframe timing | Selected-key stretch/compress and reverse delivered | Source-key retiming is distinct from the remaining action-placement stretch handles |
 | Playback and loops | Ping-pong preview, explicit seam comparison and whole-cycle retiming | Preview-speed controls, endpoint links, wrapped ghosts, ordinary looping and work-area playback are shipped |
 | Timeline precision | Optional frames/FPS display, frame stepping and frame snapping; editable markers | Seconds remain the underlying time model; `fpsHint` and marker storage exist without a complete authoring UI |
 | Graph editing | Value graph alongside the speed graph | Reuse numeric channels, selection and temporal interpolation rather than introducing separate animation data |

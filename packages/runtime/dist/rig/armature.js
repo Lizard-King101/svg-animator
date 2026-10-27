@@ -4,6 +4,9 @@ import { constraintPlan } from './constraint-plan';
 export function isConnectedBoneJoint(upper, lower) {
     return Math.abs(lower.x + (lower.poseX ?? 0) - upper.length) <= .05 && Math.abs(lower.y + (lower.poseY ?? 0)) <= .05;
 }
+export function boneLocalMatrix(bone, posed = true) {
+    return multiplyMatrix(translationMatrix(bone.x + (posed ? bone.poseX ?? 0 : 0), bone.y + (posed ? bone.poseY ?? 0 : 0)), rotationMatrix((bone.angle % 360) + (posed ? bone.pose % 360 : 0)));
+}
 export function boneMatrices(rig, posed = true) {
     const result = new Map(), visiting = new Set();
     const visit = (bone) => {
@@ -16,7 +19,7 @@ export function boneMatrices(rig, posed = true) {
         const parent = rig.bones.find(candidate => candidate.id === bone.parentId);
         if (bone.parentId && !parent)
             throw new Error('Bone parent is missing.');
-        const local = multiplyMatrix(translationMatrix(bone.x + (posed ? bone.poseX ?? 0 : 0), bone.y + (posed ? bone.poseY ?? 0 : 0)), rotationMatrix((bone.angle % 360) + (posed ? bone.pose % 360 : 0)));
+        const local = boneLocalMatrix(bone, posed);
         const matrix = multiplyMatrix(parent ? visit(parent) : identityMatrix(), local);
         if (!Object.values(matrix).every(Number.isFinite))
             throw new Error('Bone transform exceeds the supported numeric range.');

@@ -44,11 +44,11 @@ export function bindingProblem(svg: SVG, rig: Armature, options: RigArtworkValid
     return undefined;
 }
 
-export function applyRigPose(svg: SVG, rig: Armature): void {
+export function applyRigPose(svg: SVG, rig: Armature, deformed?: ReadonlyMap<string, ReadonlyMap<string, { x: number; y: number }>>): void {
     for(const binding of rig.bindings) {
         const path = findAnimationTarget(svg.elements, binding.pathId);
         if(!(path instanceof Path)) continue;
-        for(const [id, value] of deformBinding(rig, binding)) {
+        for(const [id, value] of deformed?.get(binding.pathId) ?? deformBinding(rig, binding)) {
             const point = path.findPointById(id);
             if(point) { point.x = value.x; point.y = value.y; }
         }

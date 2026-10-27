@@ -77,6 +77,7 @@ export function outlineSectionPathData(contour, section, rounded = true) {
 }
 /** The only stroke projection used by editor, export and portable playback. */
 export function projectOutlineSections(contours, sections, style) {
+    const completeSamples = new Map();
     const projected = sections.flatMap(section => {
         const contour = contours.find(contour => contour.id === section.contourId);
         if (!contour)
@@ -85,6 +86,11 @@ export function projectOutlineSections(contours, sections, style) {
         if (samples.length < 2 || samples[samples.length - 1].distance <= EPSILON)
             return [];
         const length = samples[samples.length - 1].distance;
+        const full = fullSection(contour);
+        if (section.start.segmentId === full.start.segmentId && section.start.t === 0
+            && section.end.segmentId === full.end.segmentId && section.end.t === 1
+            && !!section.fullContour === !!full.fullContour)
+            completeSamples.set(contour, samples);
         return [{ section, contour, lines, samples: taperSamples(samples, section, length), length }];
     });
     const total = projected.reduce((sum, item) => sum + item.length, 0);
@@ -108,7 +114,7 @@ export function projectOutlineSections(contours, sections, style) {
             stroke.push(expandStroke(samples, item.length, item.section, style, closed));
         });
     });
-    const source = contours.flatMap(contour => flatten(outlineSectionLines(contour, fullSection(contour), style.rounded !== false)));
+    const source = contours.flatMap(contour => completeSamples.get(contour) ?? flatten(outlineSectionLines(contour, fullSection(contour), style.rounded !== false)));
     return {
         strokeData: stroke.filter(Boolean).join(' '),
         sections: projected.map(item => ({ id: item.section.id, data: buildRuntimePathData([{ id: item.section.id, closed: !!item.section.fullContour && item.contour.closed, lines: item.lines }], false), length: item.length, start: item.samples[0], end: item.samples[item.samples.length - 1] })),
@@ -219,7 +225,7 @@ function flatten(lines) {
                     continue;
                 length += delta;
             }
-            result.push({ ...point, distance: length });
+            result.push({ x: point.x, y: point.y, distance: length });
         }
     }
     return result;
@@ -230,13 +236,26 @@ function sampleRange(source, start, end) {
     return [sampleAtDistance(source, start), ...source.filter(point => point.distance > start + EPSILON && point.distance < end - EPSILON), sampleAtDistance(source, end)];
 }
 function sampleAtDistance(source, desired) {
-    const after = source.findIndex(point => point.distance >= desired);
-    if (after < 0)
-        return { ...source[source.length - 1], distance: desired, tangent: direction(source[source.length - 2] ?? source[0], source[source.length - 1]) };
+    // Samples are ordered by cumulative distance. Taper sampling queries every
+    // vertex, so a linear scan here made dense outlines quadratic per frame.
+    let low = 0, high = source.length;
+    while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (source[middle].distance < desired)
+            low = middle + 1;
+        else
+            high = middle;
+    }
+    const after = low === source.length ? -1 : low;
+    if (after < 0) {
+        const last = source[source.length - 1];
+        return { x: last.x, y: last.y, distance: desired, tangent: direction(source[source.length - 2] ?? source[0], last) };
+    }
     if (after === 0)
-        return { ...source[0], distance: desired, tangent: direction(source[0], source[1] ?? source[0]) };
+        return { x: source[0].x, y: source[0].y, distance: desired, tangent: direction(source[0], source[1] ?? source[0]) };
     const a = source[after - 1], b = source[after], t = (desired - a.distance) / (b.distance - a.distance);
-    return { ...lerpCurvePoint(a, b, t), distance: desired, tangent: direction(a, b) };
+    const point = lerpCurvePoint(a, b, t);
+    return { x: point.x, y: point.y, distance: desired, tangent: direction(a, b) };
 }
 /** Sample width variation once per authored end, not once for every dash fragment. */
 function taperSamples(source, section, length) {

@@ -380,6 +380,8 @@ export class TimelineEditorService implements OnDestroy {
         return 'property' in row ? `property:${timelineRowTargetId(row)}:${row.property.property}` : `${row.type}:${timelineRowId(row)}`;
     }
 
+    trackKeyframe(_index: number, keyframe: TimelineKeyframe): string { return keyframe.id; }
+
     isPropertyRow(row: TimelineRow): row is NumericTimelineRow { return 'property' in row; }
     rowExpanded(row: TimelineRow): boolean { return this.filteringRows || this.expandedLayerIds.has(timelineRowId(row)); }
     toggleRow(row: TimelineRow): void {

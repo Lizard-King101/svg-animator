@@ -28,7 +28,7 @@
            (pointercancel)="timeline.endLaneGesture($event)">
         <div class="playhead animation-playhead" [attr.data-pixels-per-second]="timeline.pixelsPerSecond" [attr.data-time-padding]="timeline.timePadding" [attr.data-domain-start]="timeline.timeDomainStart" [style.left]="timeline.playheadLeft()"></div>
         <button class="key-diamond"
-                *ngFor="let keyframe of timeline.isPropertyRow(row) ? timeline.visibleKeyframes(row) : []"
+                *ngFor="let keyframe of timeline.isPropertyRow(row) ? timeline.visibleKeyframes(row) : []; trackBy: timeline.trackKeyframe"
                 [attr.data-keyframe-id]="keyframe.id"
                 [attr.data-keyframe-ids]="keyframe.groupedKeyframeIds?.join(',')"
                 [ngClass]="{'selected': timeline.isKeyframeSelected(keyframe)}"
@@ -39,7 +39,7 @@
           <fa-icon [icon]="timeline.keyframeEasingIcon(keyframe)"></fa-icon>
         </button>
         <span class="key-summary-diamond"
-              *ngFor="let keyframe of !timeline.isPropertyRow(row) ? timeline.visibleKeyframes(row) : []"
+              *ngFor="let keyframe of !timeline.isPropertyRow(row) ? timeline.visibleKeyframes(row) : []; trackBy: timeline.trackKeyframe"
               [style.left]="timeline.keyframeLeft(keyframe.time)"
               [title]="keyframe.time.toFixed(2) + 's · ' + keyframe.summaryCount + ' keyframe' + (keyframe.summaryCount == 1 ? '' : 's')"
               aria-hidden="true">

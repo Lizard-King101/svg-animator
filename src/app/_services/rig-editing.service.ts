@@ -1,3 +1,4 @@
+import { RigEvaluationPlan } from '../../../packages/runtime/src/rig/evaluation-plan';
 import { RowDropPosition } from '../editor/row-pointer-drag';
 import { chainBend, solveTwoBoneIK, twoBoneChain } from '../editor/two-bone-ik';
 import { constraintJointGap, evaluateRigConstraints, rigConstraintProblem } from '../editor/rig-constraints';
@@ -47,6 +48,7 @@ export class RigEditingService {
     }
     poseMethod: 'fk' | 'ik' = 'fk';
     /** Uncommitted evaluated pose shown on the live artwork; every rig command restores it before committing. */
+    private previewEvaluation?: { rig: Armature; revision: number; plan: RigEvaluationPlan };
     private livePose?: { svg: SVG; rigId: string; rig: Armature; restore: () => void };
     get posePreview(): Armature | undefined { const live = this.livePose; return live && live.svg === this.editor.selectedSVG && live.rigId === this.activeId ? live.rig : undefined; }
     private ikBends = new Map<string, 1 | -1>();
@@ -304,7 +306,7 @@ export class RigEditingService {
     /** Shows an FK rotation or body offset on the live artwork until the gesture commits or cancels. */
     previewFK(boneId: string, changes: Pick<Bone, 'pose'> | Required<Pick<Bone, 'poseX' | 'poseY'>>): Armature | undefined {
         const candidate = this.fkCandidate(boneId, changes);
-        if(candidate) return this.previewPose(candidate);
+        if(candidate) return this.previewPose(candidate, true);
         this.clearPosePreview(); return undefined;
     }
     private fkCandidate(boneId: string | undefined, changes: Partial<Pick<Bone, 'pose' | 'poseX' | 'poseY'>>): Armature | undefined {
@@ -319,7 +321,7 @@ export class RigEditingService {
     previewIK(target: {x:number;y:number}): Armature | undefined {
         if(!this.active || !this.boneId || !this.canPose || !this.readyToPose()) { this.clearPosePreview(); return; }
         const candidate = this.ikCandidate(target);
-        if(candidate) return this.previewPose(candidate);
+        if(candidate) return this.previewPose(candidate, true);
         this.clearPosePreview(); return undefined;
     }
     /** Weight previews only move artwork on a posed rig; at rest every weighting leaves points in place. */
@@ -329,15 +331,16 @@ export class RigEditingService {
         try { this.previewPose(assignWeightUpdates(rig, updates)); }
         catch { this.clearPosePreview(); }
     }
-    private previewPose(candidate: Armature): Armature | undefined {
+    private previewPose(candidate: Armature, reuseSetup = false): Armature | undefined {
         this.clearPosePreview();
         const svg = this.editor.selectedSVG, rig = this.active;
         if(!svg || !rig || !this.canPose || !this.readyToPose()) return;
-        const evaluated = this.evaluatePose(candidate); if(!evaluated) return;
+        const evaluation = this.evaluatePose(candidate, reuseSetup); if(!evaluation) return;
+        const evaluated = evaluation.pose;
         const paths = evaluated.bindings.flatMap(binding => { const path = findAnimationTarget(svg.elements, binding.pathId); return path instanceof Path ? [path] : []; });
         const geometry = paths.map(path => ({ path, snapshot: captureGeometrySnapshot(path) }));
         const transforms = (evaluated.attachments ?? []).flatMap(link => { const element = findAnimationTarget(svg.elements, link.elementId); return element ? [{ element, transform: { ...element.transform } }] : []; });
-        applyRigPose(svg, evaluated); applyAttachments(svg, evaluated);
+        applyRigPose(svg, evaluated, evaluation.paths); applyAttachments(svg, evaluated, evaluation.transforms);
         this.livePose = { svg, rigId: rig.id, rig: evaluated, restore: () => {
             geometry.forEach(({ path, snapshot }) => restoreGeometrySnapshot(path, snapshot));
             transforms.forEach(({ element, transform }) => element.transform = transform);
@@ -373,13 +376,16 @@ export class RigEditingService {
     get atRest(): boolean { return !this.displayedRig?.bones.some(hasBonePose); }
     get restBlocked(): boolean { return this.message === REST_REQUIRED && !this.atRest; }
     /** Preflight the complete evaluated pose before writing either bones or artwork. */
-    private evaluatePose(candidate: Armature): Armature | undefined {
+    private evaluatePose(candidate: Armature, reuseSetup = false): RigEvaluationPlan | undefined {
         try {
-            const evaluated = evaluateRigConstraints(candidate); attachmentTransforms(evaluated);
-            for(const binding of evaluated.bindings) for(const point of deformBinding(evaluated,binding).values()) {
-                if(!Number.isFinite(point.x) || !Number.isFinite(point.y)) throw new Error('This pose exceeds the supported coordinate range.');
+            const rig = this.active;
+            if(reuseSetup && rig) {
+                if(this.previewEvaluation?.rig !== rig || this.previewEvaluation.revision !== this.mutations.revision) {
+                    this.previewEvaluation = { rig, revision: this.mutations.revision, plan: new RigEvaluationPlan(rig) };
+                }
+                return this.previewEvaluation.plan.evaluate(candidate);
             }
-            return evaluated;
+            return new RigEvaluationPlan(candidate).evaluate(candidate);
         }
         catch(error) { this.message = (error as Error).message; return; }
     }
@@ -428,8 +434,9 @@ export class RigEditingService {
     }
     private commitPose(candidate: Armature, pinOrigins: AnyElement[] = []): boolean {
         this.clearPosePreview();
-        const svg = this.editor.selectedSVG, rig = this.active, evaluated = this.evaluatePose(candidate);
-        if(!svg || !rig || !evaluated) return false;
+        const svg = this.editor.selectedSVG, rig = this.active, evaluation = this.evaluatePose(candidate);
+        if(!svg || !rig || !evaluation) return false;
+        const evaluated = evaluation.pose;
         this.mutate(() => {
             pinOrigins.forEach(pinTransformOrigin);
             rig.bones = candidate.bones.map(next => {
@@ -441,7 +448,7 @@ export class RigEditingService {
             if(candidate.attachments) rig.attachments = candidate.attachments; else delete rig.attachments;
             if(candidate.constraints) rig.constraints = candidate.constraints; else delete rig.constraints;
             if(candidate.constraintsActive !== undefined) rig.constraintsActive = candidate.constraintsActive; else delete rig.constraintsActive;
-            applyRigPose(svg,evaluated); applyAttachments(svg,evaluated);
+            applyRigPose(svg,evaluated,evaluation.paths); applyAttachments(svg,evaluated,evaluation.transforms);
         });
         this.message = ''; return true;
     }

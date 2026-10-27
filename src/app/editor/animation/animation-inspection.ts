@@ -1,3 +1,4 @@
+import { DocumentRigEvaluationPlan } from '../rig-evaluation';
 import { AnimationEvaluationPlan } from './animation-evaluation-plan';
 import { findAnimationTarget } from '../objects/animation-targets';
 import { findElementChain, resolvedOrigin } from '../objects/element-bounds';
@@ -6,7 +7,7 @@ import { SVG } from '../objects/svg.object';
 import { applyMatrix } from '../objects/transform.object';
 import { buildSVGMarkup } from '../svg-markup';
 import { captureGeometrySnapshot, restoreGeometrySnapshot } from '../objects/element-geometry';
-import { applyDocumentRigAnimation, parseRigAnimationProperty, rigArtworkIds, writeDocumentAnimationProperty } from '../rig-animation';
+import { parseRigAnimationProperty, rigArtworkIds, writeDocumentAnimationProperty } from '../rig-animation';
 import { captureRigAnimationPreview, restoreRigAnimationPreview } from '../rig-animation-preview';
 
 export interface InspectionPoint { x: number; y: number; time: number; }
@@ -22,10 +23,12 @@ export function onionTimes(time: number, duration: number, step: number): number
 /** Owns a detached model. Sampling never writes into the active artwork or its renderer. */
 export class AnimationInspectionSnapshot {
     private readonly plan: AnimationEvaluationPlan;
+    private readonly rigPlan: DocumentRigEvaluationPlan;
     private readonly baselines;
     private readonly rigBaseline;
     private readonly animatedRigIds: Set<string>;
     constructor(readonly document: SVG) {
+        this.rigPlan = new DocumentRigEvaluationPlan(document);
         this.plan = new AnimationEvaluationPlan(document.animation, document.elements, document.rigs);
         this.baselines = [...this.plan.targetMap.values()].map(target => ({
             target, geometry: captureGeometrySnapshot(target), transform: { ...target.transform },
@@ -45,7 +48,7 @@ export class AnimationInspectionSnapshot {
         this.plan.evaluate(time).forEach(value => {
             if(value.applied) writeDocumentAnimationProperty(this.document, value.targetId, value.property, value.value);
         });
-        applyDocumentRigAnimation(this.document, this.animatedRigIds);
+        this.rigPlan.apply(this.animatedRigIds);
     }
 
     skins(time: number, step: number, selectedIds: readonly string[] = [], loopRange?: {start: number; end: number}): OnionSkin[] {

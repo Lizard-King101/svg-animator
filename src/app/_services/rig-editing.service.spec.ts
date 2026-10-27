@@ -30,7 +30,7 @@ import { RigWeightOverlayComponent } from '../_components/rig-editor/rig-weight-
 import { RigPanelComponent } from '../_components/rig-editor/rig-panel.component';
 import { PropertiesPanelComponent } from '../_components/properties-panel/properties-panel.component';
 import { PaintEditingService } from './paint-editing.service';
-import { TestBed } from '@angular/core/testing';
+import { fakeAsync, tick, TestBed } from '@angular/core/testing';
 import rigFixture from '../editor/migrations/fixtures/document-v10-rig.json';
 import { evaluateRigConstraints } from '../editor/rig-constraints';
 import { editableRestRig } from '../editor/rig-rest-edit';
@@ -195,7 +195,7 @@ describe('armature editing and weighted FK', () => {
         overlay.begin(event(100, 140), id); t.rigs.workspace = 'rest'; overlay.ngDoCheck(); overlay.end(event(140, 100)); expect(t.rigs.bone!.pose).toBe(80);
         overlay.ngOnDestroy();
     });
-    it('deforms bound artwork live during pose drags, restores on cancel and commits once', () => {
+    it('deforms bound artwork live during pose drags, restores on cancel and commits once', fakeAsync(() => {
         const t = setup(); t.rigs.addBone(true); const id = t.rigs.boneId!; t.rigs.bind(); t.rigs.workspace = 'pose';
         const overlay = new RigOverlayComponent(t.rigs, t.mutations, new RigBindingSessionService(t.rigs, t.mutations), new BoneDrawingService(t.rigs, t.mutations)), element = document.createElement('div'), button = document.createElement('button');
         spyOn(element, 'getBoundingClientRect').and.returnValue({ left: 0, top: 0, width: 200, height: 200 } as DOMRect);
@@ -203,19 +203,19 @@ describe('armature editing and weighted FK', () => {
         overlay.artwork = element as unknown as SVGElement; overlay.workspace = { element } as never;
         const event = (x: number, y: number) => ({ button: 0, pointerId: 1, clientX: x, clientY: y, currentTarget: button, preventDefault() {}, stopPropagation() {} }) as unknown as PointerEvent;
         const end = t.path.lines[0].points[1], before = t.svg.save(), saves = t.projects.upsert.calls.count(), revision = t.mutations.revision;
-        overlay.begin(event(140, 100), id); overlay.move(event(100, 140));
+        overlay.begin(event(140, 100), id); overlay.move(event(100, 140)); tick(17);
         expect(end.x).toBeCloseTo(100); expect(end.y).toBeCloseTo(140); expect(t.rigs.bone!.pose).toBe(0);
         expect(t.rigs.posePreview).toBeDefined(); expect(t.rigs.problem).toBeUndefined(); expect(overlay.bones.find(bone => bone.id === id)!.end.y).toBeCloseTo(140);
         const panel = new RigPanelComponent(t.rigs, new RigBindingSessionService(t.rigs, t.mutations)); expect(panel.livePose).toBe(90);
         expect(t.projects.upsert.calls.count()).toBe(saves); expect(t.mutations.revision).toBe(revision);
-        overlay.move(event(141, 100)); expect(t.svg.save()).toEqual(before);
-        overlay.move(event(100, 140)); overlay.key(new KeyboardEvent('keydown', { key: 'Escape' }), id);
+        overlay.move(event(141, 100)); tick(17); expect(t.svg.save()).toEqual(before);
+        overlay.move(event(100, 140)); tick(17); overlay.key(new KeyboardEvent('keydown', { key: 'Escape' }), id);
         expect(t.rigs.posePreview).toBeUndefined(); expect(t.svg.save()).toEqual(before); expect(panel.livePose).toBe(0);
-        overlay.begin(event(140, 100), id); overlay.move(event(100, 140)); const preview = t.svg.save().elements; overlay.end(event(100, 140));
+        overlay.begin(event(140, 100), id); overlay.move(event(100, 140)); tick(17); const preview = t.svg.save().elements; overlay.end(event(100, 140));
         expect(t.rigs.bone!.pose).toBe(90); expect(t.projects.upsert.calls.count()).toBe(saves + 1); expect(t.svg.save().elements).toEqual(preview); expect(t.rigs.problem).toBeUndefined();
         t.mutations.undo(); expect(t.svg.save()).toEqual(before);
         overlay.ngOnDestroy();
-    });
+    }));
     it('lets only the open Weights workspace replace artwork properties', () => {
         const t = setup(); t.rigs.addBone(true); t.rigs.bind();
         TestBed.configureTestingModule({ imports: [PropertiesPanelComponent], providers: [OutlineEditingService,
@@ -418,7 +418,7 @@ describe('armature editing and weighted FK', () => {
         const restored=SVG.fromSave(JSON.parse(JSON.stringify(t.svg.save())),t.editor); expect(buildSVGMarkup(restored)).toBe(buildSVGMarkup(t.svg));
         t.rigs.resetPose(); expect(t.svg.save().elements).toEqual(before.elements);
     });
-    it('keeps IK previews temporary, cancels context changes and supports keyboard target nudges', () => {
+    it('keeps IK previews temporary, cancels context changes and supports keyboard target nudges', fakeAsync(() => {
         const t=setup(); t.rigs.drawBone({x:100,y:100},{x:140,y:100},'bone'); t.rigs.drawBone({x:140,y:100},{x:170,y:100},'bone');
         t.rigs.bind(); t.rigs.workspace='pose'; t.rigs.poseMethod='ik';
         const component=new IKTargetComponent(t.rigs,t.mutations,new RigBindingSessionService(t.rigs,t.mutations));
@@ -428,7 +428,7 @@ describe('armature editing and weighted FK', () => {
         component.artwork=element as unknown as SVGElement; component.workspace={element} as never;
         const event=(x:number,y:number)=>({button:0,pointerId:1,clientX:x,clientY:y,currentTarget:button,preventDefault(){},stopPropagation(){}} as unknown as PointerEvent);
         const before=t.svg.save(), saves=t.projects.upsert.calls.count(), revision=t.mutations.revision;
-        component.begin(event(170,100)); component.move(event(130,140)); expect(t.rigs.posePreview).toBeDefined();
+        component.begin(event(170,100)); component.move(event(130,140)); tick(17); expect(t.rigs.posePreview).toBeDefined();
         expect(t.svg.save().elements).not.toEqual(before.elements); expect(t.svg.save().rigs).toEqual(before.rigs); expect(t.rigs.problem).toBeUndefined();
         expect(t.projects.upsert.calls.count()).toBe(saves); expect(t.mutations.revision).toBe(revision);
         component.key(new KeyboardEvent('keydown',{key:'Escape'})); expect(t.rigs.posePreview).toBeUndefined(); expect(t.svg.save()).toEqual(before);
@@ -436,7 +436,7 @@ describe('armature editing and weighted FK', () => {
         component.key(new KeyboardEvent('keydown',{key:'ArrowLeft'})); expect(t.rigs.ikEndpoint!.x).toBeCloseTo(129);
         const posed=t.svg.save(); component.begin(event(129,140)); t.rigs.workspace='rest'; component.ngDoCheck(); component.end(event(110,130)); expect(t.svg.save()).toEqual(posed);
         component.ngOnDestroy();
-    });
+    }));
 
     function constrainedLeg() {
         const t = setup(), rig = t.rigs.active!, root = t.rigs.bone!;
@@ -516,7 +516,7 @@ describe('armature editing and weighted FK', () => {
         t.rigs.workspace = 'pose'; expect(t.rigs.workspace).toBe('pose'); expect(t.rigs.problem).toBeUndefined();
         t.rigs.setPose(20, 'upper'); expect(t.rigs.message).toContain('Thigh follows Leg IK. Drag Foot');
     });
-    it('drags a connected bone in Bone setup as a shared joint and nudges it with the keyboard', () => {
+    it('drags a connected bone in Bone setup as a shared joint and nudges it with the keyboard', fakeAsync(() => {
         const t = setup(); t.rigs.addBone(true); const thigh = t.rigs.bone!; t.rigs.addBone(true); const shin = t.rigs.bone!; t.rigs.workspace = 'rest';
         const overlay = new RigOverlayComponent(t.rigs, t.mutations, new RigBindingSessionService(t.rigs, t.mutations), new BoneDrawingService(t.rigs, t.mutations));
         const element = document.createElement('div'), button = document.createElement('button');
@@ -525,7 +525,7 @@ describe('armature editing and weighted FK', () => {
         overlay.artwork = element as unknown as SVGElement; overlay.workspace = { element } as never;
         const event = (x: number, y: number) => ({ button: 0, pointerId: 1, clientX: x, clientY: y, currentTarget: button, preventDefault() {}, stopPropagation() {} }) as unknown as PointerEvent;
         const saves = t.projects.upsert.calls.count(), point = (id: string, along: number) => applyMatrix(boneMatrices(t.rigs.active!).get(id)!, along, 0);
-        overlay.begin(event(140, 100), shin.id, 'body'); overlay.move(event(140, 120));
+        overlay.begin(event(140, 100), shin.id, 'body'); overlay.move(event(140, 120)); tick(17);
         const draft = overlay.bones.find(bone => bone.id === thigh.id)!; expect(draft.end.x).toBeCloseTo(140); expect(draft.end.y).toBeCloseTo(120);
         expect(t.projects.upsert.calls.count()).toBe(saves);
         overlay.end(event(140, 120)); expect(t.projects.upsert.calls.count()).toBe(saves + 1);
@@ -534,7 +534,7 @@ describe('armature editing and weighted FK', () => {
         overlay.key(new KeyboardEvent('keydown', { key: 'ArrowUp' }), shin.id);
         expect(point(shin.id, 0).y).toBeCloseTo(119); expect(t.rigs.isJointConnected(shin.id)).toBeTrue();
         overlay.ngOnDestroy();
-    });
+    }));
     it('starts new bones exactly on a nearby selected tip so drawn chains connect', () => {
         const t = setup(), drawing = new BoneDrawingService(t.rigs, t.mutations), tool = t.editor.tools.find((tool): tool is BoneTool => tool instanceof BoneTool)!;
         tool.drawing = drawing; tool.restoreSelection(); spyOn(t.editor, 'toCanvasPoint').and.callFake((x: any, y?: number) => new Point(x, y!));
