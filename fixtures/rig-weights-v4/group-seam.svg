@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <g id="Leg-artwork" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path id="Upper-leg" d="M 280 140 C 270 190 280 250 320 300" stroke="#a867cb" stroke-width="48" />
+    <path id="Lower-leg" d="M 320 300 C 360 350 410 400 420 470" stroke="#874ba7" stroke-width="42" />
+  </g>
+</svg>

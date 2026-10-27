@@ -1,5 +1,5 @@
 import { cubicPoint } from "./curve-geometry";
-import { combinedMatrixFor, parentMatrixFor, resolvedOrigin } from "./element-bounds";
+import { combinedMatrixFor, ownMatrix, parentMatrixFor, resolvedOrigin } from "./element-bounds";
 import { Group } from "./elements/group.object";
 import { Path } from "./elements/path.object";
 import { Line } from "./line.object";
@@ -110,7 +110,7 @@ export function sampleMotionPath(svg: SVG, element: AnyElement): SampledMotion |
 
 function baseElementMatrix(element: AnyElement, extraRotation: number): Matrix {
     if(Math.abs(extraRotation) < 0.000001) {
-        return transformMatrix(element.transform, resolvedOrigin(element));
+        return ownMatrix(element);
     }
 
     return transformMatrix(

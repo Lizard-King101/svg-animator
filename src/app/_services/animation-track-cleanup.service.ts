@@ -1,3 +1,4 @@
+import { allAnimationDocuments } from '../editor/objects/animation.object';
 import { Injectable } from "@angular/core";
 import { AnimationTrack } from "../editor/objects/animation.object";
 import { findAnimationTarget } from "../editor/objects/animation-targets";
@@ -5,6 +6,7 @@ import { SVG } from "../editor/objects/svg.object";
 import { AnimationPlaybackService } from "./animation-playback.service";
 import { DocumentMutationService } from "./document-mutation.service";
 import { EditorService } from "./editor.service";
+import { parseRigAnimationProperty } from '../editor/rig-animation';
 
 /** Repair operations for animation tracks whose persisted targets are no longer present. */
 @Injectable()
@@ -27,7 +29,7 @@ export class AnimationTrackCleanupService {
         const removed = new Set(orphaned);
 
         this.mutations.mutate(() => {
-            svg.animation.tracks = svg.animation.tracks.filter((track) => !removed.has(track));
+            allAnimationDocuments(svg.animation).forEach(animation => animation.tracks = animation.tracks.filter(track => !removed.has(track)));
             this.animation.invalidate();
             if(this.animation.mode === "animate") this.animation.previewAt(this.animation.currentTime);
         }, "animation");
@@ -36,5 +38,9 @@ export class AnimationTrackCleanupService {
 }
 
 export function findOrphanedAnimationTracks(svg: SVG): AnimationTrack[] {
-    return svg.animation.tracks.filter((track) => !findAnimationTarget(svg.elements, track.targetId));
+    return allAnimationDocuments(svg.animation).flatMap(animation => animation.tracks).filter(track => {
+        const property = parseRigAnimationProperty(track.property);
+        if(property) return !svg.rigs.armatures.some(rig => rig.id === track.targetId && rig.bones.some(bone => bone.id === property.boneId));
+        return !findAnimationTarget(svg.elements, track.targetId);
+    });
 }

@@ -8,7 +8,7 @@ export function buildRuntimePathData(contours: RuntimeContourV1[], rounded = tru
 function buildContour(contour: RuntimeContourV1, rounded: boolean): string {
     const lines = contour.lines.filter((line) => line.points.length >= 2);
     if(!lines.length) return "";
-    const closed = contour.closed || (lines.length > 1 && samePoint(lines[0].points[0], lines[lines.length - 1].points[1]));
+    const closed = contour.closed;
     if(!rounded) {
         const commands = [`M ${pointText(lines[0].points[0])}`];
         lines.forEach((line) => commands.push(line.type === "bezier"
@@ -61,7 +61,7 @@ export function isStraightPathSegment(line: {
     });
 }
 
-interface Corner { before: RuntimePointV1; after: RuntimePointV1; controlBefore: RuntimePointV1; controlAfter: RuntimePointV1; }
+export interface Corner { before: RuntimePointV1; after: RuntimePointV1; controlBefore: RuntimePointV1; controlAfter: RuntimePointV1; }
 function segmentStartCorner(lines: RuntimeLineV1[], index: number, closed: boolean): Corner | null {
     if(index === 0 && !closed) return null;
     return roundedCorner(lines[index === 0 ? lines.length - 1 : index - 1], lines[index]);
@@ -70,7 +70,7 @@ function segmentEndCorner(lines: RuntimeLineV1[], index: number, closed: boolean
     if(index === lines.length - 1 && !closed) return null;
     return roundedCorner(lines[index], lines[index === lines.length - 1 ? 0 : index + 1]);
 }
-function roundedCorner(incoming: RuntimeLineV1, outgoing: RuntimeLineV1): Corner | null {
+export function roundedCorner(incoming: RuntimeLineV1, outgoing: RuntimeLineV1): Corner | null {
     if(!isStraightPathSegment(incoming) || !isStraightPathSegment(outgoing) || !samePoint(incoming.points[1], outgoing.points[0])) return null;
     const anchor = outgoing.points[0];
     const radius = Math.max(incoming.points[1].cornerRadius ?? 0, anchor.cornerRadius ?? 0);

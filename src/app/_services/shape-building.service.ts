@@ -16,6 +16,7 @@ import { AnimationPlaybackService } from './animation-playback.service';
 import { DocumentMutationService } from './document-mutation.service';
 import { LayerOperationsService } from './layer-operations.service';
 import { ElementFactory } from './element-factory.service';
+import { pathTopologyProblem } from '../editor/path-topology';
 
 export type ShapeBuildingMode = 'regions' | 'trim';
 @Injectable()
@@ -36,9 +37,9 @@ export class ShapeBuildingService implements OnDestroy {
     get preview(): string { return this.hoveredSpan?.data ?? this.hoveredRegion?.data ?? ''; }
     get selectedPreview(): string { return [...this.chosen].map(region => region.data).join(' '); }
     get hint(): string {
-        if(this.animation.mode !== 'edit') return 'Switch to Edit to build shapes or trim outlines.';
+        if(this.animation.mode !== 'edit') return 'Switch to Edit to build shapes or use destructive Trim.';
         if(this.error) return this.error;
-        return this.mode === 'trim' ? 'Trim: click a highlighted span between intersections. Closed shapes become editable open paths. Escape clears preview.'
+        return this.mode === 'trim' ? 'Trim removes geometry between intersections. Use Edit outline under Stroke for visual gaps that preserve the fill and rig. Escape clears preview.'
             : 'Create shape: click enclosed regions to select them, then Create shape or Enter. Original outlines are kept. Escape cancels.';
     }
     constructor(private editor: EditorService, private animation: AnimationPlaybackService,
@@ -95,6 +96,8 @@ export class ShapeBuildingService implements OnDestroy {
         const span = this.hoveredSpan, svg = this.editor.selectedSVG!;
         const source = this.editor.findElement(span.source);
         if(!(source instanceof Path || source instanceof Shape)) return;
+        const problem = pathTopologyProblem(svg, source, 'trim');
+        if(problem) { this.error = problem; return; }
         const data = this.network!.trimmedData(span), scope = createScope();
         try {
             const path = this.factory.createPath();

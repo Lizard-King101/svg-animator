@@ -154,6 +154,7 @@ describe("SVGImporterService", () => {
         expect(clipped.elements.map((element) => element.id)).toContain("artwork");
         expect(clipped.clipElementId).toBe("mask-circle");
         expect(clipped.elements.find((element) => element.id === clipped.clipElementId)?.type).toBe("shape");
+        expect(clipped.elements.find((element) => element.id === clipped.clipElementId)?.visible).toBeFalse();
         expect(clipped.opacity).toBe(0.5);
         expect(clipped.transform?.translateX).toBe(10);
         expect(clipped.transform?.translateY).toBe(5);
@@ -183,7 +184,23 @@ describe("SVGImporterService", () => {
         expect(result.preservedNodeCount).toBe(0);
         expect(intersection.type).toBe("group");
         expect(intersection.clipElementId).not.toBeNull();
+        expect(intersection.visible).toBeFalse();
+        expect(intersection.elements.find((element) => element.id === intersection.clipElementId)?.visible).toBeFalse();
         expect(countSavedElements(result.document.elements)).toBeGreaterThanOrEqual(8);
+    });
+
+    it('preserves deliberately hidden geometry inside a single-shape clip definition', () => {
+        const result = importer.import(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+            <defs><clipPath id="hidden-clip"><circle id="hidden-circle" cx="50" cy="50" r="30" display="none"/></clipPath></defs>
+            <rect id="artwork" width="100" height="100" clip-path="url(#hidden-clip)"/>
+        </svg>`);
+        const group = result.document.elements[0] as GroupSave;
+        const clip = group.elements.find(element => element.id === group.clipElementId) as GroupSave;
+        expect(result.preservedNodeCount).toBe(0);
+        expect(clip.type).toBe('group');
+        expect(clip.visible).toBeFalse();
+        expect(clip.elements[0].id).toBe('hidden-circle');
+        expect(clip.elements[0].visible).toBeFalse();
     });
 
     it("keeps unsupported clip units and their definition scope as a partial import", () => {

@@ -1,3 +1,4 @@
+import { syncDocumentLoopSeams } from '../editor/animation/loop-seam';
 import { Injectable, OnDestroy, signal } from "@angular/core";
 import { buildSVGMarkup } from "../editor/svg-markup";
 import { AnimationPlaybackService } from "./animation-playback.service";
@@ -53,6 +54,14 @@ export class DocumentMutationService implements OnDestroy {
     }
 
     commit(domain: MutationDomain = "artwork"): boolean {
+        const current = this.editor.selectedSVG;
+        const baseline = this.baseline ? JSON.parse(this.baseline) as SVGSave : undefined;
+        if(current) syncDocumentLoopSeams(current.animation, baseline?.id === current.id ? baseline.animation : undefined);
+        if(this.baseline && this.editor.selectedSVG?.animation.composition) {
+            const previous = baseline!;
+            if(previous.id === this.editor.selectedSVG.id && previous.animation
+                && this.animation.rejectConflictingComposition(previous.animation)) this._revision.update(value => value + 1);
+        }
         const save = this.captureSave();
         let after = save ? serializeMutationState(save) : undefined;
         if(after == null || after === this.baseline) return false;
@@ -139,6 +148,7 @@ export class DocumentMutationService implements OnDestroy {
 
 function serializeMutationState(save: SVGSave): string {
     return JSON.stringify({
+        rigs: save.rigs,
         projectColors: save.projectColors,
         id: save.id,
         name: save.name,

@@ -1,4 +1,5 @@
-<ng-container *ngIf="editor.inspectedElement">
+<app-rig-panel />
+<ng-container *ngIf="editor.inspectedElement && !rigs.ownsInspector">
   <div class="panel-header">Properties</div>
   <div class="transform-section" *ngIf="asFrameElement(editor.inspectedElement) as frameElement">
     <div class="transform-title">Frame</div>
@@ -222,9 +223,11 @@
         </label>
       </div>
     </ng-container>
+    <app-outline-panel *ngIf="asPath(strokeElement) as path" [path]="path" />
+    <p class="stroke-error" role="status" *ngIf="strokeError && strokeErrorElement === strokeElement">{{strokeError}}</p>
   </div>
 </ng-container>
-<div class="panel-empty" [class.selection-summary]="editor.selectedElements.length > 1" *ngIf="!editor.inspectedElement">
+<div class="panel-empty" [class.selection-summary]="editor.selectedElements.length > 1" *ngIf="!editor.inspectedElement && !rigs.ownsInspector">
   <fa-icon icon="mouse-pointer"></fa-icon>
   <span>{{ editor.selectedElements.length > 1 ? editor.selectedElements.length + ' layers selected' : 'Select an element' }}</span>
   <span *ngIf="editor.selectedElements.length > 1">{{ selectionHint }}</span>

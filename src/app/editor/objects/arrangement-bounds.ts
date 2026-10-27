@@ -17,8 +17,9 @@ export function arrangementBounds(svg: SVG, element: AnyElement): Bounds {
         if(!element.clipElement) return bounds;
         const clip = arrangementBounds(svg, element.clipElement);
         const x = Math.max(bounds.x, clip.x), y = Math.max(bounds.y, clip.y);
-        return { x, y, width: Math.max(0, Math.min(bounds.x + bounds.width, clip.x + clip.width) - x),
+        const clipped = { x, y, width: Math.max(0, Math.min(bounds.x + bounds.width, clip.x + clip.width) - x),
             height: Math.max(0, Math.min(bounds.y + bounds.height, clip.y + clip.height) - y) };
+        return element.clipElement.visible ? unionBounds([clip, clipped]) : clipped;
     }
     if(element instanceof Shape && element.type === 'ellipse') {
         const frame = localBounds(element), rx = frame.width / 2, ry = frame.height / 2;

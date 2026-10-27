@@ -17,7 +17,7 @@ import { authoredColors, restoreProjectColors } from '../editor/objects/project-
 import { Point } from '../editor/objects/point.object';
 import { ProjectExportService } from './project-export.service';
 import { parseProjectJSON } from '../editor/import/project-json-import';
-import { migrateDocument } from '../editor/migrations/document-migrations';
+import { CURRENT_DOCUMENT_VERSION, migrateDocument } from '../editor/migrations/document-migrations';
 import { buildSVGMarkup } from '../editor/svg-markup';
 import fixture from '../editor/migrations/fixtures/document-v7-colors.json';
 import { PaintEditorComponent } from '../_components/paint-editor/paint-editor.component';
@@ -133,11 +133,11 @@ describe('Project colors', () => {
             t.mutations.undo(); t.mutations.redo(); expect(t.svg.projectColors).toEqual(restored.projectColors);
         } finally { t.destroy(); }
     });
-    it('migrates v6, keeps v7 idempotent and rejects malformed project palettes', () => {
+    it('migrates v6 and v7 and rejects malformed project palettes', () => {
         const current = migrateDocument(fixture); expect(current.status).toBe('ok');
-        if(current.status === 'ok') expect(current.migrated).toBeFalse();
+        if(current.status === 'ok') expect(current.migrated).toBeTrue();
         const previous = migrateDocument({ ...fixture, version: 6, data: { ...fixture.data, projectColors: undefined } });
-        expect(previous.status).toBe('ok'); if(previous.status === 'ok') { expect(previous.migrated).toBeTrue(); expect(previous.value.version).toBe(7); }
+        expect(previous.status).toBe('ok'); if(previous.status === 'ok') { expect(previous.migrated).toBeTrue(); expect(previous.value.version).toBe(CURRENT_DOCUMENT_VERSION); }
         for(const projectColors of [[{ color: 'not a color' }], [{ color: '#123456', pinned: 'yes' }], [{ color: '#123456', name: 'x'.repeat(81) }]]) {
             expect(() => parseProjectJSON(JSON.stringify({ ...fixture, data: { ...fixture.data, projectColors } }))).toThrow();
         }

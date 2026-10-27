@@ -1,3 +1,7 @@
+import { RigEditingService } from '../../_services/rig-editing.service';
+import { RigBindingSessionService } from '../../_services/rig-binding-session.service';
+import { OutlineEditingService } from '../../_services/outline-editing.service';
+import { Subject } from 'rxjs';
 import { TestBed } from "@angular/core/testing";
 import { AnimationPlaybackService } from "../../_services/animation-playback.service";
 import { DocumentMutationService } from "../../_services/document-mutation.service";
@@ -15,6 +19,18 @@ import { SelectTool } from "../../_services/tools/select.tool";
 import { SVG } from "../../editor/objects/svg.object";
 
 describe("PropertiesPanelComponent", () => {
+    it('refuses an excessively dense custom-outline dash pattern before saving it', () => {
+        const editor = new EditorService(new EditorPreferencesService()), path = new Path(editor);
+        path.lines = [new Line(editor, {points: [new Point(0, 0), new Point(10000, 0)]})];
+        path.outlineSections = [{id:'outline', contourId:path.contours[0].id, start:{segmentId:path.lines[0].id,t:0},end:{segmentId:path.lines[0].id,t:1}}];
+        const schedule = jasmine.createSpy('schedule');
+        const panel = new PropertiesPanelComponent(editor, {} as any, {schedule} as any, {} as any, {} as any);
+        panel.setDashPattern(path, '0.01 0.01');
+        expect(path.settings.stroke_dasharray).toEqual([]); expect(schedule).not.toHaveBeenCalled();
+        expect(panel.strokeError).toContain('20,000'); expect(panel.strokeErrorElement).toBe(path);
+        panel.setDashPattern(path, '1 1');
+        expect(path.settings.stroke_dasharray).toEqual([1, 1]); expect(schedule).toHaveBeenCalledTimes(1); expect(panel.strokeError).toBe('');
+    });
     for(const closure of ["open", "implicit", "explicit", "coincident", "straight-cubic"] as const) it(`rounds a selected straight corner through the radius input (${closure})`, async () => {
         const editor = new EditorService(new EditorPreferencesService());
         const path = new Path(editor), a = new Point(100, 100), b = new Point(200, 100), c = new Point(200, 200);
@@ -35,10 +51,10 @@ describe("PropertiesPanelComponent", () => {
         const schedule = jasmine.createSpy('schedule');
         await TestBed.configureTestingModule({
             imports: [PropertiesPanelComponent],
-            providers: [
+            providers: [RigEditingService, RigBindingSessionService, OutlineEditingService,
                 { provide: EditorService, useValue: editor },
-                { provide: AnimationPlaybackService, useValue: { mode: 'edit' } },
-                { provide: DocumentMutationService, useValue: { schedule } },
+                { provide: AnimationPlaybackService, useValue: { mode: 'edit', contextChanging: new Subject<void>() } },
+                { provide: DocumentMutationService, useValue: { schedule, historyRestored: new Subject<void>() } },
                 { provide: PaintEditingService, useValue: { apply: () => true } },
             ],
         }).compileComponents();
@@ -82,10 +98,10 @@ describe("PropertiesPanelComponent", () => {
 
         await TestBed.configureTestingModule({
             imports: [PropertiesPanelComponent],
-            providers: [
+            providers: [RigEditingService, RigBindingSessionService, OutlineEditingService,
                 { provide: EditorService, useValue: editor },
-                { provide: AnimationPlaybackService, useValue: { mode: "edit" } },
-                { provide: DocumentMutationService, useValue: { schedule: () => undefined } },
+                { provide: AnimationPlaybackService, useValue: { mode: "edit", contextChanging: new Subject<void>() } },
+                { provide: DocumentMutationService, useValue: { schedule: () => undefined, historyRestored: new Subject<void>() } },
                 { provide: PaintEditingService, useValue: { apply: () => true } },
             ],
         }).compileComponents();
@@ -124,10 +140,10 @@ describe("PropertiesPanelComponent", () => {
         const schedule = jasmine.createSpy("schedule");
         await TestBed.configureTestingModule({
             imports: [PropertiesPanelComponent],
-            providers: [
+            providers: [RigEditingService, RigBindingSessionService, OutlineEditingService,
                 { provide: EditorService, useValue: editor },
-                { provide: AnimationPlaybackService, useValue: { mode: "edit" } },
-                { provide: DocumentMutationService, useValue: { schedule } },
+                { provide: AnimationPlaybackService, useValue: { mode: "edit", contextChanging: new Subject<void>() } },
+                { provide: DocumentMutationService, useValue: { schedule, historyRestored: new Subject<void>() } },
                 { provide: PaintEditingService, useValue: { apply: () => true } },
             ],
         }).compileComponents();

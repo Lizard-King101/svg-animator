@@ -1,8 +1,12 @@
 export declare const RUNTIME_BUNDLE_KIND: "svg-animator/runtime-bundle";
 export declare const RUNTIME_BUNDLE_FORMAT_VERSION: 1;
-export declare const RUNTIME_VERSION: "1.0.0";
+import type { RigDocument } from './rig/armature';
+import type { OutlineSection } from './outline';
+export type { OutlinePosition, OutlineTaper, OutlineSection } from './outline';
+export type { Armature, Bone, BoneWeight, BoundPoint, PathBinding, RigidAttachment, TwoBoneIKConstraint, RigDocument, WeightPointRef } from './rig/armature';
+export declare const RUNTIME_VERSION: "1.5.0";
 export declare const RUNTIME_BROWSER_GLOBAL: "SVGAnimatorRuntime";
-export declare const RUNTIME_CAPABILITIES_V1: readonly ["tracks.numeric-v1", "tracks.color-v1", "tracks.discrete-v1", "render.transforms-v1", "render.geometry-v1", "render.paint-v1", "render.gradient-v1", "render.path-v1", "render.clipping-v1", "render.motion-path-v1"];
+export declare const RUNTIME_CAPABILITIES_V1: readonly ["tracks.numeric-v1", "rig.pose-v1", "composition.action-windows-v1", "composition.action-timing-v1", "tracks.color-v1", "tracks.discrete-v1", "render.transforms-v1", "render.geometry-v1", "render.paint-v1", "render.gradient-v1", "render.path-v1", "render.outline-sections-v1", "render.clipping-v1", "render.visible-clipping-v1", "render.motion-path-v1"];
 export type RuntimeCapabilityV1 = typeof RUNTIME_CAPABILITIES_V1[number];
 export type RuntimeSegmentMode = "linear" | "hold" | "ease-in" | "ease-out" | "ease-in-out" | "temporal";
 export interface CompiledNumericTrackV1 {
@@ -32,7 +36,19 @@ export interface CompiledDiscreteTrackV1 {
     times: number[];
     values: (boolean | string)[];
 }
-export type CompiledRuntimeTrackV1 = CompiledNumericTrackV1 | CompiledColorTrackV1 | CompiledDiscreteTrackV1;
+export type CompiledRuntimeTrackV1 = (CompiledNumericTrackV1 | CompiledColorTrackV1 | CompiledDiscreteTrackV1) & {
+    /** Action-local time during [start, end); the outer track supplies the underlying scene value. */
+    actionWindows?: {
+        timing?: {
+            sourceStart: number;
+            sourceEnd: number;
+            rate: number;
+        };
+        start: number;
+        end: number;
+        track: CompiledRuntimeTrackV1;
+    }[];
+};
 export interface RuntimePointV1 {
     id: string;
     x: number;
@@ -108,13 +124,16 @@ export interface RuntimeSceneTargetV1 {
     };
     clipping?: {
         clipElementId: string;
-        clipPathId: string;
+        clipPathId: string; /** Source visibility affects paint only; clipping geometry stays active. */
+        sourceVisibility?: true;
     };
     path?: {
         contours: RuntimeContourV1[];
         fillRule: "nonzero" | "evenodd";
         drawProgress: number;
         rounded: boolean;
+        outlineSections?: OutlineSection[];
+        explicitClosure?: boolean;
     };
     paints: {
         fill?: RuntimePaintV1;
@@ -126,6 +145,9 @@ export interface RuntimeSceneTargetV1 {
         alignment: "inside" | "center" | "outside";
         dasharray: number[];
         dashoffset: number;
+        lineCap?: 'butt' | 'round' | 'square' | null;
+        lineJoin?: 'miter' | 'round' | 'bevel' | null;
+        miterLimit?: number;
     };
 }
 export interface RuntimeMarkerV1 {
@@ -145,6 +167,8 @@ export interface RuntimeBundleV1 {
         version: string;
     };
     requiredCapabilities: RuntimeCapabilityV1[];
+    /** Rest-space rig data for authored bone pose channels; requires rig.pose-v1. */
+    rigs?: RigDocument;
     artwork: {
         id: string;
         signature: string;

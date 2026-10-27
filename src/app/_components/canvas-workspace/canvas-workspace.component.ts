@@ -4,6 +4,8 @@ import { DocumentMutationService } from "../../_services/document-mutation.servi
 import { EditorService } from "../../_services/editor.service";
 import { Point } from "../../editor/objects/point.object";
 
+const gestureModifierKeys = new Set(['Alt', 'Control', 'Meta', 'Shift']);
+
 @Component({
     selector: "app-canvas-workspace",
     standalone: true,
@@ -29,17 +31,24 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
         const viewport = this.element;
         const signal = this.listeners.signal;
 
+        // View navigation belongs to the workspace, including above interactive overlays.
+        viewport.addEventListener("mousedown", (event) => {
+            if(event.button !== 1 || this.activeButton != null) return;
+            event.preventDefault(); event.stopPropagation();
+            this.zone.run(() => {
+                this.editor.closeContextMenu();
+                this.activeButton = 1; this.movingView = true;
+                this.moveStart = this.editor.toViewportPoint(event.x, event.y);
+            });
+        }, { capture: true, signal });
+
         viewport.addEventListener("mousedown", (event) => this.zone.run(() => {
             this.editor.closeContextMenu();
-            if(event.button !== 0 && event.button !== 1) return;
+            if(event.button !== 0 || this.activeButton != null) return;
             this.activeButton = event.button;
-            const start = this.editor.toViewportPoint(event.x, event.y);
-            if(event.button === 0 && this.editor.selectedTool) {
+            if(this.editor.selectedTool) {
                 this.editor.selectedTool.down(event);
                 this.animationGestures.begin();
-            } else if(event.button === 1) {
-                this.movingView = true;
-                this.moveStart = start;
             }
         }), { signal });
 
@@ -54,7 +63,7 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
             }
             this.movingView = false;
             if(wasMovingView && this.editor.selectedSVG) this.editor.rememberCanvasView(this.editor.selectedSVG);
-            if(event.button !== 2) this.mutations.commit();
+            if(!wasMovingView) this.mutations.commit();
         }), { signal });
 
         viewport.addEventListener("wheel", (event) => this.zone.run(() => {
@@ -90,6 +99,7 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
                     const delta = position.subtract(this.moveStart);
                     this.moveStart.addTo(delta.x, delta.y);
                     this.editor.selectedSVG.pos.addTo(delta);
+                    return;
                 }
                 this.editor.selectedTool?.drag(event);
             });
@@ -120,8 +130,9 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
         }), { signal });
         document.addEventListener('keydown', (event) => {
             if(this.activeButton == null) return;
-            if(event.key === 'Alt' && this.activeButton === 0) {
-                // A modifier may refresh the live move, but only mouseup commits it.
+            if(gestureModifierKeys.has(event.key) && this.activeButton === 0) {
+                // Keep modifiers out of page-level mutation snapshots, which
+                // restore base geometry and would discard an animated drag.
                 this.zone.run(() => this.editor.keyPressed(event.key));
                 event.preventDefault();
                 event.stopImmediatePropagation();
@@ -136,7 +147,7 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
             }
         }, { signal, capture: true });
         document.addEventListener('keyup', (event) => {
-            if(this.activeButton !== 0 || event.key !== 'Alt') return;
+            if(this.activeButton !== 0 || !gestureModifierKeys.has(event.key)) return;
             this.zone.run(() => this.editor.keyReleased(event.key));
             event.preventDefault();
             event.stopImmediatePropagation();
@@ -147,8 +158,12 @@ export class CanvasWorkspaceComponent implements AfterViewInit, OnDestroy {
 
     private cancelGesture(): void {
         if(this.activeButton == null) return;
-        this.editor.selectedTool?.reset();
-        this.animationGestures.cancel();
+        if(this.movingView) {
+            if(this.editor.selectedSVG) this.editor.rememberCanvasView(this.editor.selectedSVG);
+        } else {
+            this.editor.selectedTool?.reset();
+            this.animationGestures.cancel();
+        }
         this.activeButton = undefined;
         this.movingView = false;
     }

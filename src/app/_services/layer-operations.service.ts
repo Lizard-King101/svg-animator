@@ -7,10 +7,10 @@ import { Point } from "../editor/objects/point.object";
 import { convertStrokeToPath, StrokeToPathProfile } from "../editor/objects/stroke-outline.object";
 import { AnyElement, SVGSave } from "../editor/objects/svg.object";
 import { applyMatrix, invertMatrix, multiplyMatrix } from "../editor/objects/transform.object";
-import { makeAnimationId } from "../editor/objects/animation.object";
-import { matchingAnimationProperty } from "../editor/objects/animation-targets";
 import { EditorService } from "./editor.service";
 import { ElementFactory } from "./element-factory.service";
+import { duplicateArtworkTracks, duplicateRigArtwork } from './layer-duplication';
+import { pathTopologyProblem } from '../editor/path-topology';
 
 export interface LayerContext {
     element: AnyElement;
@@ -22,6 +22,7 @@ export interface LayerContext {
 /** Structural document operations. UI selection and gesture state stay outside. */
 @Injectable()
 export class LayerOperationsService {
+    operationError = '';
     constructor(
         private editor: EditorService,
         private elements: ElementFactory,
@@ -113,6 +114,8 @@ export class LayerOperationsService {
     }
 
     combine(selected: AnyElement[], target: Path): boolean {
+        this.operationError = this.topologyProblem(selected) ?? '';
+        if(this.operationError) return false;
         if(!this.canCombine(selected, target) || !this.editor.selectedSVG) return false;
         const contexts = this.contexts(selected);
         const sources = contexts
@@ -125,65 +128,54 @@ export class LayerOperationsService {
     }
 
     duplicate(element: AnyElement): AnyElement | undefined {
-        const context = this.context(element);
-        if(!context) return undefined;
-        const duplicate = this.elements.clone(element);
-        context.elements.splice(context.index + 1, 0, duplicate);
-        this.duplicateAnimation(element, duplicate);
-        return duplicate;
+        return this.duplicateMany([element])[0];
     }
 
-    private duplicateAnimation(original: AnyElement, duplicate: AnyElement): void {
-        const animation = this.editor.selectedSVG?.animation;
-        if(!animation) return;
-
-        const elements = new Map<string, { original: AnyElement; duplicate: AnyElement }>();
-        this.mapDuplicateElements(original, duplicate, elements);
-        const tracks = animation.tracks
-            .filter((track) => elements.has(track.targetId))
-            .flatMap((track) => {
-                const pair = elements.get(track.targetId)!;
-                const property = matchingAnimationProperty(pair.original, pair.duplicate, track.property);
-                if(!property) return [];
-                return [{
-                    id: makeAnimationId("track"),
-                    targetId: pair.duplicate.id,
-                    property,
-                    valueType: track.valueType,
-                    enabled: track.enabled,
-                    keyframes: track.keyframes.map((keyframe) => ({
-                        id: makeAnimationId("key"),
-                        time: keyframe.time,
-                        value: cloneValue(keyframe.value),
-                        easing: cloneValue(keyframe.easing),
-                        temporal: cloneValue(keyframe.temporal),
-                    })),
-                }];
-            });
-        animation.tracks.push(...tracks);
-    }
-
-    private mapDuplicateElements(
-        original: AnyElement,
-        duplicate: AnyElement,
-        elements: Map<string, { original: AnyElement; duplicate: AnyElement }>,
-    ): void {
-        elements.set(original.id, { original, duplicate });
-
-        if(original instanceof Group && duplicate instanceof Group) {
-            original.elements.forEach((child, index) => {
-                const cloned = duplicate.elements[index];
-                if(cloned) this.mapDuplicateElements(child, cloned, elements);
-            });
-        }
+    duplicateMany(selected: readonly AnyElement[]): AnyElement[] {
+        const svg = this.editor.selectedSVG;
+        if(!svg) return [];
+        const requested = new Set(selected), roots: AnyElement[] = [];
+        const visit = (elements: AnyElement[]) => elements.forEach(element => {
+            if(requested.has(element)) roots.push(element);
+            else if(element instanceof Group) visit(element.elements);
+        });
+        visit(svg.elements);
+        if(!roots.length) return [];
+        const copies = this.elements.cloneSelection(roots);
+        const tracks = duplicateArtworkTracks(svg.animation.tracks, copies);
+        const actions = (svg.animation.composition?.actions ?? []).map(action => ({
+            action, tracks: duplicateArtworkTracks(action.animation.tracks, copies),
+            targetIds: action.targetIds.flatMap(id => copies.elements.has(id) ? [copies.ids.get(id)!] : []),
+        }));
+        const rigs = svg.rigs.armatures.map(rig => ({ rig, additions: duplicateRigArtwork(rig, copies) }));
+        roots.forEach((root, index) => {
+            const context = this.context(root)!;
+            context.elements.splice(context.index + 1, 0, copies.roots[index]);
+        });
+        svg.animation.tracks.push(...tracks);
+        actions.forEach(({ action, tracks, targetIds }) => {
+            action.animation.tracks.push(...tracks);
+            action.targetIds.push(...targetIds);
+        });
+        rigs.forEach(({ rig, additions }) => {
+            rig.bindings.push(...additions.bindings);
+            if(additions.attachments.length) (rig.attachments ??= []).push(...additions.attachments);
+        });
+        return copies.roots;
     }
 
     convertStroke(path: Path, profile: StrokeToPathProfile): Path | undefined {
+        this.operationError = this.topologyProblem([path]) ?? '';
+        if(this.operationError) return undefined;
         const context = this.context(path);
         if(!context) return undefined;
         const converted = convertStrokeToPath(path, this.editor, profile) ?? undefined;
         if(converted) context.elements.splice(context.index, 1, converted);
         return converted;
+    }
+
+    topologyProblem(elements: readonly AnyElement[]): string | undefined {
+        return elements.map(element => pathTopologyProblem(this.editor.selectedSVG, element, 'convert')).find(Boolean);
     }
 
     delete(element: AnyElement): boolean {
@@ -244,7 +236,7 @@ export class LayerOperationsService {
         group.name = clipping ? `Clip ${below.name} With ${element.name}` : `Group ${below.name}, ${element.name}`;
         group.elements = [below, element];
         if(clipping) {
-            element.visible = true;
+            element.visible = false;
             group.clipElementId = element.id;
         }
         context.elements.splice(context.index - 1, 2, group);
@@ -254,20 +246,23 @@ export class LayerOperationsService {
     ungroup(group: Group): AnyElement[] | undefined {
         const context = this.context(group);
         if(!context) return undefined;
+        this.releaseClippingMask(group);
         context.elements.splice(context.index, 1, ...group.elements);
         return [...group.elements];
     }
 
     useAsClippingMask(element: AnyElement): boolean {
         const parent = this.context(element)?.parent;
-        if(!parent) return false;
-        element.visible = true;
+        if(!parent || parent.clipElementId === element.id) return false;
+        this.releaseClippingMask(parent);
+        element.visible = false;
         parent.clipElementId = element.id;
         return true;
     }
 
     releaseClippingMask(group: Group): boolean {
         if(!group.clipElementId) return false;
+        if(group.clipElement) group.clipElement.visible = true;
         group.clipElementId = null;
         return true;
     }
@@ -326,8 +321,4 @@ export class LayerOperationsService {
             })), contour.closed));
         });
     }
-}
-
-function cloneValue<T>(value: T): T {
-    return value == null ? value : JSON.parse(JSON.stringify(value));
 }

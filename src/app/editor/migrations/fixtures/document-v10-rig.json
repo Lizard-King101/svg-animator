@@ -1,0 +1,116 @@
+{
+  "kind": "svg-animator/document",
+  "version": 10,
+  "data": {
+    "id": "rig-fixture",
+    "name": "Weighted FK fixture",
+    "width": 200,
+    "height": 200,
+    "elements": [
+      {
+        "type": "path",
+        "id": "path",
+        "name": "Arm",
+        "visible": true,
+        "locked": false,
+        "settings": {
+          "stroke_width": 3,
+          "fill_enabled": false,
+          "fill": null,
+          "stroke": null,
+          "line_cap": "round",
+          "line_join": "round",
+          "stroke_alignment": "center",
+          "stroke_dasharray": [],
+          "stroke_dashoffset": 0,
+          "stroke_miterlimit": 4
+        },
+        "contours": [
+          {
+            "id": "contour",
+            "closed": false,
+            "lines": [
+              {
+                "id": "line",
+                "type": "line",
+                "points": [
+                  {
+                    "id": "a",
+                    "x": 100,
+                    "y": 100
+                  },
+                  {
+                    "id": "b",
+                    "x": 100,
+                    "y": 140
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "rigs": {
+      "version": 1,
+      "armatures": [
+        {
+          "id": "rig",
+          "name": "Armature",
+          "bones": [
+            {
+              "id": "bone",
+              "name": "Upper arm",
+              "parentId": null,
+              "x": 100,
+              "y": 100,
+              "angle": 0,
+              "length": 40,
+              "pose": 90
+            }
+          ],
+          "bindings": [
+            {
+              "pathId": "path",
+              "matrix": {
+                "a": 1,
+                "b": 0,
+                "c": 0,
+                "d": 1,
+                "e": 0,
+                "f": 0
+              },
+              "topology": "[[\"contour\",false,[[\"line\",\"line\",[\"a\",\"b\"],null,null]]]]",
+              "points": [
+                {
+                  "id": "a",
+                  "anchorId": "a",
+                  "x": 100,
+                  "y": 100,
+                  "weights": [
+                    {
+                      "boneId": "bone",
+                      "weight": 1
+                    }
+                  ]
+                },
+                {
+                  "id": "b",
+                  "anchorId": "b",
+                  "x": 140,
+                  "y": 100,
+                  "weights": [
+                    {
+                      "boneId": "bone",
+                      "weight": 1
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

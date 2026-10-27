@@ -1,3 +1,7 @@
+import { RigPanelComponent } from '../rig-editor/rig-panel.component';
+import { OutlinePanelComponent } from '../outline-editor/outline-panel.component';
+import { pathOutlineProblem } from '../../editor/path-outline';
+import { RigEditingService } from '../../_services/rig-editing.service';
 import { selectionFrame } from "../../editor/selection";
 import { NgFor, NgIf } from "@angular/common";
 import { Component } from "@angular/core";
@@ -32,11 +36,13 @@ import { formatDashArray, parseDashArray, StrokeAlignment } from "../../editor/o
 @Component({
     selector: "app-properties-panel",
     standalone: true,
-    imports: [FormsModule, NgFor, NgIf, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute, PaintFieldComponent, NumberFieldDirective],
+    imports: [RigPanelComponent, OutlinePanelComponent, FormsModule, NgFor, NgIf, FaIconComponent, BoolAttribute, ColorAttribute, RangeAttribute, SelectAttribut, TextAttribute, PaintFieldComponent, NumberFieldDirective],
     templateUrl: "properties-panel.component.html",
     styleUrl: "properties-panel.component.scss",
 })
 export class PropertiesPanelComponent {
+    strokeError = '';
+    strokeErrorElement?: Path | Shape;
     get selectionHint(): string {
         const svg = this.editor.selectedSVG;
         const frame = svg && selectionFrame(svg, this.editor.selectedElements);
@@ -57,6 +63,7 @@ export class PropertiesPanelComponent {
         public animation: AnimationPlaybackService,
         private mutations: DocumentMutationService,
         private paintEditing: PaintEditingService,
+        public rigs: RigEditingService,
     ) {}
 
     private scheduleAttributeSnapshot(): void { this.mutations.schedule(); }
@@ -161,7 +168,11 @@ export class PropertiesPanelComponent {
     setDashPattern(element: Path | Shape, value: string): void {
         const parsed = parseDashArray(value);
         if(parsed == null) return;
+        const previous = element.settings.stroke_dasharray;
         element.settings.stroke_dasharray = parsed;
+        this.strokeErrorElement = element;
+        this.strokeError = element instanceof Path && element.outlineSections !== undefined ? pathOutlineProblem(element) ?? '' : '';
+        if(this.strokeError) { element.settings.stroke_dasharray = previous; return; }
         this.scheduleAttributeSnapshot();
     }
 

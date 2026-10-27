@@ -5,7 +5,7 @@ import { PathSave } from "../objects/elements/path.object";
 import { ShapeSave } from "../objects/elements/shape.object";
 import { TextSave } from "../objects/elements/text.object";
 import { ElementSave, ImportedSourceNode, SVGSave } from "../objects/svg.object";
-import { TransformSave, identityMatrix, Matrix, multiplyMatrix, rotationMatrix, scaleMatrix, translationMatrix } from "../objects/transform.object";
+import { decomposeTransform, TransformSave, identityMatrix, Matrix, multiplyMatrix, rotationMatrix, scaleMatrix, translationMatrix } from "../objects/transform.object";
 import { parseSVGPathData, SVGPathParseError } from "./svg-path-parser";
 import { sanitizeSVGText, SVGParseError } from "./svg-sanitizer";
 import { GradientPaintSave, GradientSpreadMethod, GradientUnits, PaintSave } from "../objects/paint.object";
@@ -186,6 +186,7 @@ class ImportContext {
         const artwork = this.importResolvedElement(unclipped, null);
         if(!artwork) throw new SVGImportError("Clipped artwork is not editable yet.");
         const clipElement = this.importClipPath(referenceId);
+        clipElement.visible = false;
         const id = this.id(undefined, "clip-group");
         const state = commonState(element, id, `Clip ${artwork.name}`, this.transform(element));
         // The referencing element's transform and opacity affect its clip as a unit.
@@ -225,7 +226,9 @@ class ImportContext {
             if(children.length === 0) throw new SVGImportError(`Clip path #${referenceId} is empty.`);
 
             let geometry: ElementSave;
-            if(children.length === 1 && !definition.getAttribute("transform")) {
+            // A root clip source is always active geometry. Keep deliberately
+            // hidden SVG geometry as a child so its own visibility still applies.
+            if(children.length === 1 && children[0].visible && !definition.getAttribute("transform")) {
                 geometry = children[0];
             } else {
                 geometry = this.definitionGroup(definition, children, "clip-shapes");
@@ -234,6 +237,7 @@ class ImportContext {
             const nestedReference = localUrlReference(styleValue(definition, "clip-path"));
             if(!nestedReference) return geometry;
             const nestedClip = this.importClipPath(nestedReference);
+            nestedClip.visible = false;
             const intersection = this.definitionGroup(definition, [geometry, nestedClip], "clip-intersection");
             intersection.clipElementId = nestedClip.id;
             return intersection;
@@ -846,21 +850,4 @@ function parseTransform(source: string): Matrix | undefined {
         lastIndex = (match.index ?? 0) + match[0].length;
     }
     return /^\s*$/.test(source.slice(lastIndex)) ? matrix : undefined;
-}
-
-function decomposeTransform(matrix: Matrix): TransformSave | undefined {
-    const scaleX = Math.hypot(matrix.a, matrix.b);
-    if(scaleX < 0.000001) return undefined;
-    const dot = matrix.a * matrix.c + matrix.b * matrix.d;
-    if(Math.abs(dot) > 0.00001 * Math.max(1, scaleX)) return undefined;
-    const scaleY = (matrix.a * matrix.d - matrix.b * matrix.c) / scaleX;
-    return {
-        translateX: matrix.e,
-        translateY: matrix.f,
-        scaleX,
-        scaleY,
-        rotation: Math.atan2(matrix.b, matrix.a) * 180 / Math.PI,
-        originX: 0,
-        originY: 0,
-    };
 }

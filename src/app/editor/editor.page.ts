@@ -1,3 +1,12 @@
+import { IKTargetComponent } from '../_components/rig-editor/ik-target.component';
+import { OutlineEditingService } from '../_services/outline-editing.service';
+import { OutlineOverlayComponent } from '../_components/outline-editor/outline-overlay.component';
+import { RigBindingSessionService } from '../_services/rig-binding-session.service';
+import { BoneDrawingService } from '../_services/bone-drawing.service';
+import { BoneDrawingControlsComponent } from '../_components/rig-editor/bone-drawing-controls.component';
+import { RigEditingService } from '../_services/rig-editing.service';
+import { RigOverlayComponent } from '../_components/rig-editor/rig-overlay.component';
+import { ActionCompositionService } from '../_services/action-composition.service';
 import { ShapeBuildingService } from '../_services/shape-building.service';
 import { ProjectColorsService } from '../_services/project-colors.service';
 import { EyedropperService } from '../_services/eyedropper.service';
@@ -44,11 +53,18 @@ import { AnimationTrackCleanupService } from "../_services/animation-track-clean
 import { CanvasSelectionCommandService } from "../_services/canvas-selection-command.service";
 import { ObjectClipboardCommandService } from "../_services/object-clipboard-command.service";
 import { SelectionArrangementService } from "../_services/selection-arrangement.service";
+import { AnimationInspectionService } from '../_services/animation-inspection.service';
+import { AnimationInspectionOverlayComponent } from '../_components/animation-inspection/animation-inspection-overlay.component';
 
 @Component({
     standalone: true,
     imports: [
+        RigOverlayComponent,
+        OutlineOverlayComponent,
+        IKTargetComponent,
+        BoneDrawingControlsComponent,
         NgIf,
+        AnimationInspectionOverlayComponent,
         FaIconComponent,
         SVGDisplay,
         AnimationTimelineComponent,
@@ -71,9 +87,15 @@ import { SelectionArrangementService } from "../_services/selection-arrangement.
         EyedropperSurfaceDirective,
     ],
     providers: [
+        RigEditingService,
+        OutlineEditingService,
+        RigBindingSessionService,
+        BoneDrawingService,
         EditorService,
+        AnimationInspectionService,
         HistoryService,
         AnimationPlaybackService,
+        ActionCompositionService,
         AnimationGestureService,
         DocumentMutationService,
         ProjectColorsService,
@@ -101,6 +123,14 @@ export class EditorPage implements OnInit, AfterViewInit {
 
     @HostListener('document:keydown', ['$event']) handleKeyDown(event: KeyboardEvent) {
         if(event.defaultPrevented) return;
+        if(event.key === 'Escape' && this.outline.active) {
+            event.preventDefault();
+            if(this.outline.previewing) this.outline.cancel(); else this.outline.end();
+            return;
+        }
+        if((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase()) && this.outline.previewing) {
+            event.preventDefault(); this.outline.cancel(); return;
+        }
         if(this.ui.activeDialog) {
             if(event.key == 'Escape') this.ui.closeDialog();
             return;
@@ -124,9 +154,16 @@ export class EditorPage implements OnInit, AfterViewInit {
         if((event.key === 'Enter' || event.key === ' ') && event.target instanceof Element
             && event.target.closest('button, a, [role="button"]')) return;
 
+        if(this.outline.active && this.outline.handleKey(event)) return;
+
         if(!this.layers.renamingLayer && this.selectionCommands.handleKey(event)) return;
 
         if((event.ctrlKey || event.metaKey) && !this.layers.renamingLayer) {
+            if(event.key.toLowerCase() == 'd' && this.layers.selectedLayers.length) {
+                event.preventDefault();
+                this.layers.duplicateSelectedLayers();
+                return;
+            }
             if(event.key.toLowerCase() == 'z' && !event.shiftKey) {
                 event.preventDefault();
                 this.mutations.undo();
@@ -156,12 +193,6 @@ export class EditorPage implements OnInit, AfterViewInit {
             if(event.key == 'Enter') {
                 event.preventDefault();
                 this.layers.renamingLayer = this.editor.selectedElement;
-                return;
-            }
-
-            if((event.ctrlKey || event.metaKey) && event.key.toLowerCase() == 'd') {
-                event.preventDefault();
-                this.layers.duplicateLayer(this.editor.selectedElement);
                 return;
             }
 
@@ -207,6 +238,7 @@ export class EditorPage implements OnInit, AfterViewInit {
     }
 
     constructor(
+        public rigs: RigEditingService,
         public reference: ReferenceImageService,
         public editor: EditorService,
         public animation: AnimationPlaybackService,
@@ -217,12 +249,18 @@ export class EditorPage implements OnInit, AfterViewInit {
         private route: ActivatedRoute,
         private cdr: ChangeDetectorRef,
         private selectionCommands: CanvasSelectionCommandService,
+        public outline: OutlineEditingService,
     ) {}
 
     ngOnInit(): void {
         if(!this.route.snapshot.queryParamMap.get('id')) this.ui.openDialog('new-project');
         // Canvas right-clicks in Edit mode share the layer menu (and its clipboard actions).
         const select = this.editor.tools.find((tool): tool is SelectTool => tool instanceof SelectTool);
+        if(select) {
+            select.topologyEdit = change => this.mutations.mutate(change);
+            select.outlineSegments = (path, lines, visible) => this.outline.setSegmentsVisible(path, lines, visible);
+            select.editOutline = path => this.outline.begin(path);
+        }
         if(select) select.objectMenu = (event, element) => {
             if(this.animation.mode === 'edit') this.layers.openCanvasContextMenu(event, element);
             else this.editor.closeContextMenu();

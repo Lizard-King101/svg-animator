@@ -10,6 +10,7 @@ import {
     identityMatrix,
     multiplyMatrix,
     transformMatrix,
+    translationMatrix,
     transformedBounds,
     unionBounds,
 } from "./transform.object";
@@ -58,13 +59,13 @@ export function localBounds(element: AnyElement): Bounds {
     return groupLocalBounds(element);
 }
 
-export function resolvedOrigin(element: AnyElement): { x: number; y: number } {
+export function resolvedOrigin(element: AnyElement, bounds?: Bounds): { x: number; y: number } {
     const transform = element.transform;
     if(transform.originX != null && transform.originY != null) {
         return { x: transform.originX, y: transform.originY };
     }
 
-    return boundsCenter(localBounds(element));
+    return boundsCenter(bounds ?? localBounds(element));
 }
 
 export function pinTransformOrigin(element: AnyElement): { x: number; y: number } {
@@ -87,12 +88,19 @@ export function pinAncestorTransformOrigins(rootElements: AnyElement[], element:
     });
 }
 
-export function ownMatrix(element: AnyElement): Matrix {
-    return transformMatrix(element.transform, resolvedOrigin(element));
+export function ownMatrix(element: AnyElement, bounds?: Bounds): Matrix {
+    // Translation does not depend on the pivot. Avoid walking a group's entire
+    // subtree just to render an unchanged or translated layer.
+    if(element.transform.scaleX === 1 && element.transform.scaleY === 1 && element.transform.rotation === 0) {
+        return translationMatrix(element.transform.translateX, element.transform.translateY);
+    }
+    return transformMatrix(element.transform, resolvedOrigin(element, bounds));
 }
 
 export function ownTransformBounds(element: AnyElement): Bounds {
-    return transformedBounds(localBounds(element), ownMatrix(element));
+    const bounds = localBounds(element);
+    // Reusing this hull keeps nested automatic origins to one subtree traversal.
+    return transformedBounds(bounds, ownMatrix(element, bounds));
 }
 
 export function combinedMatrixFor(rootElements: AnyElement[], element: AnyElement): Matrix {
@@ -123,7 +131,9 @@ export function transformedElementBounds(rootElements: AnyElement[], element: An
 
 function groupLocalBounds(group: Group): Bounds {
     const bounds = group.elements
-        .filter((element): element is GroupElement => element.visible)
+        // The clip source still defines geometry when its artwork is hidden.
+        // Keeping it in the control hull also keeps automatic transform origins stable.
+        .filter((element): element is GroupElement => element.visible || element.id === group.clipElementId)
         .map((element) => ownTransformBounds(element));
     return unionBounds(bounds);
 }

@@ -5,15 +5,44 @@ import { AnimatablePropertyDefinition } from "../editor/objects/animation.object
 import { Group } from "../editor/objects/elements/group.object";
 import { Path } from "../editor/objects/elements/path.object";
 import { gradientTimelineProperties } from "../editor/objects/paint.object";
+import { Armature, Bone } from '../editor/objects/armature';
+import { parseRigAnimationProperty, rigAnimationProperty } from '../editor/rig-animation';
 
-export type TimelineRow = LayerTimelineRow | PropertyTimelineRow;
+export type ArtworkTimelineRow = LayerTimelineRow | PropertyTimelineRow;
+export type TimelineRow = ArtworkTimelineRow | RigTimelineRow | BoneTimelineRow | RigPropertyTimelineRow;
 export type LayerTimelineRow = { type: "layer"; element: AnyElement; depth: number };
 export type PropertyTimelineRow = { type: "property"; element: AnyElement; depth: number; property: AnimatablePropertyDefinition };
+export type RigTimelineRow = { type: 'rig'; rig: Armature; depth: number };
+export type BoneTimelineRow = { type: 'bone'; rig: Armature; bone: Bone; depth: number };
+export type RigPropertyTimelineRow = { type: 'rig-property'; rig: Armature; bone: Bone; depth: number; property: AnimatablePropertyDefinition };
+export type NumericTimelineRow = PropertyTimelineRow | RigPropertyTimelineRow;
+
+export function timelineRowTargetId(row: TimelineRow): string { return 'rig' in row ? row.rig.id : row.element.id; }
+export function timelineRowId(row: TimelineRow): string {
+    return row.type === 'bone' || row.type === 'rig-property' ? `${row.rig.id}:${row.bone.id}` : timelineRowTargetId(row);
+}
+export function rigTimelineProperties(bone: Bone): AnimatablePropertyDefinition[] {
+    return (['poseX', 'poseY', 'pose'] as const).map(field => ({ property: rigAnimationProperty(bone.id, field),
+        label: field === 'pose' ? 'Rotation' : field === 'poseX' ? 'Offset X' : 'Offset Y', valueType: 'number', group: 'transform', mvp: true }));
+}
+
+export function rigBoneBranchIds(rig: Armature, boneId?: string): Set<string> {
+    if(!boneId) return new Set(rig.bones.map(bone => bone.id));
+    const ids = new Set([boneId]);
+    for(let changed = true; changed;) {
+        changed = false;
+        rig.bones.forEach(bone => {
+            if(bone.parentId && ids.has(bone.parentId) && !ids.has(bone.id)) { ids.add(bone.id); changed = true; }
+        });
+    }
+    return ids;
+}
 
 @Injectable()
 export class TimelineEditingService {
     selectedKeyframeIds = new Set<string>();
     private clipboard: CopiedKeyframe[] = [];
+    get copiedChannels(): ReadonlyArray<{ targetId: string; property: string }> { return this.clipboard.map(({ targetId, property }) => ({ targetId, property })); }
 
     projectRows(
         elements: AnyElement[],
@@ -21,8 +50,8 @@ export class TimelineEditingService {
         properties: readonly AnimatablePropertyDefinition[],
         propertySupported: (element: AnyElement, property: AnimatablePropertyDefinition) => boolean,
         pathShapeProperty: AnimatablePropertyDefinition,
-    ): TimelineRow[] {
-        const rows: TimelineRow[] = [];
+    ): ArtworkTimelineRow[] {
+        const rows: ArtworkTimelineRow[] = [];
         const append = (list: AnyElement[], depth: number) => [...list].reverse().forEach((element) => {
             rows.push({ type: "layer", element, depth });
             if(expanded.has(element.id)) {
@@ -35,6 +64,22 @@ export class TimelineEditingService {
             if(element instanceof Group && expanded.has(element.id)) append(element.elements, depth + 1);
         });
         append(elements, 0);
+        return rows;
+    }
+
+    projectRigRows(armatures: readonly Armature[], expanded: ReadonlySet<string>): TimelineRow[] {
+        const rows: TimelineRow[] = [];
+        armatures.forEach(rig => {
+            rows.push({ type: 'rig', rig, depth: 0 });
+            if(!expanded.has(rig.id)) return;
+            const append = (parentId: string | null, depth: number) => rig.bones.filter(bone => bone.parentId === parentId).forEach(bone => {
+                rows.push({ type: 'bone', rig, bone, depth });
+                if(!expanded.has(`${rig.id}:${bone.id}`)) return;
+                rigTimelineProperties(bone).forEach(property => rows.push({ type: 'rig-property', rig, bone, depth: depth + 1, property }));
+                append(bone.id, depth + 1);
+            });
+            append(null, 1);
+        });
         return rows;
     }
 
@@ -61,16 +106,19 @@ export class TimelineEditingService {
         return true;
     }
 
-    paste(
+    paste<T extends { id: string } = AnyElement>(
         animation: AnimationDocument,
         currentTime: number,
-        destination?: AnyElement,
-        mapProperty: (element: AnyElement, property: string, sourceTargetId: string) => string | undefined = (_element, property) => property,
+        destination?: T,
+        mapProperty: (element: T, property: string, sourceTargetId: string) => string | undefined = (_element, property) => property,
+        allowsTarget: (id: string) => boolean = () => true,
+        validProperty: (targetId: string, property: string) => boolean = () => true,
     ): boolean {
         if(this.clipboard.length === 0) return false;
         const entries = this.clipboard.flatMap((copied) => {
+            if(!allowsTarget(destination?.id ?? copied.targetId)) return [];
             const property = destination ? mapProperty(destination, copied.property, copied.targetId) : copied.property;
-            return property ? [{ copied, property }] : [];
+            return property && validProperty(destination?.id ?? copied.targetId, property) ? [{ copied, property }] : [];
         });
         if(entries.length === 0) return false;
         this.selectedKeyframeIds.clear();
@@ -201,6 +249,9 @@ function cloneValue<T>(value: T): T { return value == null ? value : JSON.parse(
 
 /** Returns the numeric channel displayed alongside a selected speed curve. */
 export function semanticPartnerProperty(property: string): string | undefined {
+    const rig = parseRigAnimationProperty(property);
+    if(rig?.field === 'poseX') return rigAnimationProperty(rig.boneId, 'poseY');
+    if(rig?.field === 'poseY') return rigAnimationProperty(rig.boneId, 'poseX');
     const fixed: Record<string, string> = {
         "transform.translateX": "transform.translateY",
         "transform.translateY": "transform.translateX",

@@ -5,9 +5,10 @@ import { Point } from "src/app/editor/objects/point.object";
 import { AnyElement } from "src/app/editor/objects/svg.object";
 import { combinedMatrixFor, findElementChain, pinAncestorTransformOrigins, pinTransformOrigin } from "src/app/editor/objects/element-bounds";
 import { applyMatrix, invertMatrix } from "src/app/editor/objects/transform.object";
-import { EditorService } from "../editor.service";
+import { EditorContextMenuItem, EditorService } from "../editor.service";
 import { Tool } from "./tool";
-import { contourForLine, deletePathAnchor, insertPathPoint, togglePathLineType } from "./path-edit.helpers";
+import { breakPathAtAnchor, closePathContour, contourForAnchor, contourForLine, deletePathAnchor, insertPathPoint, togglePathLineType } from "./path-edit.helpers";
+import { pathTopologyProblem, PathTopologyOperation } from '../../editor/path-topology';
 import { TransformInteraction } from "./transform.interaction";
 import { elementGradient, GradientHandle, moveGradientHandle } from "src/app/editor/objects/gradient-geometry";
 import { GradientPaint } from "src/app/editor/objects/paint.object";
@@ -37,6 +38,11 @@ export class SelectTool extends Tool {
     get snapFeedback() { return this.transformInteraction.snapFeedback; }
     get rotationSnapFeedback() { return this.transformInteraction.rotationSnapFeedback; }
     private gradientDrag?: { element: AnyElement; paint: GradientPaint; handle: GradientHandle };
+    /** Bound by the workspace to its persistent mutation and outline editing owners. */
+    topologyEdit?: (change: () => void) => void;
+    outlineSegments?: (path: Path, lines: Line[], visible: boolean) => void;
+    editOutline?: (path: Path) => void;
+    topologyFeedback = '';
 
     constructor(private _editor: EditorService) {
         super(_editor);
@@ -205,23 +211,62 @@ export class SelectTool extends Tool {
     }
 
     private convertLine(line: Line) {
-        togglePathLineType(line);
+        const path = this._editor.selectedElement;
+        if(!(path instanceof Path) || !this.allLines(path).includes(line)) return;
+        this.changeTopology(path, 'convert', () => togglePathLineType(line));
     }
 
     private insertPoint(path: Path, line: Line, targetPoint?: Point) {
-        const result = insertPathPoint(path, line, (options) => new Line(this._editor, options), targetPoint);
-        if(result.changed) {
-            this._editor.selectedPathAnchor = result.selectedAnchor;
-            this._editor.selectedPathLine = result.selectedLine;
-        }
+        this.changeTopology(path, 'split', () => {
+            const result = insertPathPoint(path, line, (options) => new Line(this._editor, options), targetPoint);
+            if(result.changed) {
+                this._editor.selectedPathAnchor = result.selectedAnchor;
+                this._editor.selectedPathLine = result.selectedLine;
+                this._editor.selectedPathLines = [];
+            }
+            return result.changed;
+        });
     }
 
     private deleteAnchor(path: Path, anchor: Point) {
-        const result = deletePathAnchor(path, anchor, (options) => new Line(this._editor, options));
-        if(result.changed) {
-            this._editor.selectedPathAnchor = undefined;
-            this._editor.selectedPathLine = result.selectedLine;
-        }
+        this.changeTopology(path, 'delete', () => {
+            const result = deletePathAnchor(path, anchor, (options) => new Line(this._editor, options));
+            if(result.changed) {
+                this._editor.selectedPathAnchor = undefined;
+                this._editor.selectedPathLine = result.selectedLine;
+                this._editor.selectedPathLines = [];
+            }
+            return result.changed;
+        });
+    }
+
+    private changeTopology(path: Path, operation: PathTopologyOperation, change: () => boolean): void {
+        if(this._editor.selectedElement !== path) return;
+        this.topologyFeedback = pathTopologyProblem(this._editor.selectedSVG, path, operation) ?? '';
+        if(this.topologyFeedback) return;
+        const run = () => {
+            const chain = findElementChain(this.rootElements(), path) ?? [path];
+            const transforms = chain.map(element => ({ ...element.transform }));
+            pinAncestorTransformOrigins(this.rootElements(), path); pinTransformOrigin(path);
+            if(!change()) chain.forEach((element, index) => element.transform = transforms[index]);
+        };
+        if(this.topologyEdit) this.topologyEdit(run); else run();
+    }
+
+    private breakAt(path: Path, anchor: Point): void {
+        this.changeTopology(path, 'break', () => {
+            const result = breakPathAtAnchor(path, anchor, options => new Line(this._editor, options));
+            if(result.changed) {
+                this._editor.selectedPathAnchor = result.selectedAnchor;
+                this._editor.selectedPathLine = undefined;
+                this._editor.selectedPathLines = [];
+            }
+            return result.changed;
+        });
+    }
+
+    private closeContour(path: Path, contour: PathContour): void {
+        this.changeTopology(path, 'close', () => closePathContour(path, contour).changed);
     }
 
     override down(event: MouseEvent) {
@@ -259,6 +304,10 @@ export class SelectTool extends Tool {
 
         const overlayPoint = this.findOverlayPoint(target);
         if(overlayPoint) {
+            if(overlayPoint.role === 'anchor' && (event.altKey || this._editor.keysDown['Alt']) && this._editor.selectedElement instanceof Path) {
+                this.topologyFeedback = pathTopologyProblem(this._editor.selectedSVG, this._editor.selectedElement, 'convert') ?? '';
+                if(this.topologyFeedback) { this.moveStart = undefined; return; }
+            }
             if(overlayPoint.role === 'anchor' && !(event.altKey || this._editor.keysDown['Alt']) && this._editor.selectedElement instanceof Path) {
                 this.anchorInteraction.begin(this._editor.selectedElement, overlayPoint.point, canvasPoint);
                 this._editor.selectedPathAnchor = overlayPoint.point;
@@ -336,7 +385,8 @@ export class SelectTool extends Tool {
         for(const target of targets) {
             let current: Element | null = target;
             while(current) {
-                const found = current.id ? this._editor.findElement(current.id) : undefined;
+                const targetId = current.getAttribute('data-render-target') || current.id;
+                const found = targetId ? this._editor.findElement(targetId) : undefined;
                 if(found) {
                     const chain = findElementChain(this.rootElements(), found);
                     return chain?.every((element) => element.visible && !element.locked) ? found : undefined;
@@ -513,21 +563,33 @@ export class SelectTool extends Tool {
 
         const overlayPoint = this.findOverlayPoint(target);
         if(overlayPoint?.role == 'anchor') {
+            const path = this._editor.selectedElement;
+            const contour = contourForAnchor(path, overlayPoint.point);
+            const problem = pathTopologyProblem(this._editor.selectedSVG, path, 'break');
+            const canBreak = !!contour && (contour.closed || contour.lines.some((line, index) => index > 0 && line.points[0] === overlayPoint.point));
             this._editor.selectedPathAnchor = overlayPoint.point;
             this._editor.selectedPathLine = undefined;
             this._editor.selectedPathLines = [];
             this._editor.openContextMenu(menuPosition.x, menuPosition.y, [
                 {
+                    label: 'Break at selected anchor', disabled: !!problem || !canBreak,
+                    action: () => this.breakAt(path, overlayPoint.point),
+                },
+                ...(contour && !contour.closed ? [{ label: 'Close contour', disabled: !!problem, action: () => this.closeContour(path, contour) }] : []),
+                {
                     label: 'Delete point',
                     danger: true,
                     shortcut: 'Del',
+                    disabled: !!pathTopologyProblem(this._editor.selectedSVG, path, 'delete'),
                     action: () => {
-                        this.deleteAnchor(this._editor.selectedElement as Path, overlayPoint.point);
+                        this.deleteAnchor(path, overlayPoint.point);
                     }
-                }
+                },
+                ...(this.editOutline ? [{ label: 'Edit outline', action: () => this.editOutline?.(path) }] : []),
             ]);
             this._editor.contextMenu!.infoTitle = 'Path shortcuts';
             this._editor.contextMenu!.infoLines = [
+                ...(problem ? [problem] : []),
                 'Alt-drag anchor: convert point',
                 'Delete or Backspace: delete selected point',
             ];
@@ -536,27 +598,37 @@ export class SelectTool extends Tool {
 
         const overlaySegment = this.findOverlaySegment(target);
         if(overlaySegment) {
+            const path = this._editor.selectedElement;
+            const contour = contourForLine(path, overlaySegment);
+            const lines = this._editor.selectedPathLines.includes(overlaySegment) ? [...this._editor.selectedPathLines] : [overlaySegment];
+            const problem = pathTopologyProblem(this._editor.selectedSVG, path, 'convert');
             this._editor.selectedPathLine = overlaySegment;
-            this._editor.selectedPathLines = [overlaySegment];
+            this._editor.selectedPathLines = lines;
             this._editor.selectedPathAnchor = undefined;
             this._editor.openContextMenu(menuPosition.x, menuPosition.y, [
                 {
                     label: 'Insert point',
                     shortcut: 'I',
+                    disabled: !!pathTopologyProblem(this._editor.selectedSVG, path, 'split'),
                     action: () => {
-                        this.insertPoint(this._editor.selectedElement as Path, overlaySegment, canvasPoint);
+                        this.insertPoint(path, overlaySegment, this.canvasToSelectedLocal(canvasPoint));
                     }
                 },
                 {
                     label: overlaySegment.type == 'line' ? 'Convert to curve' : 'Convert to line',
                     shortcut: 'C',
+                    disabled: !!problem,
                     action: () => {
                         this.convertLine(overlaySegment);
                     }
-                }
+                },
+                ...(contour ? [{ label: contour.closed ? 'Open contour' : 'Close contour', disabled: !!problem,
+                    action: () => contour.closed ? this.breakAt(path, contour.lines[0].points[0]) : this.closeContour(path, contour) }] : []),
+                ...this.outlineMenu(path, lines),
             ]);
             this._editor.contextMenu!.infoTitle = 'Path shortcuts';
             this._editor.contextMenu!.infoLines = [
+                ...(problem ? [problem] : []),
                 'C: convert selected segment',
                 'I: insert point on selected segment',
                 'Alt-drag anchor: convert point',
@@ -565,6 +637,14 @@ export class SelectTool extends Tool {
         }
 
         this.openObjectMenu(event);
+    }
+
+    private outlineMenu(path: Path, lines: Line[]): EditorContextMenuItem[] {
+        return this.outlineSegments ? [
+            { label: 'Hide outline here', separatorBefore: true, action: () => this.outlineSegments?.(path, lines, false) },
+            { label: 'Show outline here', action: () => this.outlineSegments?.(path, lines, true) },
+            ...(this.editOutline ? [{ label: 'Edit outline', action: () => this.editOutline?.(path) }] : []),
+        ] : [];
     }
 
     /** Right-clicking an object selects it as a left click would (keeping a selected ancestor or selection). */

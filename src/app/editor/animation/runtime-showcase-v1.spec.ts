@@ -1,15 +1,17 @@
 import showcaseEnvelope from "../../../../fixtures/runtime-showcase-v1/document-v5.json";
 import goldenBundle from "../../../../fixtures/runtime-showcase-v1/runtime-bundle-v1.json";
 import { RuntimeBundleV1 } from "../../../../packages/runtime/src/contracts";
-import { SVGSave } from "../objects/svg.object";
 import { SVG } from "../objects/svg.object";
+import { migrateDocument } from "../migrations/document-migrations";
 import { Color } from "../objects/color.object";
 import { compileRuntimeAnimation, evaluateCompiledRuntimeTrack } from "./runtime-animation-compiler";
 import { evaluateTrack } from "../objects/animation.object";
 import { expectRuntimeDomParity } from "./runtime-dom-parity.spec-support";
 
 describe("runtime-showcase-v1 immutable fixture", () => {
-    const source = SVG.fromSave(showcaseEnvelope.data as SVGSave, { ID: "fixture-id" } as never).save();
+    const migrated = migrateDocument(showcaseEnvelope);
+    if(migrated.status !== 'ok') throw new Error('The immutable legacy fixture must migrate successfully.');
+    const source = SVG.fromSave(migrated.value.data, { ID: "fixture-id" } as never).save();
 
     it("matches the checked-in RuntimeBundleV1 golden without diagnostics", () => {
         const result = compileRuntimeAnimation(source);

@@ -1,7 +1,10 @@
+import { activeActionWindow, actionLocalTime } from './composition.internal';
 import { CompiledNumericTrackV1, CompiledRuntimeTrackV1, RuntimeSegmentMode } from "./contracts";
 import { evaluateTemporalCubicArray } from "./temporal.internal";
 
 export function evaluateRuntimeTrack(track: CompiledRuntimeTrackV1, time: number): number | boolean | string | undefined {
+    const active = activeActionWindow(track.actionWindows ?? [], time);
+    if(active) return evaluateRuntimeTrack(active.track, actionLocalTime(active, time));
     if(track.times.length === 0) return undefined;
     if(time <= track.times[0]) return track.values[0];
     const last = track.times.length - 1;

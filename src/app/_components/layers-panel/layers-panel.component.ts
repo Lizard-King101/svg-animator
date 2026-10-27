@@ -1,6 +1,8 @@
+import { RigLayersComponent } from '../rig-editor/rig-layers.component';
+import { RigLayerBadgeComponent } from '../rig-editor/rig-layer-badge.component';
 import { NgClass, NgFor, NgIf } from "@angular/common";
 import { ChangeDetectorRef, Component, DoCheck, ElementRef } from "@angular/core";
-import { FormsModule } from "@angular/forms";
+import { InlineRenameDirective, InlineRenameResult } from '../../editor/inline-rename.directive';
 import { FaIconComponent } from "@fortawesome/angular-fontawesome";
 import { LayerCommandService } from "../../_services/layer-command.service";
 import { AnyElement } from "../../editor/objects/svg.object";
@@ -8,7 +10,7 @@ import { AnyElement } from "../../editor/objects/svg.object";
 @Component({
     selector: "app-layers-panel",
     standalone: true,
-    imports: [FormsModule, NgClass, NgFor, NgIf, FaIconComponent],
+    imports: [RigLayersComponent, RigLayerBadgeComponent, InlineRenameDirective, NgClass, NgFor, NgIf, FaIconComponent],
     templateUrl: "layers-panel.component.html",
     styles: [`
         :host { display: contents; }
@@ -35,6 +37,15 @@ export class LayersPanelComponent implements DoCheck {
         const rows = this.commands.layerRows;
         const focused = rows.find((row) => row.element.id === this.focusedId);
         this.tabStopId = (focused ?? rows.find((row) => this.commands.isLayerSelected(row.element)) ?? rows[0])?.element.id;
+    }
+
+    finishRename(result: InlineRenameResult, element: AnyElement): void {
+        if(this.commands.renamingLayer !== element) return;
+        this.commands.finishLayerRename(result.value);
+        if(result.restoreFocus) {
+            this.focusedId = element.id;
+            this.host.nativeElement.querySelector<HTMLElement>(`.layer-row[data-layer-id="${CSS.escape(element.id)}"]`)?.focus();
+        }
     }
 
     handleKey(event: KeyboardEvent, element: AnyElement): void {

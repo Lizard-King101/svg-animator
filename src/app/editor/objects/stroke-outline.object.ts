@@ -7,6 +7,7 @@ import { Point } from "./point.object";
 import { clonePaint } from "./paint.object";
 import { dashedPathContourGroups, dashedPathContours } from "./stroke-dash.object";
 import { effectiveStrokeAlignment } from "./stroke-style.object";
+import { strokeIntersection, strokeNormal, strokeOffset } from '../../../../packages/runtime/src/stroke-expansion';
 
 interface Vec {
     x: number;
@@ -870,10 +871,7 @@ function lerpPoint(a: Point, b: Point, t: number): Point {
 }
 
 function normalFromDirection(direction: Vec, side: Side): Vec {
-    return {
-        x: -direction.y * side,
-        y: direction.x * side,
-    };
+    return strokeNormal(direction, side);
 }
 
 function negate(vector: Vec): Vec {
@@ -881,7 +879,8 @@ function negate(vector: Vec): Vec {
 }
 
 function offsetPoint(point: Point, normal: Vec, distanceValue: number): Point {
-    return new Point(point.x + (normal.x * distanceValue), point.y + (normal.y * distanceValue));
+    const offset = strokeOffset(point, normal, distanceValue);
+    return new Point(offset.x, offset.y);
 }
 
 function unit(a: Point, b: Point): Vec {
@@ -909,15 +908,8 @@ function unitVector(vector: Vec): Vec | null {
 }
 
 function lineIntersection(pointA: Point, directionA: Vec, pointB: Point, directionB: Vec): Point | null {
-    const determinant = cross(directionA, directionB);
-    if(Math.abs(determinant) <= EPSILON) {
-        return null;
-    }
-
-    const dx = pointB.x - pointA.x;
-    const dy = pointB.y - pointA.y;
-    const t = ((dx * directionB.y) - (dy * directionB.x)) / determinant;
-    return new Point(pointA.x + (directionA.x * t), pointA.y + (directionA.y * t));
+    const intersection = strokeIntersection(pointA, directionA, pointB, directionB, EPSILON);
+    return intersection ? new Point(intersection.x, intersection.y) : null;
 }
 
 function cross(a: Vec, b: Vec): number {

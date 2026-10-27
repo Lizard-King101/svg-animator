@@ -82,13 +82,27 @@ animation-timeline {
 }
 
 .timeline-toolbar {
-  flex: 0 0 36px;
+  flex: 0 0 auto;
+  min-height: 36px;
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 10px;
+  padding: 4px 10px;
   border-bottom: 1px solid var(--border);
 }
+
+animation-timeline .timeline-options {
+  display:flex; flex:0 0 auto; flex-wrap:wrap; align-items:center; gap:16px;
+  padding:6px 10px; border-bottom:1px solid var(--border); background:var(--bg-base);
+  .timeline-zoom-field output { width:auto; }
+  .ghost-legend { display:inline-flex; gap:5px; align-items:center; color:var(--text-secondary); font-size:11px; }
+  .ghost-legend i { width:8px; height:8px; border-radius:50%; }
+  .past { background:#2dd4bf; } .future { background:#f59e0b; }
+}
+
+animation-timeline .surface-button:focus-visible,
+animation-timeline .timeline-icon:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 
 .surface-switch {
   display: inline-flex;
@@ -104,7 +118,7 @@ animation-timeline {
   border: 0;
   border-radius: 3px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 10px;
   cursor: pointer;
 
@@ -127,7 +141,7 @@ animation-timeline {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 9px;
   white-space: nowrap;
 
@@ -208,7 +222,7 @@ animation-timeline {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 10px;
 
   span {

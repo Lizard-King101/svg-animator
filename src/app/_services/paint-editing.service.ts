@@ -239,13 +239,13 @@ export class PaintEditingService {
 
     private captureVariant(element: AnyElement, key: PaintSettingKey, paint: Paint | null): CachedPaintVariant {
         const gradient = isGradientPaint(paint);
-        const tracks = this.editor.selectedSVG?.animation.tracks.filter((track) => track.targetId === element.id
+        const tracks = (this.animation.activeAnimation ?? this.editor.selectedSVG?.animation)?.tracks.filter((track) => track.targetId === element.id
             && (gradient ? track.property.startsWith(this.gradientPrefix(key)) : track.property === this.solidProperty(key))) ?? [];
         return { paint: clonePaint(paint), tracks: tracks.map(cloneTrack) };
     }
 
     private restoreTracks(element: AnyElement, key: PaintSettingKey, variant: CachedPaintVariant): void {
-        const animation = this.editor.selectedSVG?.animation;
+        const animation = (this.animation.activeAnimation ?? this.editor.selectedSVG?.animation);
         if(!animation) return;
         const gradient = isGradientPaint(variant.paint);
         animation.tracks = animation.tracks.filter((track) => track.targetId !== element.id
@@ -256,12 +256,12 @@ export class PaintEditingService {
     }
 
     private removeTracks(element: AnyElement, predicate: (track: AnimationTrack) => boolean): void {
-        const animation = this.editor.selectedSVG?.animation;
+        const animation = (this.animation.activeAnimation ?? this.editor.selectedSVG?.animation);
         if(animation) animation.tracks = animation.tracks.filter((track) => track.targetId !== element.id || !predicate(track));
     }
 
     private session(element: AnyElement, key: PaintSettingKey): PaintSession {
-        const cacheKey = `${this.editor.selectedSVG?.id ?? "none"}:${element.id}:${key}`;
+        const cacheKey = `${this.editor.selectedSVG?.id ?? "none"}:${this.animation.contextKey}:${element.id}:${key}`;
         let session = this.sessions.get(cacheKey);
         if(!session) {
             session = {};

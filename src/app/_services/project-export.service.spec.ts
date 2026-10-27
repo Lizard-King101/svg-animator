@@ -1,5 +1,5 @@
 import { ProjectExportService } from "./project-export.service";
-import { migrateDocument } from "../editor/migrations/document-migrations";
+import { CURRENT_DOCUMENT_VERSION, migrateDocument } from "../editor/migrations/document-migrations";
 import { SVGSave } from "../editor/objects/svg.object";
 
 describe("ProjectExportService", () => {
@@ -14,7 +14,7 @@ describe("ProjectExportService", () => {
         },
     });
 
-    it("builds a deterministic editable v6 envelope even with orphaned tracks", () => {
+    it("builds a deterministic editable v16 envelope even with orphaned tracks", () => {
         const service = new ProjectExportService();
         const project = { name: "Demo / unsafe", svgData: source() };
         const first = service.build(project);
@@ -25,7 +25,7 @@ describe("ProjectExportService", () => {
         expect(first.mimeType).toBe("application/json");
         const envelope = JSON.parse(first.content as string);
         expect(envelope.kind).toBe("svg-animator/document");
-        expect(envelope.version).toBe(7);
+        expect(envelope.version).toBe(CURRENT_DOCUMENT_VERSION);
         expect(envelope.data.animation.tracks[0].targetId).toBe("deleted-layer");
         expect(migrateDocument(envelope).status).toBe("ok");
     });

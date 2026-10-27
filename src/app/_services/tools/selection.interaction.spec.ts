@@ -94,6 +94,21 @@ describe('shared canvas selection', () => {
         expect(editor.selectedElements).toEqual([second]);
     });
 
+    it('selects visible clipping artwork through its fill and outline projections', () => {
+        const { editor, svg, first, second } = setup();
+        const group = new Group(editor); group.elements = [first, second]; group.clipElementId = first.id; svg.elements = [group];
+        const container = document.createElementNS('http://www.w3.org/2000/svg', 'g'); container.id = group.id;
+        const projection = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        projection.id = `${first.id}--stroke-${group.id}`; projection.setAttribute('data-render-target', first.id);
+        const stroke = document.createElementNS('http://www.w3.org/2000/svg', 'path'); projection.appendChild(stroke); container.appendChild(projection);
+        const event = mouse(20, 30); Object.defineProperty(event, 'target', { value: stroke });
+        const tool = new SelectTool(editor), select = () => { editor.selectedElements = []; tool.down(event); tool.up(event); };
+        select(); expect(editor.selectedElement).toBe(first);
+        first.visible = false; select(); expect(editor.selectedElements).toEqual([]); first.visible = true;
+        first.locked = true; select(); expect(editor.selectedElements).toEqual([]); first.locked = false;
+        group.visible = false; select(); expect(editor.selectedElements).toEqual([]);
+    });
+
     it('uses a screen-pixel marquee threshold and selects a whole group once', () => {
         const { editor, svg, first, second } = setup();
         const group = new Group(editor); group.elements = [first, second]; svg.elements = [group];

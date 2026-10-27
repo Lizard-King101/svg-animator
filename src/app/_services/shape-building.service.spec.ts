@@ -21,6 +21,7 @@ import { constructionSources } from '../editor/objects/construction-sources';
 import { combinedMatrixFor } from '../editor/objects/element-bounds';
 import { applyMatrix } from '../editor/objects/transform.object';
 import { buildSVGMarkup } from '../editor/svg-markup';
+import { createPathBinding } from '../editor/rig-binding';
 
 const mouse = (x: number, y: number) => new MouseEvent('click', { clientX: x, clientY: y });
 function setup() {
@@ -40,6 +41,20 @@ function setup() {
 }
 
 describe('shape creation and trim commands', () => {
+    it('refuses destructive trim of weighted paths and paths with authored outline sections', () => {
+        const t = setup();
+        try {
+            t.svg.rigs.armatures = [{ id: 'rig', name: 'Rig', bones: [], bindings: [createPathBinding(t.svg, t.divider, 'bone')] }];
+            const before = t.divider.save();
+            t.building.activate('trim'); t.building.click(mouse(200, 200));
+            expect(t.building.error).toContain('bound to bones'); expect(t.building.error).toContain('Edit outline');
+            expect(t.divider.save()).toEqual(before); expect(t.projects.upsert).not.toHaveBeenCalled();
+            t.svg.rigs.armatures = []; t.divider.outlineSections = [];
+            t.building.activate('trim'); t.building.click(mouse(200, 200));
+            expect(t.building.error).toContain('Restore full outline');
+            expect(t.svg.elements[1]).toBe(t.divider); expect(t.projects.upsert).not.toHaveBeenCalled();
+        } finally { t.destroy(); }
+    });
     it('uses drawing paints for built regions without recoloring sources, and restores them on redo', () => {
         const t = setup(), original = t.preferences.drawingPaint;
         try {

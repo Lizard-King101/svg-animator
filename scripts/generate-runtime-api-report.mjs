@@ -1,7 +1,8 @@
+import { fileURLToPath } from 'node:url';
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-const root = resolve(new URL("..", import.meta.url).pathname);
+const root = fileURLToPath(new URL("..", import.meta.url));
 const declarationsDirectory = resolve(root, "packages/runtime/dist");
 const reportPath = resolve(root, "packages/runtime/API_REPORT.md");
 const files = (await readdir(declarationsDirectory)).filter((file) => file.endsWith(".d.ts") && !file.endsWith(".internal.d.ts")).sort();

@@ -3,6 +3,9 @@ import { evaluateRuntimeTrack } from "./evaluator";
 import { RuntimePlayerError } from "./errors";
 import { RuntimeScene } from "./scene";
 import { resolveSvgRoot } from "./dom.internal";
+import { validateRuntimeRigs } from './rig/runtime-rigs';
+import { outlineProjectionProblem, outlineSectionsProblem } from './outline';
+import { renderTargetNodes } from './render-roles.internal';
 export class RuntimePlayer {
     constructor(root, bundle, options = {}) {
         this.root = root;
@@ -16,7 +19,7 @@ export class RuntimePlayer {
         this._playbackRate = finiteRate(options.playbackRate ?? 1);
         this._loop = options.loop ?? bundle.animation.loop;
         this.initialAttributes = snapshotAttributes(root);
-        this.scene = new RuntimeScene(root, bundle.artwork.targets);
+        this.scene = new RuntimeScene(root, bundle.artwork.targets, bundle.rigs);
         this.applyAt(0);
         queueMicrotask(() => this.emit("ready", { player: this }));
         if (options.autoPlay && (options.autoplayWhenReducedMotion || !prefersReducedMotion()))
@@ -114,7 +117,14 @@ export class RuntimePlayer {
             this.lastFrameTime = timestamp;
         const delta = Math.max(0, timestamp - this.lastFrameTime) / 1000 * this._playbackRate;
         this.lastFrameTime = timestamp;
-        this.advance(delta);
+        try {
+            this.advance(delta);
+        }
+        catch (error) {
+            if (!(error instanceof RuntimePlayerError))
+                throw error;
+            return;
+        }
         if (this._state === "playing")
             this.frameId = requestAnimationFrame((time) => this.tick(time));
     }
@@ -155,14 +165,22 @@ export class RuntimePlayer {
         this.applyAt(next);
     }
     applyAt(time) {
-        this._time = time;
         const animation = this.bundle.animation;
         animation.tracks.forEach((track) => {
             const value = evaluateRuntimeTrack(track, time);
             if (value !== undefined)
                 this.scene.write(animation.targets[track.target], animation.properties[track.property], value);
         });
-        this.scene.render();
+        try {
+            this.scene.render();
+            this._time = time;
+        }
+        catch (error) {
+            this.pause();
+            if (error instanceof RuntimePlayerError)
+                this.emit('error', { error });
+            throw error;
+        }
     }
     emitMarkers(from, to) {
         if (from === to)
@@ -230,12 +248,26 @@ export function validateRuntimeBundle(value) {
         throw new RuntimePlayerError("unsupported-capability", `Runtime capability “${unsupported}” is not supported.`);
     if (!bundle.artwork || typeof bundle.artwork.signature !== "string" || !Array.isArray(bundle.artwork.targets))
         throw new RuntimePlayerError("invalid-bundle", "Runtime bundle artwork is incomplete.");
+    if (bundle.artwork.targets.some(target => target.clipping?.sourceVisibility !== undefined && target.clipping.sourceVisibility !== true))
+        throw new RuntimePlayerError('invalid-bundle', 'Clipping sourceVisibility must be true when present.');
+    if (bundle.artwork.targets.some(target => target.clipping?.sourceVisibility) && !bundle.requiredCapabilities.includes('render.visible-clipping-v1'))
+        throw new RuntimePlayerError('invalid-bundle', 'Visible clipping sources require the render.visible-clipping-v1 capability.');
+    for (const target of bundle.artwork.targets)
+        if (target.path?.outlineSections !== undefined || target.path?.explicitClosure) {
+            if (!bundle.requiredCapabilities.includes('render.outline-sections-v1'))
+                throw new RuntimePlayerError('invalid-bundle', 'Outline sections require the render.outline-sections-v1 capability.');
+            const sections = target.path.outlineSections;
+            const problem = sections !== undefined ? outlineSectionsProblem(target.path.contours, sections)
+                ?? (target.stroke ? outlineProjectionProblem(target.path.contours, sections, { ...target.stroke, rounded: target.path.rounded }) : undefined) : undefined;
+            if (problem)
+                throw new RuntimePlayerError('invalid-bundle', problem);
+        }
     if (!bundle.animation || !Number.isFinite(bundle.animation.duration) || !Array.isArray(bundle.animation.tracks)
         || !Array.isArray(bundle.animation.targets) || !Array.isArray(bundle.animation.properties))
         throw new RuntimePlayerError("invalid-bundle", "Runtime bundle animation is incomplete.");
     if (bundle.animation.duration < 0 || !Array.isArray(bundle.animation.markers) || !Array.isArray(bundle.animation.variables))
         throw new RuntimePlayerError("invalid-bundle", "Runtime bundle timing metadata is invalid.");
-    bundle.animation.tracks.forEach((track, index) => {
+    const validateTrack = (track, index, nested = false) => {
         if (!track || !Number.isInteger(track.target) || track.target < 0 || track.target >= bundle.animation.targets.length
             || !Number.isInteger(track.property) || track.property < 0 || track.property >= bundle.animation.properties.length
             || !Array.isArray(track.times) || !Array.isArray(track.values) || track.times.length === 0 || track.times.length !== track.values.length
@@ -250,7 +282,28 @@ export function validateRuntimeBundle(value) {
             throw new RuntimePlayerError("invalid-bundle", `Color runtime track ${index} is malformed.`);
         if (track.kind !== "number" && track.kind !== "color" && track.kind !== "boolean" && track.kind !== "string")
             throw new RuntimePlayerError("invalid-bundle", `Runtime track ${index} has an unknown kind.`);
-    });
+        if (track.actionWindows !== undefined) {
+            if (nested || !bundle.requiredCapabilities.includes('composition.action-windows-v1') || !Array.isArray(track.actionWindows))
+                throw new RuntimePlayerError('invalid-bundle', 'Action windows require the composition capability and cannot nest.');
+            let end = -Infinity;
+            track.actionWindows.forEach(window => {
+                if (window?.timing !== undefined) {
+                    const t = window.timing;
+                    if (!t || !bundle.requiredCapabilities.includes('composition.action-timing-v1')
+                        || ![t.sourceStart, t.sourceEnd, t.rate].every(Number.isFinite)
+                        || t.sourceStart < 0 || t.sourceEnd <= t.sourceStart || t.rate < .01 || t.rate > 100)
+                        throw new Error('Invalid action time mapping.');
+                }
+                if (!window || !Number.isFinite(window.start) || !Number.isFinite(window.end) || window.start < 0 || window.end <= window.start
+                    || window.start < end || !window.track || window.track.target !== track.target || window.track.property !== track.property || window.track.kind !== track.kind)
+                    throw new RuntimePlayerError('invalid-bundle', 'Action windows must be ordered, nonoverlapping, and address the same channel.');
+                end = window.end;
+                validateTrack(window.track, index, true);
+            });
+        }
+    };
+    bundle.animation.tracks.forEach((track, index) => validateTrack(track, index));
+    validateRuntimeRigs(bundle);
 }
 function validateArtwork(root, bundle) {
     const actual = root.getAttribute("data-svg-animator-signature");
@@ -258,7 +311,7 @@ function validateArtwork(root, bundle) {
         throw new RuntimePlayerError("artwork-signature-mismatch", actual
             ? `SVG artwork signature ${actual} does not match bundle ${bundle.artwork.signature}.`
             : "SVG artwork has no data-svg-animator-signature attribute.");
-    const missing = bundle.artwork.targets.find((target) => !root.querySelector(`[id="${selectorValue(target.id)}"]`));
+    const missing = bundle.artwork.targets.find((target) => !renderTargetNodes(root, target.id).length);
     if (missing)
         throw new RuntimePlayerError("artwork-signature-mismatch", `SVG artwork is missing runtime target “${missing.id}”.`);
 }
@@ -275,5 +328,4 @@ function prefersReducedMotion() { return typeof matchMedia === "function" && mat
 function finiteRate(value) { if (!Number.isFinite(value) || value === 0)
     throw new RangeError("playbackRate must be a finite non-zero number."); return value; }
 function clamp(value, minimum, maximum) { return Math.max(minimum, Math.min(maximum, value)); }
-function selectorValue(value) { return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"'); }
 //# sourceMappingURL=player.js.map

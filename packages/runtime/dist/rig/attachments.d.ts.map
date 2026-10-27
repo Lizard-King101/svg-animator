@@ -1,0 +1,1 @@
+{"version":3,"file":"attachments.d.ts","sourceRoot":"","sources":["../../src/rig/attachments.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,QAAQ,EAA6B,eAAe,EAAE,MAAM,YAAY,CAAC;AAClF,OAAO,EAAoC,MAAM,EAAkB,cAAc,EAAE,MAAM,aAAa,CAAC;AAEvG,wBAAgB,gBAAgB,CAAC,GAAG,EAAE,QAAQ,EAAE,UAAU,EAAE,eAAe,GAAG,MAAM,CAGnF;AAED,wBAAgB,oBAAoB,CAAC,GAAG,EAAE,QAAQ,GAAG,GAAG,CAAC,MAAM,EAAE,cAAc,CAAC,CAQ/E"}

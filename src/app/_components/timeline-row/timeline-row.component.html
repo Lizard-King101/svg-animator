@@ -1,17 +1,21 @@
 <div class="timeline-left-cell"
-     [ngClass]="{'selected': timeline.editor.selectedElements.includes(row.element), 'property': row.type == 'property', 'popover-open': timeline.colorEditorOpen(row)}"
+     [ngClass]="{'selected': timeline.rowSelected(row), 'property': timeline.isPropertyRow(row), 'popover-open': timeline.colorEditorOpen(row)}"
      [style.padding-left.px]="10 + row.depth * 16"
      (click)="timeline.selectTimelineRow(row)"
      (contextmenu)="timeline.openRowContextMenu(row, $event)">
   <button class="row-expander"
-          *ngIf="row.type == 'layer'"
-          (click)="$event.stopPropagation(); timeline.toggleLayer(row.element)">
-    <fa-icon [icon]="timeline.expandedLayerIds.has(row.element.id) ? 'angle-down' : 'angle-right'"></fa-icon>
+          *ngIf="!timeline.isPropertyRow(row)"
+          [attr.aria-label]="(timeline.rowExpanded(row) ? 'Collapse ' : 'Expand ') + timeline.rowLabel(row)"
+          [attr.aria-expanded]="timeline.rowExpanded(row)"
+          [disabled]="timeline.filteringRows"
+          [title]="timeline.filteringRows ? 'Matching branches are expanded while filtering' : ''"
+          (click)="$event.stopPropagation(); timeline.toggleRow(row)">
+    <fa-icon [icon]="timeline.rowExpanded(row) ? 'angle-down' : 'angle-right'"></fa-icon>
   </button>
-  <span class="row-expander-placeholder" *ngIf="row.type == 'property'"></span>
-  <span class="row-name" *ngIf="row.type == 'layer'">{{ row.element.name }}</span>
-  <ng-container *ngIf="row.type == 'property'">
-    <span class="row-name">{{ row.property.label }}</span>
+  <span class="row-expander-placeholder" *ngIf="timeline.isPropertyRow(row)"></span>
+  <span class="row-name" *ngIf="!timeline.isPropertyRow(row)">{{ row.type == 'rig' ? '⊕ ' : row.type == 'bone' ? '◇ ' : '' }}{{ timeline.rowLabel(row) }}</span>
+  <ng-container *ngIf="row.type == 'property' || row.type == 'rig-property'">
+    <span class="row-name">{{ row.property.label }} <span *ngIf="timeline.rowLoopLabel(row) as loopLabel" [attr.title]="loopLabel" [attr.aria-label]="loopLabel">↔</span></span>
     <button class="scale-link-toggle"
             *ngIf="timeline.isScaleRow(row)"
             [class.active]="timeline.scaleLinked(row)"
@@ -37,6 +41,9 @@
            *ngIf="row.property.valueType == 'number'"
            type="number"
            step="0.01"
+           [disabled]="!!timeline.rowDisabledReason(row)"
+           [title]="timeline.rowDisabledReason(row)"
+           [attr.aria-label]="row.property.label"
            [ngModel]="timeline.propertyValue(row)"
            (click)="$event.stopPropagation()"
            (pointerdown)="timeline.beginNumberDrag(row, $event)"
@@ -76,8 +83,9 @@
       </button>
       <button class="key-button key-toggle"
               [ngClass]="{'active': timeline.hasKeyAtTime(row)}"
+              [disabled]="!!timeline.rowDisabledReason(row) && !timeline.hasKeyAtTime(row)"
               (click)="$event.stopPropagation(); timeline.toggleKey(row)"
-              [title]="timeline.hasKeyAtTime(row) ? 'Remove keyframe' : 'Add keyframe'">
+              [title]="timeline.hasKeyAtTime(row) ? 'Remove keyframe' : timeline.rowDisabledReason(row) || 'Add keyframe'">
         <fa-icon icon="diamond"></fa-icon>
       </button>
       <button class="key-button"

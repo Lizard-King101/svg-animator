@@ -1,3 +1,4 @@
+import { RenderProjection, projectionId, clippingProjection, childProjection, isClipProjection, projectionFill, projectionStroke, projectionVisible, projectionRoles } from '../../editor/render-projection';
 import { ReferenceImage } from '../../editor/objects/reference-image';
 import { AfterViewInit, Component, ElementRef, HostBinding, Input } from "@angular/core";
 import { NgFor, NgIf, NgTemplateOutlet } from "@angular/common";
@@ -10,8 +11,10 @@ import { motionAdjustedMatrix } from "src/app/editor/objects/motion-path.object"
 import { AnyElement, ImportedSourceNode } from "src/app/editor/objects/svg.object";
 import { matrixToSvg } from "src/app/editor/objects/transform.object";
 import { ImportedSVGSourceDirective } from "./imported-svg-source.directive";
-import { GradientPaint, gradientPaints, gradientTransformValue, Paint, paintOpacity, paintSVGValue } from "src/app/editor/objects/paint.object";
+import { GradientPaint, gradientPaints, gradientTransformValue, isGradientPaint, Paint, paintOpacity, paintSVGValue } from "src/app/editor/objects/paint.object";
 import { drawProgressVisible, effectiveStrokeAlignment, StrokeAlignment, strokeDasharrayAttr } from "src/app/editor/objects/stroke-style.object";
+import { outlineGradientTransform, outlineStrokePaint, projectPathOutline } from 'src/app/editor/path-outline';
+import { resolvedOutlineSections } from 'src/app/editor/outline-preview';
 
 @Component({
     standalone: true,
@@ -59,8 +62,17 @@ export class SVGDisplay implements AfterViewInit {
         return element instanceof Group ? element : null;
     }
 
-    clipUrl(group: Group): string | null {
-        return group.clipElement ? `url(#${group.clipPathId})` : null;
+    readonly projectionId = projectionId;
+    readonly clippingProjection = clippingProjection;
+    readonly childProjection = childProjection;
+    readonly isClipProjection = isClipProjection;
+    readonly projectionFill = projectionFill;
+    readonly projectionStroke = projectionStroke;
+    readonly projectionVisible = projectionVisible;
+    readonly projectionRoles = projectionRoles;
+
+    clipUrl(group: Group, projection?: RenderProjection): string | null {
+        return group.clipElement ? `url(#${projectionId(group.clipPathId, projection)})` : null;
     }
 
     clipElementList(group: Group): Array<Group['elements'][number]> {
@@ -97,10 +109,21 @@ export class SVGDisplay implements AfterViewInit {
     }
 
     strokeAlignment(element: Path | Shape): StrokeAlignment { return effectiveStrokeAlignment(element); }
-    strokeEffectId(element: Path | Shape): string { return `stroke-${this.strokeAlignment(element)}-${element.id}`; }
-    strokeEffectUrl(element: Path | Shape): string { return `url(#${this.strokeEffectId(element)})`; }
-    drawMaskId(path: Path): string { return `stroke-draw-${path.id}`; }
-    drawMaskUrl(path: Path): string { return `url(#${this.drawMaskId(path)})`; }
+    hasOutlineSections(path: Path): boolean { return resolvedOutlineSections(path) !== undefined; }
+    outlineData(path: Path): string { return projectPathOutline(path, resolvedOutlineSections(path)).strokeData; }
+    outlinePaint(path: Path, projection?: RenderProjection): string | null {
+        const paint = outlineStrokePaint(path);
+        return projection && paint === `url(#outline-paint-${path.id})` ? `url(#${projectionId(`outline-paint-${path.id}`, projection)})` : paint;
+    }
+    outlineGradient(path: Path): GradientPaint | undefined {
+        const paint = path.settings.stroke;
+        return isGradientPaint(paint) && paint.units === 'objectBoundingBox' ? paint : undefined;
+    }
+    outlineGradientTransform(path: Path): string { return outlineGradientTransform(path, resolvedOutlineSections(path)); }
+    strokeEffectId(element: Path | Shape, projection?: RenderProjection): string { return projectionId(`stroke-${this.strokeAlignment(element)}-${element.id}`, projection); }
+    strokeEffectUrl(element: Path | Shape, projection?: RenderProjection): string { return `url(#${this.strokeEffectId(element, projection)})`; }
+    drawMaskId(path: Path, projection?: RenderProjection): string { return projectionId(`stroke-draw-${path.id}`, projection); }
+    drawMaskUrl(path: Path, projection?: RenderProjection): string { return `url(#${this.drawMaskId(path, projection)})`; }
     strokeDasharray(element: Path | Shape): string | number | null {
         return strokeDasharrayAttr(element.settings.stroke_dasharray)
             ?? (element instanceof Path ? this.drawDasharrayAttr(element) : null);

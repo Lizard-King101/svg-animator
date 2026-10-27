@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="-40 20 480 300" data-svg-animator-signature="fnv1a32-5ad33bef">
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="-40 20 480 300" data-svg-animator-signature="fnv1a32-a8afd634">
   <defs>
     <linearGradient id="path-gradient" data-render-role="gradient" gradientUnits="userSpaceOnUse" spreadMethod="reflect" gradientTransform="matrix(1 0 0 1 0 0)" x1="20" y1="40" x2="170" y2="140">
       <stop id="path-stop-a" data-render-role="gradient-stop" offset="0" stop-color="#ff0066" stop-opacity="0.85"/>
@@ -32,19 +32,21 @@
       <rect id="" x="215" y="42" width="90" height="80" rx="14" ry="14" data-render-role="geometry fill" fill="#7c3aed" fill-opacity="0.8"/>
       <rect id="" x="215" y="42" width="90" height="80" rx="14" ry="14" data-render-role="geometry stroke" fill="none" stroke="#f8fafc" stroke-width="10" stroke-linecap="square" stroke-linejoin="bevel" stroke-miterlimit="4" mask="url(#stroke-outside-reflecting-rect)"/>
     </g>
-    <defs>
-      <clipPath id="clip-clipped-group">
-        <ellipse id="clip-circle" cx="355" cy="170" rx="45" ry="45"/>
-      </clipPath>
-    </defs>
-    <g id="clipped-group" data-svg-animator-target="" clip-path="url(#clip-clipped-group)">
-      <defs>
-        <clipPath id="stroke-inside-radial-ellipse"><ellipse id="" cx="355" cy="170" rx="65" ry="55" data-render-role="geometry-effect"/></clipPath>
-      </defs>
-      <g id="radial-ellipse" data-svg-animator-target="">
-        <ellipse id="" cx="355" cy="170" rx="65" ry="55" data-render-role="geometry fill" fill="url(#radial-gradient)"/>
-        <ellipse id="" cx="355" cy="170" rx="65" ry="55" data-render-role="geometry stroke" fill="none" stroke="#0f172a" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" clip-path="url(#stroke-inside-radial-ellipse)"/>
+    <defs><clipPath id="clip-clipped-group">
+      <ellipse cx="355" cy="170" rx="45" ry="45" id="clip-circle--clip-clipped-group" data-svg-animator-target="" data-render-target="clip-circle" data-render-projection="clip" data-render-role="geometry"/>
+    </clipPath></defs>
+    <g id="clipped-group" data-svg-animator-target="">
+      <ellipse id="clip-circle--fill-clipped-group" data-svg-animator-target="" data-render-target="clip-circle" data-render-projection="fill" style="display:none" data-render-role="geometry fill" cx="355" cy="170" rx="45" ry="45" fill="#000000" stroke="none" stroke-width="0" stroke-miterlimit="4"/>
+      <g clip-path="url(#clip-clipped-group)">
+        <defs>
+          <clipPath id="stroke-inside-radial-ellipse"><ellipse id="" cx="355" cy="170" rx="65" ry="55" data-render-role="geometry-effect"/></clipPath>
+        </defs>
+        <g id="radial-ellipse" data-svg-animator-target="">
+          <ellipse id="" cx="355" cy="170" rx="65" ry="55" data-render-role="geometry fill" fill="url(#radial-gradient)"/>
+          <ellipse id="" cx="355" cy="170" rx="65" ry="55" data-render-role="geometry stroke" fill="none" stroke="#0f172a" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" clip-path="url(#stroke-inside-radial-ellipse)"/>
+        </g>
       </g>
+      <ellipse id="clip-circle--stroke-clipped-group" data-svg-animator-target="" data-render-target="clip-circle" data-render-projection="stroke" style="display:none" data-render-role="geometry stroke" cx="355" cy="170" rx="45" ry="45" fill="none" stroke-width="0" stroke-miterlimit="4"/>
     </g>
     <rect id="motion-dot" data-svg-animator-target="" data-render-role="geometry fill stroke" x="8" y="8" transform="matrix(0.7096 -0.7046 0.7046 0.7096 0.3269 182.8232)" width="16" height="16" fill="#06b6d4" stroke="#ffffff" stroke-width="2" stroke-miterlimit="4"/>
     <text id="caption" data-svg-animator-target="" data-render-role="geometry fill" x="205" y="245" font-size="18" font-family="system-ui" font-weight="700" text-anchor="start" fill="#e2e8f0" dominant-baseline="hanging">
@@ -719,7 +721,7 @@
   "artwork": {
     "height": 300,
     "id": "runtime-showcase-v1",
-    "signature": "fnv1a32-5ad33bef",
+    "signature": "fnv1a32-a8afd634",
     "targets": [
       {
         "geometry": {
@@ -825,6 +827,9 @@
             4
           ],
           "dashoffset": 0,
+          "lineCap": "round",
+          "lineJoin": "round",
+          "miterLimit": 4,
           "width": 1
         },
         "transform": {
@@ -1038,6 +1043,9 @@
             6
           ],
           "dashoffset": 2,
+          "lineCap": "round",
+          "lineJoin": "round",
+          "miterLimit": 6,
           "width": 8
         },
         "transform": {
@@ -1087,6 +1095,9 @@
           "alignment": "outside",
           "dasharray": [],
           "dashoffset": 0,
+          "lineCap": "square",
+          "lineJoin": "bevel",
+          "miterLimit": 4,
           "width": 5
         },
         "transform": {
@@ -1105,7 +1116,8 @@
       {
         "clipping": {
           "clipElementId": "clip-circle",
-          "clipPathId": "clip-clipped-group"
+          "clipPathId": "clip-clipped-group",
+          "sourceVisibility": true
         },
         "geometry": {
           "height": 110,
@@ -1168,6 +1180,9 @@
           "alignment": "center",
           "dasharray": [],
           "dashoffset": 0,
+          "lineCap": null,
+          "lineJoin": null,
+          "miterLimit": 4,
           "width": 0
         },
         "transform": {
@@ -1181,7 +1196,7 @@
           "translateY": 0
         },
         "type": "ellipse",
-        "visible": true
+        "visible": false
       },
       {
         "geometry": {
@@ -1248,6 +1263,9 @@
           "alignment": "inside",
           "dasharray": [],
           "dashoffset": 0,
+          "lineCap": "round",
+          "lineJoin": "round",
+          "miterLimit": 4,
           "width": 7
         },
         "transform": {
@@ -1297,6 +1315,9 @@
           "alignment": "center",
           "dasharray": [],
           "dashoffset": 0,
+          "lineCap": null,
+          "lineJoin": null,
+          "miterLimit": 4,
           "width": 2
         },
         "transform": {
@@ -1373,6 +1394,7 @@
     "render.paint-v1",
     "render.path-v1",
     "render.transforms-v1",
+    "render.visible-clipping-v1",
     "tracks.color-v1",
     "tracks.discrete-v1",
     "tracks.numeric-v1"

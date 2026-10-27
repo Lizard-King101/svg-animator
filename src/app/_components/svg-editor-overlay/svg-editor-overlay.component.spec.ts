@@ -3,6 +3,7 @@ import { PenTool } from '../../_services/tools/pen.tool';
 import { Component } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { EditorService } from "../../_services/editor.service";
+import { EditorPreferencesService } from '../../_services/editor-preferences.service';
 import { SelectTool } from "../../_services/tools/select.tool";
 import { canvasToWorkspaceProjection } from "../../editor/canvas-workspace-projection";
 import { Group } from "../../editor/objects/elements/group.object";
@@ -28,6 +29,32 @@ class OverlayTestHost {
 }
 
 describe("viewport SVG editor overlay", () => {
+    it('keeps completed Pen segments and the closing anchor visible with no stroke, without changing the saved paint', async () => {
+        const editor = new EditorService(new EditorPreferencesService());
+        const svg = new SVG(editor, { width: 400, height: 300, pos: new Point(0, 0) }); editor.selectedSVG = svg;
+        const paths = new Paths(editor); editor.selectedTool = paths;
+        Object.defineProperty(editor, 'drawingPaint', { value: { fill: '#123456', stroke: null, strokeWidth: 0 } });
+        Object.defineProperty(editor, 'objectSnapping', { value: false });
+        spyOn(editor, 'toCanvasPoint').and.callFake((x: number | Point, y?: number) => typeof x === 'number' ? new Point(x, y!) : x);
+        await TestBed.configureTestingModule({ imports: [OverlayTestHost], providers: [{ provide: EditorService, useValue: editor }] }).compileComponents();
+        const fixture = TestBed.createComponent(OverlayTestHost), pen = paths.selectedChild as PenTool;
+        const click = (x: number, y: number) => pen.click(new MouseEvent('click', { clientX: x, clientY: y }));
+        try {
+            click(20, 20); click(120, 20); click(120, 120); fixture.detectChanges();
+            const path = editor.activeElement as Path, root = fixture.nativeElement as HTMLElement;
+            expect(root.querySelector('.pen-draft-segments')?.getAttribute('d')).toBe(path.raw);
+            expect(path.raw).toContain('L 120 20 L 120 120');
+            expect(root.querySelector('.pen-draft-start')?.getAttribute('cx')).toBe('20');
+            expect(root.querySelector('.pen-draft')?.getAttribute('pointer-events')).toBe('none');
+            expect(path.settings.stroke).toBeNull(); expect(path.settings.fill_enabled).toBeFalse();
+            click(20, 20); fixture.detectChanges();
+            expect(path.closed).toBeTrue(); expect(path.settings.fill_enabled).toBeTrue(); expect(path.settings.stroke).toBeNull();
+            expect(root.querySelector('.pen-draft')).toBeNull();
+            click(40, 40); click(80, 90); fixture.detectChanges();
+            expect(root.querySelector('.pen-draft')).not.toBeNull();
+            pen.keyPressed('Escape'); fixture.detectChanges(); expect(root.querySelector('.pen-draft')).toBeNull();
+        } finally { fixture.destroy(); }
+    });
     it('keeps selected-object hit handles out of drawing and trim tools', () => {
         const { editor, svg, overlay } = setup();
         const path = new Path(editor); path.lines = [new Line(editor, { points: [new Point(0, 0), new Point(20, 20)] })];
@@ -174,6 +201,36 @@ describe("viewport SVG editor overlay", () => {
 
 describe("overlay segment interaction", () => {
     afterEach(() => TestBed.resetTestingModule());
+
+    it('retains pointer targets between pointerdown and mousedown while refreshing projected positions', () => {
+        const { editor, svg, overlay } = setup();
+        const path = new Path(editor);
+        const anchor = new Point(10, 20);
+        path.lines = [new Line(editor, { type: 'bezier', points: [anchor, new Point(80, 60)],
+            controlStart: new Point(30, 10), controlEnd: new Point(60, 70) })];
+        svg.elements = [path]; editor.selectedElement = path;
+        TestBed.configureTestingModule({ imports: [OverlayTestHost], providers: [{ provide: EditorService, useValue: editor }] });
+        const fixture = TestBed.createComponent(OverlayTestHost);
+        fixture.componentInstance.artwork = overlay.artwork;
+        fixture.componentInstance.workspace = overlay.workspace;
+        fixture.detectChanges();
+        const root: HTMLElement = fixture.nativeElement;
+        const targets = Array.from(root.querySelectorAll('[data-point-id], [data-transform-handle]'));
+        expect(targets.length).toBe(15);
+        for(const target of targets) {
+            target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            // Document pointer listeners can trigger Angular before the browser
+            // emits mousedown. Removing the target retargets that event to the SVG.
+            fixture.detectChanges();
+            expect(root.contains(target)).withContext(target.outerHTML).toBeTrue();
+        }
+        const anchorNode = root.querySelector(`[data-point-id="${anchor.id}"]`)!;
+        anchor.x += 5;
+        fixture.detectChanges();
+        expect(root.querySelector(`[data-point-id="${anchor.id}"]`)).toBe(anchorNode);
+        expect(anchorNode.getAttribute('cx')).toBe('130');
+        fixture.destroy();
+    });
 
     it("keeps the full hit area across zoom and selection changes, including outside the artboard", () => {
         const { editor, svg, overlay } = setup();

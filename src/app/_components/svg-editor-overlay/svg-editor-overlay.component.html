@@ -1,3 +1,12 @@
+<svg:g *ngIf="drawingPath() as draft" class="pen-draft" pointer-events="none" aria-hidden="true">
+    <svg:g [attr.transform]="draft.transform" fill="none">
+        <svg:path class="pen-draft-outline" [attr.d]="draft.data" stroke="var(--bg-base)" stroke-width="3" vector-effect="non-scaling-stroke" />
+        <svg:path class="pen-draft-segments" [attr.d]="draft.data" stroke="var(--accent)" stroke-width="1.25" vector-effect="non-scaling-stroke" />
+        <svg:path class="pen-draft-preview" [attr.d]="draft.preview" stroke="var(--accent)" stroke-width="1.25" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" />
+    </svg:g>
+    <svg:circle class="pen-draft-start" [attr.cx]="draft.start.x" [attr.cy]="draft.start.y" r="5" fill="var(--bg-surface)" stroke="var(--accent)" stroke-width="2" />
+</svg:g>
+
 <svg:polygon *ngFor="let outline of selectionOutlines()" [attr.points]="outline.points"
     fill="none" stroke="var(--accent)" stroke-width="1" opacity="0.55" pointer-events="none" />
 
@@ -48,7 +57,7 @@
         </svg:g>
     </svg:g>
 
-    <ng-container *ngFor="let segment of bezierSegments(selectedPath)">
+    <ng-container *ngFor="let segment of bezierSegments(selectedPath); trackBy: trackBezierSegment">
         <svg:line
             [attr.x1]="segment.start.x"
             [attr.y1]="segment.start.y"
@@ -97,7 +106,7 @@
         [attr.stroke-width]="screenPx(1.5)"
         pointer-events="all"
     ><svg:title>Move transform origin</svg:title></svg:circle>
-    <ng-container *ngFor="let handle of box.handles">
+    <ng-container *ngFor="let handle of box.handles; trackBy: trackTransformHandle">
         <svg:rect
             class="editor-handle"
             [style.cursor]="handle.cursor"
@@ -115,7 +124,7 @@
 </ng-container>
 
 <ng-container *ngIf="asPath(editableElement) as selectedPath">
-    <ng-container *ngFor="let segment of bezierSegments(selectedPath)">
+    <ng-container *ngFor="let segment of bezierSegments(selectedPath); trackBy: trackBezierSegment">
         <svg:circle
             class="editor-handle point-handle"
             data-point-role="control-start"
@@ -144,7 +153,7 @@
         ><svg:title>Move Bézier control · Alt to move independently</svg:title></svg:circle>
     </ng-container>
 
-    <ng-container *ngFor="let anchor of pathAnchors(selectedPath)">
+    <ng-container *ngFor="let anchor of pathAnchors(selectedPath); trackBy: trackAnchor">
         <svg:circle
             class="editor-handle point-handle anchor-handle"
             [class.selected]="editor.selectedPathAnchor == anchor.point"

@@ -5,6 +5,7 @@ import { ProjectService } from "../_services/project.service";
 import { FaIconLibrary } from "@fortawesome/angular-fontawesome";
 import { fas } from "@fortawesome/free-solid-svg-icons";
 import { far } from "@fortawesome/free-regular-svg-icons";
+import { RigEditingService } from '../_services/rig-editing.service';
 
 describe("editor page keyboard shortcuts", () => {
     function setup() {
@@ -27,7 +28,7 @@ describe("editor page keyboard shortcuts", () => {
             deleteLayer: jasmine.createSpy("deleteLayer"),
             deleteSelectedLayers: jasmine.createSpy("deleteSelectedLayers"),
         };
-        const page = new EditorPage(
+        const page = new EditorPage({ hidesArtworkHandles: false } as any,
             {} as any,
             editor as any,
             { mode: "edit" } as any,
@@ -38,6 +39,7 @@ describe("editor page keyboard shortcuts", () => {
             {} as any,
             {} as any,
             { handleKey: () => false } as any,
+            { active: false } as any,
         );
         return { editor, layers, page, selectedElement };
     }
@@ -124,6 +126,37 @@ describe('new project canvas lifecycle', () => {
         fixture.componentInstance.animation.setMode('edit'); fixture.detectChanges();
         expect(root.querySelector('.canvas-ruler')).not.toBeNull();
         expect(() => fixture.checkNoChanges()).not.toThrow();
+        fixture.destroy();
+    });
+
+    it('retains rig selection, pose inspector and canvas controls when entering Animate', async () => {
+        await TestBed.configureTestingModule({ imports: [EditorPage], providers: [
+            provideRouter([]),
+            { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({}) } } },
+            { provide: ProjectService, useValue: { get: () => undefined, upsert: () => undefined, uniqueName: (base: string) => base } },
+        ] }).compileComponents();
+        TestBed.inject(FaIconLibrary).addIconPacks(fas, far);
+        const fixture = TestBed.createComponent(EditorPage);
+        fixture.detectChanges();
+        const root = fixture.nativeElement as HTMLElement;
+        (root.querySelector('.btn-create') as HTMLButtonElement).click(); fixture.detectChanges();
+        const rig = fixture.debugElement.injector.get(RigEditingService);
+        rig.create(); fixture.detectChanges();
+        const selectedBone = rig.boneId, panel = root.querySelector('app-editor-side-panel');
+        expect(rig.visible).toBeTrue();
+        fixture.componentInstance.animation.setMode('animate'); fixture.detectChanges();
+        expect(root.querySelector('app-editor-side-panel')).toBe(panel);
+        expect(rig.boneId).toBe(selectedBone);
+        expect(rig.visible).toBeTrue();
+        expect(rig.workspace).toBe('pose');
+        expect(root.querySelector('app-rig-overlay [aria-label="Armature bones"]')).not.toBeNull();
+        expect(root.querySelector('app-ik-target')).not.toBeNull();
+        expect(root.querySelector('input[aria-label="Pose offset X"]')).not.toBeNull();
+        expect(root.textContent).toContain('Key selected control');
+        expect(() => fixture.checkNoChanges()).not.toThrow();
+        fixture.componentInstance.animation.setMode('edit'); fixture.detectChanges();
+        expect(root.querySelector('app-editor-side-panel')).toBe(panel);
+        expect(rig.visible).toBeTrue();
         fixture.destroy();
     });
 });

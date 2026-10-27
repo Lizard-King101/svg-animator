@@ -1,4 +1,5 @@
 import { Color, ColorSpace, HSL, RGB } from "./color.object";
+import { actionTime } from '../../../../packages/runtime/src/composition.internal';
 import { solveTemporalCubicPosition } from "../../../../packages/runtime/src/temporal.internal";
 
 export type AnimationValueType = "number" | "color" | "boolean" | "string";
@@ -14,11 +15,41 @@ export interface AnimationDocument {
     variables?: RuntimeVariable[];
     /** Authoring-only preview range. Runtime playback exports ignore it. */
     workArea?: TimelineWorkArea;
+    /** Optional scene composition; local action animations cannot contain compositions. */
+    composition?: AnimationComposition;
 }
+
+export interface AnimationAction {
+    id: string;
+    name: string;
+    targetIds: string[];
+    animation: AnimationDocument;
+}
+export interface ActionPlacement { id: string; actionId: string; start: number; sourceStart?: number; sourceEnd?: number; rate?: number; repeat?: number; }
+
+export function placementTiming(placement: ActionPlacement, sourceDuration: number) {
+    const sourceStart = placement.sourceStart ?? 0, sourceEnd = placement.sourceEnd ?? sourceDuration;
+    const rate = placement.rate ?? 1, repeat = placement.repeat ?? 1;
+    return { sourceStart, sourceEnd, rate, repeat, duration: (sourceEnd - sourceStart) * repeat / rate };
+}
+export function validPlacementTiming(placement: ActionPlacement, sourceDuration: number): boolean {
+    const t = placementTiming(placement, sourceDuration);
+    return [t.sourceStart, t.sourceEnd, t.rate, t.repeat, t.duration].every(Number.isFinite)
+        && t.sourceStart >= 0 && t.sourceEnd <= sourceDuration && t.sourceEnd > t.sourceStart
+        && t.rate >= .01 && t.rate <= 100 && Number.isInteger(t.repeat) && t.repeat >= 1 && t.repeat <= 10000;
+}
+export interface AnimationComposition { version: 1; actions: AnimationAction[]; placements: ActionPlacement[]; }
 
 export interface TimelineWorkArea {
     start: number;
     end: number;
+}
+
+/** Authoring relationship; runtime evaluates the ordinary endpoint keys. */
+export interface LoopSeam {
+    startKeyId: string;
+    endKeyId: string;
+    smooth: boolean;
 }
 
 export interface AnimationTrack {
@@ -28,6 +59,7 @@ export interface AnimationTrack {
     valueType: AnimationValueType;
     keyframes: Keyframe[];
     enabled?: boolean;
+    loopSeam?: LoopSeam;
 }
 
 export interface Keyframe {
@@ -141,7 +173,88 @@ export function restoreAnimation(save?: (Omit<Partial<AnimationSave>, "version">
         markers: Array.isArray(save.markers) ? save.markers.map(restoreMarker).filter((marker): marker is TimelineMarker => !!marker) : [],
         variables: Array.isArray(save.variables) ? save.variables.map(restoreVariable).filter((variable): variable is RuntimeVariable => !!variable) : [],
         workArea: normalizeWorkArea((save as Partial<AnimationDocument>).workArea, duration),
+        ...(save.composition ? { composition: restoreComposition(save.composition) } : {}),
     };
+}
+
+function restoreComposition(value: AnimationComposition): AnimationComposition {
+    const ids = new Set<string>();
+    const actions: AnimationAction[] = [];
+    if(value?.version === 1 && Array.isArray(value.actions)) value.actions.forEach(action => {
+        if(!action || typeof action.id !== 'string' || ids.has(action.id) || typeof action.name !== 'string'
+            || !Array.isArray(action.targetIds) || !action.animation) return;
+        ids.add(action.id);
+        const targetIds = [...new Set(action.targetIds.filter(id => typeof id === 'string'))];
+        const animation = restoreAnimation({ ...action.animation, composition: undefined });
+        animation.tracks = animation.tracks.filter(track => targetIds.includes(track.targetId));
+        actions.push({ id: action.id, name: action.name.trim() || 'Action', targetIds, animation });
+    });
+    const placements: ActionPlacement[] = [];
+    const placementIds = new Set<string>();
+    if(Array.isArray(value?.placements)) value.placements.forEach(placement => {
+        if(!placement || typeof placement.id !== 'string' || placementIds.has(placement.id)
+            || !ids.has(placement.actionId) || !Number.isFinite(placement.start) || placement.start < 0) return;
+        placementIds.add(placement.id);
+        const copy: ActionPlacement = { id: placement.id, actionId: placement.actionId, start: placement.start };
+        for(const key of ['sourceStart', 'sourceEnd', 'rate', 'repeat'] as const) if(placement[key] !== undefined) copy[key] = placement[key];
+        placements.push(copy);
+    });
+    return { version: 1, actions, placements };
+}
+
+export function allAnimationDocuments(animation: AnimationDocument): AnimationDocument[] {
+    return [animation, ...(animation.composition?.actions.map(action => action.animation) ?? [])];
+}
+
+/** Distinct channels may run together; geometric frame/path edits share an exclusive domain. */
+function actionChannelsConflict(left: AnimationAction, right: AnimationAction): boolean {
+    if(left.id === right.id) return true;
+    const active = (action: AnimationAction) => action.animation.tracks.filter(track => track.enabled !== false && track.keyframes.length > 0);
+    const geometry = (property: string) => property.startsWith('geometry.') || property === 'path.points' || property.startsWith('path.points.');
+    return active(left).some(a => active(right).some(b => a.targetId === b.targetId
+        && (a.property === b.property || (geometry(a.property) && geometry(b.property)))));
+}
+
+/** A placement or source edit must not introduce overlapping writes to the same channel. */
+export function compositionHasOverlap(composition: AnimationComposition, durationOverride?: { id: string; duration: number }): boolean {
+    return composition.placements.some((placement, index) => {
+        const action = composition.actions.find(value => value.id === placement.actionId);
+        if(!action) return false;
+        const sourceDuration = action.id === durationOverride?.id ? durationOverride.duration : action.animation.duration;
+        if(!validPlacementTiming(placement, sourceDuration)) return true;
+        const duration = placementTiming(placement, sourceDuration).duration;
+        return composition.placements.slice(index + 1).some(otherPlacement => {
+            const other = composition.actions.find(value => value.id === otherPlacement.actionId);
+            const otherDuration = other ? placementTiming(otherPlacement, other.id === durationOverride?.id ? durationOverride.duration : other.animation.duration).duration : 0;
+            return other && actionChannelsConflict(action, other)
+                && actionTime(placement.start) < actionTime(otherPlacement.start + otherDuration)
+                && actionTime(otherPlacement.start) < actionTime(placement.start + duration);
+        });
+    });
+}
+
+export function validComposition(value: unknown): boolean {
+    if(value === undefined) return true;
+    if(!value || typeof value !== 'object') return false;
+    const composition = value as AnimationComposition;
+    if(composition.version !== 1 || !Array.isArray(composition.actions) || !Array.isArray(composition.placements)) return false;
+    const ids = new Set<string>();
+    for(const action of composition.actions) {
+        if(!action || typeof action.id !== 'string' || ids.has(action.id) || typeof action.name !== 'string'
+            || !Array.isArray(action.targetIds) || action.targetIds.some(id => typeof id !== 'string')
+            || !action.animation || action.animation.version !== 2 || action.animation.composition !== undefined
+            || !Number.isFinite(action.animation.duration) || action.animation.duration < 0.1 || !Array.isArray(action.animation.tracks)
+            || action.animation.tracks.some(track => !track || typeof track.property !== 'string'
+                || !Array.isArray(track.keyframes) || !action.targetIds.includes(track.targetId))) return false;
+        ids.add(action.id);
+    }
+    const placements = new Set<string>();
+    for(const placement of composition.placements) {
+        if(!placement || typeof placement.id !== 'string' || placements.has(placement.id) || !ids.has(placement.actionId)
+            || !Number.isFinite(placement.start) || placement.start < 0) return false;
+        placements.add(placement.id);
+    }
+    return !compositionHasOverlap(composition);
 }
 
 export function normalizeWorkArea(workArea: Partial<TimelineWorkArea> | null | undefined, duration: number): TimelineWorkArea {
@@ -443,12 +556,18 @@ function restoreTrack(track: Partial<AnimationTrack>): AnimationTrack | undefine
         return undefined;
     }
 
+    const keys = normalizedKeyframes(Array.isArray(track.keyframes) ? track.keyframes.map(restoreKeyframe).filter((keyframe): keyframe is Keyframe => !!keyframe) : []);
+    const seam = track.loopSeam;
+    const start = keys.find(key => key.id === seam?.startKeyId), end = keys.find(key => key.id === seam?.endKeyId);
     return {
         id: typeof track.id === "string" ? track.id : makeAnimationId("track"),
         targetId: track.targetId,
         property: track.property,
         valueType,
-        keyframes: normalizedKeyframes(Array.isArray(track.keyframes) ? track.keyframes.map(restoreKeyframe).filter((keyframe): keyframe is Keyframe => !!keyframe) : []),
+        keyframes: keys,
+        ...(seam && start && end && start.time < end.time ? { loopSeam: {
+            startKeyId: start.id, endKeyId: end.id, smooth: seam.smooth === true && valueType === 'number',
+        } } : {}),
         enabled: track.enabled ?? true,
     };
 }

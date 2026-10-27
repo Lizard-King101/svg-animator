@@ -1,3 +1,4 @@
+import { ActionCompositionComponent } from '../action-composition/action-composition.component';
 import { ChangeDetectionStrategy, Component, HostBinding, HostListener, Output, ViewEncapsulation } from "@angular/core";
 import { TimelineEditingService } from "../../_services/timeline-editing.service";
 import { TimelineEditorService } from "../../_services/timeline-editor.service";
@@ -7,7 +8,7 @@ import { TimelineDopeSheetComponent } from "../timeline-dope-sheet/timeline-dope
 @Component({
     standalone: true,
     selector: "animation-timeline",
-    imports: [TimelineToolbarComponent, TimelineDopeSheetComponent],
+    imports: [TimelineToolbarComponent, TimelineDopeSheetComponent, ActionCompositionComponent],
     templateUrl: "animation-timeline.component.html",
     styleUrls: ["animation-timeline.component.scss"],
     providers: [TimelineEditingService, TimelineEditorService],

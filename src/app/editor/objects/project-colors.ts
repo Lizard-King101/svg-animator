@@ -1,3 +1,4 @@
+import { allAnimationDocuments } from './animation.object';
 import { Color } from './color.object';
 import type { SVGSave, ElementSave } from './svg.object';
 import { PaintSave } from './paint.object';
@@ -47,7 +48,7 @@ export function authoredColors(document?: SVGSave): Map<string, string> {
     });
     if(document) {
         visit(document.elements);
-        document.animation?.tracks.forEach(track => {
+        (document.animation ? allAnimationDocuments(document.animation).flatMap(animation => animation.tracks) : []).forEach(track => {
             if(track.valueType === 'color') track.keyframes.forEach(key => {
                 const value = createAnimationColorValue(key.value);
                 if(value && typeof value === 'object') add(`animation/${track.id}/${key.id}`, value.hex, value.alpha);
