@@ -1,3 +1,4 @@
+export const DEFAULT_CURVE_SAMPLE_STEPS = 64;
 export function lerpCurvePoint(a, b, t) {
     return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
@@ -19,7 +20,7 @@ export function curvePoint(line, t) {
         ? cubicPoint(line.points[0], line.controlStart, line.controlEnd, line.points[1], t)
         : lerpCurvePoint(line.points[0], line.points[1], t);
 }
-export function curveLengthSamples(line, steps = 64) {
+export function curveLengthSamples(line, steps = DEFAULT_CURVE_SAMPLE_STEPS) {
     if (line.type !== 'bezier' || !line.controlStart || !line.controlEnd)
         return [{ t: 0, length: 0 }, { t: 1, length: Math.hypot(line.points[1].x - line.points[0].x, line.points[1].y - line.points[0].y) }];
     const samples = [{ t: 0, length: 0 }];

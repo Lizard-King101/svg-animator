@@ -3,7 +3,7 @@ import { RuntimePlayerError } from '../errors';
 import { deformBinding, RigDocument, validRigs } from './armature';
 import { evaluateRigConstraints } from './constraints';
 import { attachmentMatrix, attachmentTransforms } from './attachments';
-import { parseRigAnimationProperty } from './channels';
+import { parseRigAnimationProperty, hasRigWindData, resolveRigAnimationChannel } from './channels';
 import { identityMatrix, Matrix, multiplyMatrix, transformMatrix } from './transform';
 
 export interface RigSceneNode { id: string; parentId: string | null; }
@@ -14,7 +14,7 @@ export function rigChannelConflict(rigs: RigDocument | undefined, scene: readonl
     const boneChannel = parseRigAnimationProperty(channel.property);
     if(boneChannel) {
         const rig = rigs.armatures.find(rig => rig.id === channel.targetId);
-        const constraint = rig?.constraints?.find(constraint => constraint.enabled && [constraint.upperBoneId, constraint.lowerBoneId].includes(boneChannel.boneId));
+        const constraint = rig?.constraints?.find(constraint => constraint.enabled && [constraint.upperBoneId, constraint.lowerBoneId].includes(boneChannel.boneId??''));
         return constraint ? `“${constraint.name}” controls this bone. Animate its IK target, or disable the constraint before animating this bone.` : undefined;
     }
     if(!/^(geometry\.|path\.points\.|transform\.|motion\.)/.test(channel.property)) return;
@@ -104,13 +104,15 @@ export function validateRuntimeRigs(bundle: RuntimeBundleV1): void {
         if(!bundle.requiredCapabilities.includes('rig.pose-v1')) fail('Rig data requires rig.pose-v1.');
         const problem = rigSceneProblem(bundle.rigs, bundle.artwork.targets);
         if(problem) fail(problem);
+        if((bundle.rigs.armatures.some(hasRigWindData) || bundle.animation.properties.some(property=>/^physics\.wind[XY]$/.test(property))) && !bundle.requiredCapabilities.includes('rig.wind-v1')) fail('Wind requires rig.wind-v1.');
+        if(bundle.rigs.armatures.some(rig => rig.springs?.length) && !bundle.requiredCapabilities.includes('rig.spring-v1')) fail('Spring constraints require rig.spring-v1.');
     }
     for(const track of bundle.animation.tracks) {
         const targetId = bundle.animation.targets[track.target], property = bundle.animation.properties[track.property];
         const channel = parseRigAnimationProperty(property);
         const rig = bundle.rigs?.armatures.find(rig => rig.id === targetId);
         if(channel || rig) {
-            if(!channel || !rig?.bones.some(bone => bone.id === channel.boneId) || track.kind !== 'number') fail(`Rig channel “${targetId}/${property}” has an invalid target or property.`);
+            if(!channel || !resolveRigAnimationChannel(rig,property) || track.kind !== 'number') fail(`Rig channel “${targetId}/${property}” has an invalid target or property.`);
         }
         const conflict = rigChannelConflict(bundle.rigs, bundle.artwork.targets, { targetId, property });
         if(conflict) fail(conflict);

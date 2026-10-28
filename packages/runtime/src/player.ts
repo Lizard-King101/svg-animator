@@ -50,6 +50,7 @@ export class RuntimePlayer {
     private frameId?: number;
     private lastFrameTime?: number;
     private loopIteration = 0;
+    private physicsOffset = 0;
     private readonly listeners = new Map<RuntimePlayerEventType, Set<(event: never) => void>>();
     private readonly scene: RuntimeScene;
     private readonly initialAttributes: AttributeSnapshot[];
@@ -60,7 +61,7 @@ export class RuntimePlayer {
         this._playbackRate = finiteRate(options.playbackRate ?? 1);
         this._loop = options.loop ?? bundle.animation.loop;
         this.initialAttributes = snapshotAttributes(root);
-        this.scene = new RuntimeScene(root, bundle.artwork.targets, bundle.rigs);
+        this.scene = new RuntimeScene(root, bundle.artwork.targets, bundle.rigs, bundle.animation);
         this.applyAt(0);
         queueMicrotask(() => this.emit("ready", { player: this }));
         if(options.autoPlay && (options.autoplayWhenReducedMotion || !prefersReducedMotion())) queueMicrotask(() => this.play());
@@ -72,7 +73,11 @@ export class RuntimePlayer {
     get playbackRate(): number { return this._playbackRate; }
     set playbackRate(value: number) { this.assertActive(); this._playbackRate = finiteRate(value); }
     get loop(): boolean { return this._loop; }
-    set loop(value: boolean) { this.assertActive(); this._loop = Boolean(value); }
+    set loop(value: boolean) {
+        this.assertActive();
+        if(this._loop !== Boolean(value)) { this.physicsOffset=0; this.scene.resetPhysics(); }
+        this._loop = Boolean(value);
+    }
 
     setPlaybackRate(value: number): this { this.playbackRate = value; return this; }
     setLoop(value: boolean): this { this.loop = value; return this; }
@@ -104,6 +109,7 @@ export class RuntimePlayer {
 
     stop(): this {
         this.assertActive();
+        this.physicsOffset=0; this.scene.resetPhysics();
         if(this.frameId != null) cancelAnimationFrame(this.frameId);
         this.frameId = undefined;
         this.lastFrameTime = undefined;
@@ -115,6 +121,8 @@ export class RuntimePlayer {
 
     seek(time: number): this {
         this.assertActive();
+        if(this.physicsOffset !== 0) this.scene.resetPhysics();
+        this.physicsOffset = 0;
         const previousTime = this._time;
         const nextTime = clamp(Number.isFinite(time) ? time : 0, 0, this.duration);
         this.emitMarkers(previousTime, nextTime);
@@ -165,10 +173,12 @@ export class RuntimePlayer {
                 if(next > this.duration) {
                     this.emitMarkers(markerCursor, this.duration);
                     next -= this.duration;
+                    this.physicsOffset += this.duration;
                     this.loopIteration++;
                     this.emit("loop", { time: next, iteration: this.loopIteration, direction: "forward" });
                     markerCursor = 0;
                 } else {
+                    this.physicsOffset = 0; this.scene.resetPhysics();
                     this.emitMarkers(markerCursor, 0);
                     next += this.duration;
                     this.loopIteration++;
@@ -196,7 +206,7 @@ export class RuntimePlayer {
             const value = evaluateRuntimeTrack(track, time);
             if(value !== undefined) this.scene.write(animation.targets[track.target], animation.properties[track.property], value);
         });
-        try { this.scene.render(); this._time = time; }
+        try { this.scene.render(time + this.physicsOffset, this._loop ? {start:0,end:this.duration} : undefined); this._time = time; }
         catch(error) {
             this.pause();
             if(error instanceof RuntimePlayerError) this.emit('error', { error });

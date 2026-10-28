@@ -39,7 +39,7 @@ function benchmark(name: string, svg: SVG): void {
         const samples: number[] = [];
         for(let i = 0; i < 900; i++) {
             animation.evaluateEach((i % 180) / 180 * svg.animation.duration, (track, value) => {
-                if(track.rigChannel) track.rigChannel.bone[track.rigChannel.field] = Number(value);
+                if(track.rigChannel) track.rigChannel.write(Number(value));
             });
             const started = performance.now(); evaluate();
             if(i >= 300) samples.push(performance.now() - started);
@@ -57,7 +57,7 @@ function benchmark(name: string, svg: SVG): void {
     // Random-order sampling must produce exactly the same geometry at the same time.
     const documentPlan = new DocumentRigEvaluationPlan(svg);
     const at = (time: number) => {
-        animation.evaluateEach(time, (track, value) => { if(track.rigChannel) track.rigChannel.bone[track.rigChannel.field] = Number(value); });
+        animation.evaluateEach(time, (track, value) => { if(track.rigChannel) track.rigChannel.write(Number(value)); });
         documentPlan.apply(); return JSON.stringify(svg.save().elements);
     };
     const samples = Array.from({ length: 181 }, (_, i) => i / 180 * svg.animation.duration);

@@ -1,4 +1,5 @@
 import { Matrix, TransformState } from './transform';
+import { SpringConstraint } from './spring-chain';
 /** Rest joints are parent-local; pose angles are offsets from rest, in degrees. */
 export interface Bone {
     kind?: 'bone' | 'point';
@@ -57,6 +58,9 @@ export interface TwoBoneIKConstraint {
     bend: 1 | -1;
 }
 export interface Armature {
+    windX?: number;
+    windY?: number;
+    springs?: SpringConstraint[];
     attachments?: RigidAttachment[];
     constraints?: TwoBoneIKConstraint[];
     constraintsActive?: boolean;
@@ -66,7 +70,7 @@ export interface Armature {
     bindings: PathBinding[];
 }
 export interface RigDocument {
-    version: 1 | 2 | 3 | 4 | 5;
+    version: 1 | 2 | 3 | 4 | 5 | 6;
     armatures: Armature[];
 }
 /** Drawing may leave subpixel joint differences; IK requires the same connected joint. */

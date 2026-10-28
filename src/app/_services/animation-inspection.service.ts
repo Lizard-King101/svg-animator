@@ -39,7 +39,10 @@ export class AnimationInspectionService {
         if(source !== this.source || revision !== this.revision) {
             const copy = this.factory.restoreDocument(source.save());
             this.animation.restoreSamplingBase(copy);
-            if(this.animation.activeAction) copy.animation = copy.animation.composition!.actions.find(action => action.id === this.animation.activeAction!.id)!.animation;
+            if(this.animation.activeAction) {
+                copy.animation = copy.animation.composition!.actions.find(action => action.id === this.animation.activeAction!.id)!.animation;
+                for(const rig of copy.rigs.armatures) if(!this.animation.allowsTarget(rig.id)) delete rig.springs;
+            }
             this.snapshot = new AnimationInspectionSnapshot(copy);
             this.source = source; this.revision = revision;
             this.skinKey = this.trailKey = this.currentKey = '';

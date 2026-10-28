@@ -20,6 +20,10 @@ export declare class RigEvaluationPlan {
     private readonly bindings;
     private readonly attachments;
     constructor(source: Armature);
+    /** Evaluate only the skeleton for detached motion generators; no artwork work is needed. */
+    evaluatePose(source: Armature, constraintsActive?: boolean): this;
+    /** Apply one compiled IK writer after its physics/IK dependencies have updated. */
+    solveConstraint(id: string): void;
     evaluate(source: Armature, constraintsActive?: boolean): this;
     private updateMatrices;
 }

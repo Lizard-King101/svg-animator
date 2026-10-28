@@ -44,7 +44,7 @@ function setup() {
         new TimelineEditingService(), zone, mutations, { markForCheck: () => {} } as ChangeDetectorRef, {} as PaintEditingService, rig);
     timeline.expandedLayerIds = new Set(['character', 'character:root', 'character:upper', 'character:lower', 'character:foot']);
     const subscription = timeline.animationChange.subscribe(() => mutations.commit('animation'));
-    const row = (boneId = 'foot', field = 'poseX') => timeline.rows.find((row): row is RigPropertyTimelineRow => row.type === 'rig-property' && row.bone.id === boneId && row.property.property.endsWith('.' + field))!;
+    const row = (boneId = 'foot', field = 'poseX') => timeline.rows.find((row): row is RigPropertyTimelineRow => row.type === 'rig-property' && row.bone?.id === boneId && row.property.property.endsWith('.' + field))!;
     const actions = new ActionCompositionService(editor, playback, mutations, rig);
     const destroy = () => { subscription.unsubscribe(); timeline.ngOnDestroy(); playback.ngOnDestroy(); mutations.ngOnDestroy(); };
     return { editor, svg, shape, rig, playback, mutations, projects, timeline, row, actions, zone, destroy };
@@ -57,6 +57,24 @@ function track(property: string, id = property): AnimationTrack {
 }
 
 describe('bone timeline and reusable actions', () => {
+    it('keys, graphs, copies and cleans up armature wind without requiring a bone target',()=>{
+        const t=setup();
+        try {
+            const row=t.timeline.rows.find((row):row is RigPropertyTimelineRow=>row.type==='rig-property' && row.property.property==='physics.windX')!;
+            expect(row.bone).toBeUndefined();expect(t.timeline.rowDisabledReason(row)).toBe('');
+            t.timeline.selectTimelineRow(row);t.playback.seek(1);t.timeline.setPropertyValue(row,8);
+            expect(t.svg.animation.tracks[0].property).toBe('physics.windX');
+            expect(t.svg.animation.tracks[0].keyframes.map(key=>key.value)).toEqual([0,8]);
+            expect(t.timeline.selectedNumericRow()!.property.property).toBe('physics.windX');
+            expect(semanticPartnerProperty('physics.windX')).toBe('physics.windY');
+            expect(findOrphanedAnimationTracks(t.svg)).toEqual([]);
+            t.timeline.expandedLayerIds.clear();expect(t.timeline.selectedNumericRow()!.property.property).toBe('physics.windX');
+            t.timeline.selectedKeyframeIds.add(t.svg.animation.tracks[0].keyframes[1].id);
+            expect(t.timeline.copySelectedKeyframes()).toBeTrue();t.playback.seek(2);expect(t.timeline.pasteKeyframes()).toBeTrue();
+            expect(t.svg.animation.tracks[0].keyframes.map(key=>key.time)).toEqual([0,1,2]);
+            t.mutations.undo();expect(t.svg.animation.tracks[0].keyframes.map(key=>key.time)).toEqual([0,1]);
+        } finally {t.destroy();}
+    });
     it('registers playback cache observers outside Angular when opening an animated rig', () => {
         const Observer = window.MutationObserver;
         const zones: boolean[] = [];

@@ -22,7 +22,8 @@ describe('animated pose inspector', () => {
         const projects={upsert:jasmine.createSpy('upsert')}, mutations=new DocumentMutationService(editor,playback,new HistoryService(),projects as never);
         const rig=new RigEditingService(editor,playback,mutations); rig.selectBone('rig','target'); playback.setMode('animate'); mutations.resetBaseline();
         const session={cancel:jasmine.createSpy('cancel'),showsBindingControls:false};
-        await TestBed.configureTestingModule({imports:[RigPanelComponent],providers:[{provide:RigEditingService,useValue:rig},{provide:RigBindingSessionService,useValue:session}]}).compileComponents();
+        await TestBed.configureTestingModule({imports:[RigPanelComponent],providers:[{provide:RigEditingService,useValue:rig},{provide:RigBindingSessionService,useValue:session},
+            {provide:AnimationPlaybackService,useValue:playback},{provide:DocumentMutationService,useValue:mutations}]}).compileComponents();
         const fixture=TestBed.createComponent(RigPanelComponent); fixture.detectChanges();
         const destroy=()=>{fixture.destroy();playback.ngOnDestroy();mutations.ngOnDestroy();};
         return {fixture,rig,svg,playback,mutations,projects,destroy};

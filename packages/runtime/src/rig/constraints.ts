@@ -3,10 +3,11 @@ import { applyMatrix } from './transform';
 import { solveTwoBoneIK, twoBoneChain } from './two-bone-ik';
 
 import { constraintChainProblem, constraintPlan } from './constraint-plan';
+import { springConstraintsProblem } from './spring-chain';
 
 /** Shared structural checks for persistence and commands, including disabled records. */
 export function rigConstraintProblem(rig: Armature): string | undefined {
-    return constraintPlan(rig).problem;
+    return constraintPlan(rig).problem ?? springConstraintsProblem(rig);
 }
 
 /** The joint a two-bone chain needs before it can solve; a gap is repairable with Reconnect joint. */

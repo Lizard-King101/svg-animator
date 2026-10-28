@@ -1,6 +1,7 @@
 import { Armature, Bone, boneLocalMatrix, boneMatrices, effectivePointWeights, hasBonePose } from './armature';
 import { constraintPlan } from './constraint-plan';
 import { solveTwoBoneIKInto } from './two-bone-ik';
+import { springConstraintsProblem } from './spring-chain';
 import { applyMatrix, decomposeTransform, identityMatrix, invertMatrix, Matrix, multiplyMatrix, TransformState } from './transform';
 
 /** Internal, revision-scoped rig workspace. Results are borrowed until the next evaluate.
@@ -23,6 +24,7 @@ export class RigEvaluationPlan {
     constructor(source: Armature) {
         const plan = constraintPlan(source);
         if(plan.problem) throw new Error(plan.problem);
+        const springProblem = springConstraintsProblem(source); if(springProblem) throw new Error(springProblem);
         // Clone once, including setup: no caller mutation can contaminate workspace results.
         this.pose = structuredClone(source);
         this.bones = new Map(this.pose.bones.map(bone => [bone.id, bone]));
@@ -45,21 +47,34 @@ export class RigEvaluationPlan {
         this.attachments = (this.pose.attachments ?? []).map(link => ({ ...link, inverse: invertMatrix(link.parentMatrix) }));
     }
 
-    evaluate(source: Armature, constraintsActive = source.constraintsActive !== false): this {
+    /** Evaluate only the skeleton for detached motion generators; no artwork work is needed. */
+    evaluatePose(source: Armature, constraintsActive = source.constraintsActive !== false): this {
         for(const bone of source.bones) {
             const output = this.bones.get(bone.id);
             if(!output) throw new Error('Rig setup changed; rebuild its evaluation plan.');
             output.pose = bone.pose; output.poseX = bone.poseX; output.poseY = bone.poseY;
         }
+        this.pose.windX=source.windX; this.pose.windY=source.windY;
         this.pose.constraintsActive = constraintsActive;
         this.updateMatrices();
-        if(constraintsActive) for(const constraint of this.constraints) {
-            const target = applyMatrix(this.matrices.get(constraint.targetBoneId)!, 0, 0);
-            if(!solveTwoBoneIKInto(constraint.upper, constraint.lower, this.matrices, target, constraint.bend)) {
-                throw new Error(`${constraint.name}: this two-bone chain cannot reach a valid pose. Use Reconnect joint in Bone setup before posing.`);
-            }
-            this.updateMatrices(new Set([constraint.upper.id, constraint.lower.id]));
+        if(constraintsActive) for(const constraint of this.constraints) this.solveConstraint(constraint.id);
+        return this;
+    }
+
+    /** Apply one compiled IK writer after its physics/IK dependencies have updated. */
+    solveConstraint(id: string): void {
+        const constraint=this.constraints.find(item=>item.id===id);
+        if(!constraint) throw new Error('Unknown IK constraint.');
+        this.updateMatrices();
+        const target=applyMatrix(this.matrices.get(constraint.targetBoneId)!,0,0);
+        if(!solveTwoBoneIKInto(constraint.upper,constraint.lower,this.matrices,target,constraint.bend)) {
+            throw new Error(`${constraint.name}: this two-bone chain cannot reach a valid pose. Use Reconnect joint in Bone setup before posing.`);
         }
+        this.updateMatrices(new Set([constraint.upper.id,constraint.lower.id]));
+    }
+
+    evaluate(source: Armature, constraintsActive = source.constraintsActive !== false): this {
+        this.evaluatePose(source, constraintsActive);
         for(const bone of this.order) this.skin.set(bone.id, multiplyMatrix(this.matrices.get(bone.id)!, this.restInverse.get(bone.id)!));
         for(const binding of this.bindings) for(const point of binding.points) {
             if(!point.weights.length) { Object.assign(point.value, point.rest); continue; }

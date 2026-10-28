@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "noEmit": true, "types": ["@webgpu/types"] },
+  "files": ["main.ts", "worker.ts"],
+  "include": []
+}

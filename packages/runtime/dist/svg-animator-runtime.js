@@ -1,4 +1,4 @@
-/*! SVG Animator Runtime v1.5.0 | MIT License */
+/*! SVG Animator Runtime v1.7.0 | MIT License */
 "use strict";
 var SVGAnimatorRuntime = (() => {
   var __defProp = Object.defineProperty;
@@ -41,11 +41,13 @@ var SVGAnimatorRuntime = (() => {
   // src/contracts.ts
   var RUNTIME_BUNDLE_KIND = "svg-animator/runtime-bundle";
   var RUNTIME_BUNDLE_FORMAT_VERSION = 1;
-  var RUNTIME_VERSION = "1.5.0";
+  var RUNTIME_VERSION = "1.7.0";
   var RUNTIME_BROWSER_GLOBAL = "SVGAnimatorRuntime";
   var RUNTIME_CAPABILITIES_V1 = [
     "tracks.numeric-v1",
     "rig.pose-v1",
+    "rig.spring-v1",
+    "rig.wind-v1",
     "composition.action-windows-v1",
     "composition.action-timing-v1",
     "tracks.color-v1",
@@ -380,9 +382,9 @@ var SVGAnimatorRuntime = (() => {
     return { a: x, b: 0, c: 0, d: y, e: 0, f: 0 };
   }
   function rotationMatrix(degrees) {
-    const radians = degrees * Math.PI / 180;
-    const cos = Math.cos(radians);
-    const sin = Math.sin(radians);
+    const radians2 = degrees * Math.PI / 180;
+    const cos = Math.cos(radians2);
+    const sin = Math.sin(radians2);
     return { a: cos, b: sin, c: -sin, d: cos, e: 0, f: 0 };
   }
   function multiplyMatrix(left, right) {
@@ -509,6 +511,185 @@ var SVGAnimatorRuntime = (() => {
     return { ordered };
   }
 
+  // src/rig/motion-plan.ts
+  function rigMotionOrder(rig, springs) {
+    const ik = constraintPlan(rig);
+    if (ik.problem) throw new Error(ik.problem);
+    const steps = [
+      ...ik.ordered.map((constraint) => ({ kind: "ik", constraint })),
+      ...springs.filter(({ constraint }) => constraint.enabled).map((spring) => ({ kind: "spring", ...spring }))
+    ];
+    const bones = new Map(rig.bones.map((bone) => [bone.id, bone]));
+    const ancestors = (id2) => {
+      const result2 = /* @__PURE__ */ new Set();
+      while (id2 && !result2.has(id2)) {
+        result2.add(id2);
+        id2 = bones.get(id2)?.parentId;
+      }
+      return result2;
+    };
+    const writes = steps.map((step) => new Set(step.kind === "ik" ? [step.constraint.upperBoneId, step.constraint.lowerBoneId] : step.ids));
+    const dependencies = steps.map((step, index) => {
+      const reads = step.kind === "ik" ? /* @__PURE__ */ new Set([...ancestors(step.constraint.upperBoneId), ...ancestors(step.constraint.targetBoneId)]) : ancestors(bones.get(step.ids[0])?.parentId);
+      return steps.map((_, other) => other).filter((other) => other !== index && [...writes[other]].some((id2) => reads.has(id2)));
+    });
+    const result = [], done = /* @__PURE__ */ new Set();
+    while (result.length < steps.length) {
+      const ready = steps.map((_, index) => index).filter((index) => !done.has(index) && dependencies[index].every((other) => done.has(other))).sort((a, b) => steps[a].constraint.id < steps[b].constraint.id ? -1 : steps[a].constraint.id > steps[b].constraint.id ? 1 : a - b);
+      if (!ready.length) throw new Error("Physics and IK dependencies contain a cycle. Move the target outside the dependent chains.");
+      for (const index of ready) {
+        done.add(index);
+        result.push(steps[index]);
+      }
+    }
+    return result;
+  }
+
+  // src/rig/spring-chain.ts
+  function springConstraintsProblem(rig) {
+    if (rig.springs === void 0) return;
+    if (!Array.isArray(rig.springs)) return "Spring constraints must be a list.";
+    const ids = /* @__PURE__ */ new Set(), owners = /* @__PURE__ */ new Set();
+    const chains = [];
+    try {
+      for (const spring of rig.springs) {
+        if (!spring || typeof spring.id !== "string" || !spring.id || ids.has(spring.id) || typeof spring.name !== "string" || typeof spring.enabled !== "boolean") return "Invalid spring constraint.";
+        ids.add(spring.id);
+        validateSpringSettings(spring);
+        const chain = springChain(spring.enabled ? rig : { ...rig, constraints: [] }, spring.rootBoneId, spring.endBoneId);
+        chains.push({ constraint: spring, ids: chain });
+        if (spring.boneSettings !== void 0) {
+          if (!spring.boneSettings || typeof spring.boneSettings !== "object" || Array.isArray(spring.boneSettings)) return "Invalid per-bone spring settings.";
+          for (const [id2, settings] of Object.entries(spring.boneSettings)) {
+            if (!chain.includes(id2)) return "Spring settings reference a bone outside the range.";
+            validateSpringSettings(settings);
+          }
+        }
+        for (const id2 of chain) {
+          if (owners.has(id2)) return "Spring chains cannot overlap.";
+          owners.add(id2);
+        }
+      }
+      rigMotionOrder(rig, chains);
+    } catch (error) {
+      return error.message;
+    }
+    return;
+  }
+  var SPRING_STEP = 1 / 120;
+  var SPRING_LIMITS = {
+    stiffness: [0, 400],
+    damping: [0, 40],
+    gravity: [-20, 20],
+    limit: [0, 180],
+    mix: [0, 1],
+    windInfluence: [0, 10]
+  };
+  function validateSpringSettings(settings) {
+    for (const key of Object.keys(SPRING_LIMITS)) {
+      const [min, max] = SPRING_LIMITS[key];
+      const value = settings[key] ?? (key === "windInfluence" ? 1 : NaN);
+      if (!Number.isFinite(value) || value < min || value > max) throw new Error(`Invalid spring ${key}.`);
+    }
+  }
+  function springChain(rig, firstId, endId) {
+    boneMatrices(rig);
+    const bones = new Map(rig.bones.map((bone) => [bone.id, bone]));
+    let ids = [];
+    if (endId !== void 0) {
+      if (typeof endId !== "string" || !bones.has(endId)) throw new Error("Choose a valid end bone for the physics range.");
+      let bone = bones.get(endId);
+      while (bone) {
+        ids.unshift(bone.id);
+        if (bone.id === firstId) break;
+        bone = bone.parentId ? bones.get(bone.parentId) : void 0;
+      }
+      if (ids[0] !== firstId) throw new Error("The end bone must descend from the start bone.");
+    } else {
+      let bone = bones.get(firstId);
+      if (!bone) throw new Error("Select the first bone of a strand.");
+      while (bone) {
+        ids.push(bone.id);
+        const children = rig.bones.filter((item) => item.parentId === bone.id);
+        if (children.length > 1) throw new Error("Choose an explicit end bone; legacy spring chains must be unbranched.");
+        bone = children[0];
+      }
+    }
+    if (ids.length > 32) throw new Error("Use a spring range of at most 32 bones.");
+    for (const id2 of ids) {
+      const bone = bones.get(id2);
+      if (bone.kind === "point" || !Number.isFinite(bone.length) || bone.length <= 0) throw new Error("Spring ranges need bones with a positive length. Point controls can be children outside the range.");
+    }
+    for (const constraint of rig.constraints ?? []) {
+      if (constraint.enabled && [constraint.upperBoneId, constraint.lowerBoneId].some((id2) => ids.includes(id2))) {
+        throw new Error("Physics bones cannot also be driven by IK. A child point can drive a separate IK chain.");
+      }
+    }
+    return ids;
+  }
+  var radians = Math.PI / 180;
+  var angleDifference = (angle) => ((angle + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+  var SpringChainSimulation = class {
+    constructor(ids, settings, boneSettings = {}) {
+      this.ids = ids;
+      this.settings = settings;
+      this.boneSettings = boneSettings;
+      this.tips = /* @__PURE__ */ new Map();
+      validateSpringSettings(settings);
+      this.settings = { ...settings };
+      this.boneSettings = structuredClone(boneSettings);
+      Object.values(this.boneSettings).forEach(validateSpringSettings);
+    }
+    reset() {
+      this.tips.clear();
+    }
+    snapshot() {
+      return [...this.tips].map(([id2, tip]) => [id2, { ...tip }]);
+    }
+    restore(snapshot) {
+      this.tips.clear();
+      for (const [id2, tip] of snapshot) this.tips.set(id2, { ...tip });
+    }
+    step(authored) {
+      const matrices = boneMatrices(authored), bones = new Map(authored.bones.map((bone) => [bone.id, bone]));
+      const output = /* @__PURE__ */ new Map();
+      const dt2 = SPRING_STEP ** 2;
+      for (const id2 of this.ids) {
+        const settings = this.boneSettings[id2] ?? this.settings;
+        const decay = Math.exp(-settings.damping * SPRING_STEP);
+        const wind = settings.windInfluence ?? 1;
+        const bone = bones.get(id2);
+        if (!bone || bone.length <= 0) throw new Error("Spring chain setup changed.");
+        const parent = bone.parentId ? matrices.get(bone.parentId) : identityMatrix();
+        const target = multiplyMatrix(parent, boneLocalMatrix(bone));
+        const origin = applyMatrix(target, 0, 0), tip = applyMatrix(target, bone.length, 0);
+        const targetAngle = Math.atan2(target.b, target.a);
+        let state = this.tips.get(id2), offset = 0;
+        if (!state) {
+          state = { ...tip, previousX: tip.x, previousY: tip.y };
+          this.tips.set(id2, state);
+        } else {
+          const x = state.x + (state.x - state.previousX) * decay + (tip.x - state.x) * settings.stiffness * dt2 + bone.length * (authored.windX ?? 0) * wind * dt2;
+          const y = state.y + (state.y - state.previousY) * decay + (tip.y - state.y) * settings.stiffness * dt2 + bone.length * (settings.gravity + (authored.windY ?? 0) * wind) * dt2;
+          const raw = angleDifference(Math.atan2(y - origin.y, x - origin.x) - targetAngle);
+          const limit = settings.limit * radians;
+          offset = Math.max(-limit, Math.min(limit, raw));
+          const nextX = origin.x + Math.cos(targetAngle + offset) * bone.length;
+          const nextY = origin.y + Math.sin(targetAngle + offset) * bone.length;
+          state.previousX = raw === offset ? state.x : nextX;
+          state.previousY = raw === offset ? state.y : nextY;
+          state.x = nextX;
+          state.y = nextY;
+        }
+        const simulated = bone.pose + offset / radians;
+        if (!Number.isFinite(simulated)) throw new Error("Spring motion exceeded the supported coordinate range.");
+        output.set(id2, bone.pose + offset / radians * settings.mix);
+        matrices.set(id2, multiplyMatrix(parent, boneLocalMatrix({ ...bone, pose: output.get(id2) })));
+      }
+      return output;
+    }
+  };
+
   // src/rig/armature.ts
   function isConnectedBoneJoint(upper, lower) {
     return Math.abs(lower.x + (lower.poseX ?? 0) - upper.length) <= 0.05 && Math.abs(lower.y + (lower.poseY ?? 0)) <= 0.05;
@@ -582,7 +763,7 @@ var SVGAnimatorRuntime = (() => {
     }));
   }
   function validRigs(value) {
-    if (!record(value) || ![1, 2, 3, 4, 5].includes(value.version) || !Array.isArray(value.armatures)) return false;
+    if (!record(value) || ![1, 2, 3, 4, 5, 6].includes(value.version) || !Array.isArray(value.armatures)) return false;
     const rigIds = /* @__PURE__ */ new Set(), paths = /* @__PURE__ */ new Set();
     for (const rig of value.armatures) {
       if (!record(rig) || !id(rig.id) || rigIds.has(rig.id) || typeof rig.name !== "string" || !Array.isArray(rig.bones) || !Array.isArray(rig.bindings)) return false;
@@ -598,6 +779,8 @@ var SVGAnimatorRuntime = (() => {
       } catch {
         return false;
       }
+      if (["windX", "windY"].some((field) => rig[field] !== void 0 && (value.version < 6 || typeof rig[field] !== "number" || !Number.isFinite(rig[field])))) return false;
+      if (rig.springs !== void 0 && (value.version < 6 || springConstraintsProblem(rig))) return false;
       if (rig.constraintsActive !== void 0 && typeof rig.constraintsActive !== "boolean") return false;
       if (constraintPlan(rig).problem) return false;
       if (rig.constraintsActive !== false && rig.constraints?.some((constraint) => constraint.enabled && !isConnectedBoneJoint(rig.bones.find((bone) => bone.id === constraint.upperBoneId), rig.bones.find((bone) => bone.id === constraint.lowerBoneId)))) return false;
@@ -705,6 +888,8 @@ var SVGAnimatorRuntime = (() => {
       this.skin = /* @__PURE__ */ new Map();
       const plan = constraintPlan(source);
       if (plan.problem) throw new Error(plan.problem);
+      const springProblem = springConstraintsProblem(source);
+      if (springProblem) throw new Error(springProblem);
       this.pose = structuredClone(source);
       this.bones = new Map(this.pose.bones.map((bone) => [bone.id, bone]));
       const rest = boneMatrices(this.pose, false);
@@ -731,7 +916,8 @@ var SVGAnimatorRuntime = (() => {
       });
       this.attachments = (this.pose.attachments ?? []).map((link) => ({ ...link, inverse: invertMatrix(link.parentMatrix) }));
     }
-    evaluate(source, constraintsActive = source.constraintsActive !== false) {
+    /** Evaluate only the skeleton for detached motion generators; no artwork work is needed. */
+    evaluatePose(source, constraintsActive = source.constraintsActive !== false) {
       for (const bone of source.bones) {
         const output = this.bones.get(bone.id);
         if (!output) throw new Error("Rig setup changed; rebuild its evaluation plan.");
@@ -739,15 +925,26 @@ var SVGAnimatorRuntime = (() => {
         output.poseX = bone.poseX;
         output.poseY = bone.poseY;
       }
+      this.pose.windX = source.windX;
+      this.pose.windY = source.windY;
       this.pose.constraintsActive = constraintsActive;
       this.updateMatrices();
-      if (constraintsActive) for (const constraint of this.constraints) {
-        const target = applyMatrix(this.matrices.get(constraint.targetBoneId), 0, 0);
-        if (!solveTwoBoneIKInto(constraint.upper, constraint.lower, this.matrices, target, constraint.bend)) {
-          throw new Error(`${constraint.name}: this two-bone chain cannot reach a valid pose. Use Reconnect joint in Bone setup before posing.`);
-        }
-        this.updateMatrices(/* @__PURE__ */ new Set([constraint.upper.id, constraint.lower.id]));
+      if (constraintsActive) for (const constraint of this.constraints) this.solveConstraint(constraint.id);
+      return this;
+    }
+    /** Apply one compiled IK writer after its physics/IK dependencies have updated. */
+    solveConstraint(id2) {
+      const constraint = this.constraints.find((item) => item.id === id2);
+      if (!constraint) throw new Error("Unknown IK constraint.");
+      this.updateMatrices();
+      const target = applyMatrix(this.matrices.get(constraint.targetBoneId), 0, 0);
+      if (!solveTwoBoneIKInto(constraint.upper, constraint.lower, this.matrices, target, constraint.bend)) {
+        throw new Error(`${constraint.name}: this two-bone chain cannot reach a valid pose. Use Reconnect joint in Bone setup before posing.`);
       }
+      this.updateMatrices(/* @__PURE__ */ new Set([constraint.upper.id, constraint.lower.id]));
+    }
+    evaluate(source, constraintsActive = source.constraintsActive !== false) {
+      this.evaluatePose(source, constraintsActive);
       for (const bone of this.order) this.skin.set(bone.id, multiplyMatrix(this.matrices.get(bone.id), this.restInverse.get(bone.id)));
       for (const binding of this.bindings) for (const point of binding.points) {
         if (!point.weights.length) {
@@ -785,11 +982,32 @@ var SVGAnimatorRuntime = (() => {
 
   // src/rig/channels.ts
   function parseRigAnimationProperty(property) {
+    if (property === "physics.windX" || property === "physics.windY") return { field: property.slice(8) };
     const match = /^bones\.(.+)\.(pose|poseX|poseY)$/.exec(property);
     return match ? { boneId: match[1], field: match[2] } : void 0;
   }
+  function resolveRigAnimationChannel(rig, property) {
+    const parsed = parseRigAnimationProperty(property);
+    if (!rig || !parsed) return;
+    if (parsed.boneId !== void 0) {
+      const bone = rig.bones.find((bone2) => bone2.id === parsed.boneId);
+      if (!bone) return;
+      const field2 = parsed.field;
+      return { read: () => bone[field2] ?? 0, write: (value) => {
+        bone[field2] = value;
+      } };
+    }
+    const field = parsed.field;
+    return { read: () => rig[field] ?? 0, write: (value) => {
+      rig[field] = value;
+    } };
+  }
+  function hasRigWindData(rig) {
+    return rig.windX !== void 0 || rig.windY !== void 0 || !!rig.springs?.some((spring) => spring.windInfluence !== void 0 || Object.values(spring.boneSettings ?? {}).some((settings) => settings.windInfluence !== void 0));
+  }
 
   // src/curve-range.ts
+  var DEFAULT_CURVE_SAMPLE_STEPS = 64;
   function lerpCurvePoint(a, b, t) {
     return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
   }
@@ -809,7 +1027,7 @@ var SVGAnimatorRuntime = (() => {
   function curvePoint(line, t) {
     return line.type === "bezier" && line.controlStart && line.controlEnd ? cubicPoint(line.points[0], line.controlStart, line.controlEnd, line.points[1], t) : lerpCurvePoint(line.points[0], line.points[1], t);
   }
-  function curveLengthSamples(line, steps = 64) {
+  function curveLengthSamples(line, steps = DEFAULT_CURVE_SAMPLE_STEPS) {
     if (line.type !== "bezier" || !line.controlStart || !line.controlEnd) return [{ t: 0, length: 0 }, { t: 1, length: Math.hypot(line.points[1].x - line.points[0].x, line.points[1].y - line.points[0].y) }];
     const samples = [{ t: 0, length: 0 }];
     let previous = line.points[0], length = 0;
@@ -857,6 +1075,16 @@ var SVGAnimatorRuntime = (() => {
     return result;
   }
   function projectOutlineSections(contours, sections, style) {
+    const stroke = [];
+    const projection = projectOutline(contours, sections, style, (points) => {
+      stroke.push(`M ${points.map((point) => `${round2(point.x)} ${round2(point.y)}`).join(" L ")} Z`);
+    });
+    return { strokeData: stroke.join(" "), ...projection };
+  }
+  function projectOutline(contours, sections, style, sink, details = true) {
+    const polygon = (points) => {
+      if (points.length >= 3) sink(points);
+    };
     const completeSamples = /* @__PURE__ */ new Map();
     const projected = sections.flatMap((section) => {
       const contour = contours.find((contour2) => contour2.id === section.contourId);
@@ -864,14 +1092,13 @@ var SVGAnimatorRuntime = (() => {
       const lines = outlineSectionLines(contour, section, style.rounded !== false), samples = flatten(lines);
       if (samples.length < 2 || samples[samples.length - 1].distance <= EPSILON) return [];
       const length = samples[samples.length - 1].distance;
-      const full = fullSection(contour);
-      if (section.start.segmentId === full.start.segmentId && section.start.t === 0 && section.end.segmentId === full.end.segmentId && section.end.t === 1 && !!section.fullContour === !!full.fullContour) completeSamples.set(contour, samples);
+      const full = details ? fullSection(contour) : void 0;
+      if (full && section.start.segmentId === full.start.segmentId && section.start.t === 0 && section.end.segmentId === full.end.segmentId && section.end.t === 1 && !!section.fullContour === !!full.fullContour) completeSamples.set(contour, samples);
       return [{ section, contour, lines, samples: taperSamples(samples, section, length), length }];
     });
     const total = projected.reduce((sum, item) => sum + item.length, 0);
     let budget = total * clamp(style.drawProgress ?? 1);
     const problem = outlineDashComplexityProblem(total, style.dasharray ?? []);
-    const stroke = [];
     projected.forEach((item) => {
       const visible = Math.min(item.length, Math.max(0, budget));
       budget -= item.length;
@@ -879,17 +1106,17 @@ var SVGAnimatorRuntime = (() => {
       const wholeClosed = !!item.section.fullContour && item.contour.closed && visible === item.length && !(item.section.startTaper?.length || item.section.endTaper?.length);
       if (wholeClosed && ranges.length > 1 && ranges[0][0] === 0 && ranges[ranges.length - 1][1] === item.length) {
         const first = ranges.shift(), last = ranges.pop();
-        stroke.push(expandStroke([...sampleRange(item.samples, last[0], last[1]), ...sampleRange(item.samples, first[0], first[1]).slice(1)], item.length, item.section, style, false));
+        expandStroke([...sampleRange(item.samples, last[0], last[1]), ...sampleRange(item.samples, first[0], first[1]).slice(1)], item.length, item.section, style, false, polygon);
       }
       ranges.forEach(([start, end]) => {
         const samples = sampleRange(item.samples, start, end);
         const closed = wholeClosed && start === 0 && end === item.length;
-        stroke.push(expandStroke(samples, item.length, item.section, style, closed));
+        expandStroke(samples, item.length, item.section, style, closed, polygon);
       });
     });
+    if (!details) return problem ? { problem } : {};
     const source = contours.flatMap((contour) => completeSamples.get(contour) ?? flatten(outlineSectionLines(contour, fullSection(contour), style.rounded !== false)));
     return {
-      strokeData: stroke.filter(Boolean).join(" "),
       sections: projected.map((item) => ({ id: item.section.id, data: buildRuntimePathData([{ id: item.section.id, closed: !!item.section.fullContour && item.contour.closed, lines: item.lines }], false), length: item.length, start: item.samples[0], end: item.samples[item.samples.length - 1] })),
       sourceBounds: bounds(source),
       ...problem ? { problem } : {}
@@ -965,9 +1192,9 @@ var SVGAnimatorRuntime = (() => {
     const result = [];
     let length = 0;
     for (const line of lines) {
-      const samples = curveLengthSamples(line);
-      for (let index = 0; index < samples.length; index++) {
-        const point = curvePoint(line, samples[index].t), previous = result[result.length - 1];
+      const steps = line.type === "bezier" && line.controlStart && line.controlEnd ? DEFAULT_CURVE_SAMPLE_STEPS : 1;
+      for (let index = 0; index <= steps; index++) {
+        const point = curvePoint(line, index / steps), previous = result[result.length - 1];
         if (previous) {
           const delta = distance2(point, previous);
           if (delta <= EPSILON) continue;
@@ -989,23 +1216,37 @@ var SVGAnimatorRuntime = (() => {
       if (source[middle].distance < desired) low = middle + 1;
       else high = middle;
     }
-    const after = low === source.length ? -1 : low;
-    if (after < 0) {
+    return sampleAtIndex(source, desired, low);
+  }
+  function sampleAtIndex(source, desired, after, tangent = true) {
+    if (after === source.length) {
       const last = source[source.length - 1];
-      return { x: last.x, y: last.y, distance: desired, tangent: direction(source[source.length - 2] ?? source[0], last) };
+      return { x: last.x, y: last.y, distance: desired, tangent: tangent ? direction(source[source.length - 2] ?? source[0], last) : void 0 };
     }
-    if (after === 0) return { x: source[0].x, y: source[0].y, distance: desired, tangent: direction(source[0], source[1] ?? source[0]) };
+    if (after === 0) return { x: source[0].x, y: source[0].y, distance: desired, tangent: tangent ? direction(source[0], source[1] ?? source[0]) : void 0 };
     const a = source[after - 1], b = source[after], t = (desired - a.distance) / (b.distance - a.distance);
-    const point = lerpCurvePoint(a, b, t);
-    return { x: point.x, y: point.y, distance: desired, tangent: direction(a, b) };
+    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, distance: desired, tangent: tangent ? direction(a, b) : void 0 };
   }
   function taperSamples(source, section, length) {
-    const distances = source.map((point) => point.distance);
+    const extra = [];
     for (const [taper, end] of [[section.startTaper, false], [section.endTaper, true]]) {
       if (!taper || taper.length <= 0 || taper.tipWidth === 1) continue;
-      for (let index = 0; index <= 32; index++) distances.push(end ? length * (1 - taper.length * index / 32) : length * taper.length * index / 32);
+      for (let index2 = 0; index2 <= 32; index2++) extra.push(end ? length * (1 - taper.length * index2 / 32) : length * taper.length * index2 / 32);
     }
-    return [...new Set(distances)].sort((a, b) => a - b).map((value) => sampleAtDistance(source, value));
+    extra.sort((a, b) => a - b);
+    const result = [];
+    let index = 0, inserted = 0, after = 0, last;
+    while (index < source.length || inserted < extra.length) {
+      const next = source[index]?.distance ?? Infinity, addition = extra[inserted] ?? Infinity;
+      const desired = Math.min(next, addition);
+      if (next <= addition) index++;
+      else inserted++;
+      if (desired === last) continue;
+      while (after < source.length && source[after].distance < desired) after++;
+      result.push(sampleAtIndex(source, desired, after, desired === 0 || desired === length));
+      last = desired;
+    }
+    return result;
   }
   function outlineDashComplexityProblem(length, input) {
     const pattern = input.filter((value) => Number.isFinite(value) && value >= 0), total = pattern.reduce((sum, value) => sum + value, 0);
@@ -1051,8 +1292,8 @@ var SVGAnimatorRuntime = (() => {
     }
     return result;
   }
-  function expandStroke(source, sectionLength, section, style, closed) {
-    if (!source.length || style.width <= 0) return "";
+  function expandStroke(source, sectionLength, section, style, closed, polygon) {
+    if (!source.length || style.width <= 0) return;
     if (source.length === 1) {
       const point = source[0], half2 = style.width * (style.alignment && style.alignment !== "center" ? 1 : 0.5) * taperAt(point.distance / sectionLength, section);
       if (style.lineCap === "round") return polygon(Array.from({ length: 32 }, (_, index) => ({ x: point.x + Math.cos(index * Math.PI / 16) * half2, y: point.y + Math.sin(index * Math.PI / 16) * half2 })));
@@ -1060,23 +1301,27 @@ var SVGAnimatorRuntime = (() => {
         const tangent = point.tangent ?? { x: 1, y: 0 }, normal = strokeNormal(tangent, 1);
         return polygon([add(add(point, tangent, -half2), normal, -half2), add(add(point, tangent, half2), normal, -half2), add(add(point, tangent, half2), normal, half2), add(add(point, tangent, -half2), normal, half2)]);
       }
-      return "";
+      return;
     }
     let points = source;
     if (closed && distance2(points[0], points[points.length - 1]) <= EPSILON) points = points.slice(0, -1);
     const half = style.width * (style.alignment && style.alignment !== "center" ? 1 : 0.5);
     const radius = (point) => half * taperAt(point.distance / sectionLength, section);
     const left = [], right = [];
+    let before = direction(closed ? points[points.length - 1] : points[0], closed ? points[0] : points[1]);
     points.forEach((point, index) => {
-      const previous = points[index - 1] ?? (closed ? points[points.length - 1] : void 0);
       const next = points[index + 1] ?? (closed ? points[0] : void 0);
-      const before = previous ? direction(previous, point) : direction(point, next);
       const after = next ? direction(point, next) : before;
       const width = radius(point);
-      left.push(...joinPoints(point, before, after, width, 1, style));
-      right.push(...joinPoints(point, before, after, width, -1, style));
+      appendJoin(left, point, before, after, width, 1, style);
+      appendJoin(right, point, before, after, width, -1, style);
+      before = after;
     });
-    if (closed) return polygon(left) + " " + polygon([...right].reverse());
+    if (closed) {
+      polygon(left);
+      polygon(right.reverse());
+      return;
+    }
     const start = points[0], end = points[points.length - 1];
     const startDirection = direction(points[0], points[1]), endDirection = direction(points[points.length - 2], end);
     if (style.lineCap === "square") {
@@ -1089,17 +1334,29 @@ var SVGAnimatorRuntime = (() => {
     const startCap = style.lineCap === "round" ? arc(start, right[0], left[0], -1) : [];
     return polygon([...left, ...endCap, ...right.reverse(), ...startCap]);
   }
-  function joinPoints(point, before, after, width, side, style) {
-    const a = strokeNormal(before, side), b = strokeNormal(after, side);
-    const p = add(point, a, width), q = add(point, b, width), cross = before.x * after.y - before.y * after.x;
-    if (Math.abs(cross) < 1e-6) return [q];
-    const denominator = 1 + a.x * b.x + a.y * b.y;
-    const miter = denominator > 1e-6 ? { x: point.x + (a.x + b.x) * width / denominator, y: point.y + (a.y + b.y) * width / denominator } : q;
-    const outer = cross * side < 0;
-    if (!outer) return [distance2(miter, point) < width * 20 ? miter : q];
-    if (style.lineJoin === "round") return [p, ...arc(point, p, q, Math.sign(cross)), q];
-    if (style.lineJoin === "bevel" || distance2(miter, point) > width * (style.miterLimit ?? 4)) return [p, q];
-    return [miter];
+  function appendJoin(output, point, before, after, width, side, style) {
+    const ax = -before.y * side, ay = before.x * side, bx = -after.y * side, by = after.x * side;
+    const qx = point.x + bx * width, qy = point.y + by * width, cross = before.x * after.y - before.y * after.x;
+    if (Math.abs(cross) < 1e-6) {
+      output.push({ x: qx, y: qy });
+      return;
+    }
+    const denominator = 1 + ax * bx + ay * by;
+    const mx = denominator > 1e-6 ? point.x + (ax + bx) * width / denominator : qx;
+    const my = denominator > 1e-6 ? point.y + (ay + by) * width / denominator : qy;
+    const outer = cross * side < 0, miterDistance = Math.hypot(mx - point.x, my - point.y);
+    if (!outer) {
+      output.push(miterDistance < width * 20 ? { x: mx, y: my } : { x: qx, y: qy });
+      return;
+    }
+    if (style.lineJoin === "round" || style.lineJoin === "bevel" || miterDistance > width * (style.miterLimit ?? 4)) {
+      const p = { x: point.x + ax * width, y: point.y + ay * width }, q = { x: qx, y: qy };
+      output.push(p);
+      if (style.lineJoin === "round") output.push(...arc(point, p, q, Math.sign(cross)));
+      output.push(q);
+      return;
+    }
+    output.push({ x: mx, y: my });
   }
   function taperAt(t, section) {
     const start = section.startTaper, end = section.endTaper;
@@ -1125,13 +1382,16 @@ var SVGAnimatorRuntime = (() => {
       return { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius };
     });
   }
-  function polygon(points) {
-    return points.length < 3 ? "" : `M ${points.map((point) => `${round2(point.x)} ${round2(point.y)}`).join(" L ")} Z`;
-  }
   function bounds(points) {
     if (!points.length) return { x: 0, y: 0, width: 0, height: 0 };
-    const xs = points.map((point) => point.x), ys = points.map((point) => point.y), x = Math.min(...xs), y = Math.min(...ys);
-    return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+    let x = Infinity, y = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const point of points) {
+      x = Math.min(x, point.x);
+      y = Math.min(y, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
+    return { x, y, width: maxX - x, height: maxY - y };
   }
   function direction(a, b) {
     const length = distance2(a, b);
@@ -1148,24 +1408,152 @@ var SVGAnimatorRuntime = (() => {
     return Math.round(value * 1e4) / 1e4;
   }
 
+  // src/rig/physics.ts
+  function physicsSampleTime(time, loop) {
+    const span = loop ? loop.end - loop.start : 0;
+    if (!loop || span <= 0 || time <= loop.end) return time;
+    const phase = (time - loop.start) % span;
+    return phase < 1e-10 ? loop.end : loop.start + phase;
+  }
+  var hasPhysics = (rig) => !!rig.springs?.some((spring) => spring.enabled && (spring.mix > 0 || Object.values(spring.boneSettings ?? {}).some((settings) => settings.mix > 0)));
+  var RigSpringSimulation = class {
+    constructor(source) {
+      this.chains = /* @__PURE__ */ new Map();
+      const problem = springConstraintsProblem(source);
+      if (problem) throw new Error(problem);
+      this.skeleton = new RigEvaluationPlan(source);
+      this.order = rigMotionOrder(source, (source.springs ?? []).map((constraint) => ({ constraint, ids: springChain({ ...source, constraints: [] }, constraint.rootBoneId, constraint.endBoneId) })));
+      for (const step of this.order) if (step.kind === "spring") this.chains.set(step.constraint.id, new SpringChainSimulation(step.ids, step.constraint, step.constraint.boneSettings));
+    }
+    reset() {
+      this.chains.forEach((chain) => chain.reset());
+    }
+    snapshot() {
+      return [...this.chains].map(([id2, chain]) => ({ id: id2, state: chain.snapshot() }));
+    }
+    restore(snapshot) {
+      for (const { id: id2, state } of snapshot) this.chains.get(id2).restore(state);
+    }
+    solve(source, spring) {
+      const pose = this.skeleton.evaluatePose(source, false).pose;
+      for (const step of this.order) {
+        if (step.kind === "ik") this.skeleton.solveConstraint(step.constraint.id);
+        else for (const [id2, value] of spring(step.constraint.id, pose)) pose.bones.find((bone) => bone.id === id2).pose = value;
+      }
+      pose.constraintsActive = true;
+      return pose;
+    }
+    step(source) {
+      const offsets = /* @__PURE__ */ new Map();
+      this.solve(source, (id2, pose) => {
+        const values = this.chains.get(id2).step(pose);
+        for (const [boneId, value] of values) offsets.set(boneId, value - pose.bones.find((bone) => bone.id === boneId).pose);
+        return values;
+      });
+      return offsets;
+    }
+    /** Project interpolated spring offsets and solve downstream IK at display time. */
+    pose(source, offsets) {
+      return this.solve(source, (id2, pose) => new Map(this.chains.get(id2).ids.map((boneId) => [boneId, pose.bones.find((bone) => bone.id === boneId).pose + (offsets.get(boneId) ?? 0)])));
+    }
+  };
+  var RigPhysicsPlan = class {
+    constructor(source, sample) {
+      this.sample = sample;
+      this.stepIndex = -1;
+      this.previous = /* @__PURE__ */ new Map();
+      this.current = /* @__PURE__ */ new Map();
+      this.loopKey = "";
+      this.checkpoints = /* @__PURE__ */ new Map();
+      this.simulation = new RigSpringSimulation(source);
+      this.output = new RigEvaluationPlan(source);
+    }
+    reset() {
+      this.simulation.reset();
+      this.stepIndex = -1;
+      this.checkpoints.clear();
+      this.current.clear();
+      this.previous.clear();
+    }
+    evaluate(time, loop) {
+      if (!Number.isFinite(time) || time < 0) throw new Error("Invalid physics time.");
+      const key = loop ? `${loop.start}:${loop.end}` : "none";
+      if (this.loopKey !== key) {
+        this.reset();
+        this.loopKey = key;
+      }
+      const lower = Math.floor(time / SPRING_STEP + 1e-9), upper = lower + 1;
+      if (this.stepIndex > upper) {
+        const nearest = [...this.checkpoints.keys()].filter((index) => index <= lower).sort((a, b) => b - a)[0];
+        if (nearest === void 0) {
+          this.simulation.reset();
+          this.stepIndex = -1;
+          this.current = /* @__PURE__ */ new Map();
+        } else {
+          const checkpoint = this.checkpoints.get(nearest);
+          this.simulation.restore(checkpoint.state);
+          this.stepIndex = nearest;
+          this.current = checkpoint.offsets;
+        }
+      }
+      while (this.stepIndex < upper) {
+        this.previous = this.current;
+        this.current = this.simulation.step(this.sample(physicsSampleTime(++this.stepIndex * SPRING_STEP, loop)));
+        if (this.stepIndex % 120 === 0) {
+          this.checkpoints.set(this.stepIndex, { state: this.simulation.snapshot(), offsets: new Map(this.current) });
+          while (this.checkpoints.size > 32) this.checkpoints.delete(this.checkpoints.keys().next().value);
+        }
+      }
+      const fraction = Math.max(0, Math.min(1, time / SPRING_STEP - lower));
+      const offsets = /* @__PURE__ */ new Map();
+      for (const [id2, b] of this.current) {
+        const a = this.previous.get(id2) ?? 0;
+        offsets.set(id2, a + (b - a) * fraction);
+      }
+      const pose = this.simulation.pose(this.sample(physicsSampleTime(time, loop)), offsets);
+      this.output.evaluate(pose, false);
+      this.output.pose.constraintsActive = true;
+      return this.output;
+    }
+  };
+
   // src/scene.ts
   var MIN_VISIBLE_DRAW_PROGRESS = 2e-4;
   var RuntimeScene = class {
-    constructor(root, sourceTargets, rigs) {
+    constructor(root, sourceTargets, rigs, animation) {
       this.root = root;
       this.targetById = /* @__PURE__ */ new Map();
       this.targetNodesById = /* @__PURE__ */ new Map();
       this.targets = clone(sourceTargets);
       this.rigs = rigs && clone(rigs);
       this.rigPlans = this.rigs?.armatures.map((rig) => new RigEvaluationPlan(rig)) ?? [];
+      this.physicsPlans = this.rigs?.armatures.map((rig) => {
+        if (!hasPhysics(rig)) return void 0;
+        const source = clone(rig), bases = source.bones.map((bone) => ({ pose: bone.pose, poseX: bone.poseX, poseY: bone.poseY }));
+        const wind = { windX: source.windX, windY: source.windY };
+        const channels = (animation?.tracks ?? []).flatMap((track) => {
+          if (animation.targets[track.target] !== rig.id) return [];
+          const channel = resolveRigAnimationChannel(source, animation.properties[track.property]);
+          return channel ? [{ track, channel }] : [];
+        });
+        return new RigPhysicsPlan(source, (time) => {
+          Object.assign(source, wind);
+          source.bones.forEach((bone, index) => Object.assign(bone, bases[index]));
+          for (const { track, channel } of channels) {
+            const value = evaluateRuntimeTrack(track, time);
+            if (typeof value === "number" && Number.isFinite(value)) channel.write(value);
+          }
+          return source;
+        });
+      }) ?? [];
       this.targets.forEach((target) => this.targetById.set(target.id, target));
     }
     write(targetId, property, value) {
       const boneChannel = parseRigAnimationProperty(property);
       if (boneChannel) {
-        const bone = this.rigs?.armatures.find((rig) => rig.id === targetId)?.bones.find((bone2) => bone2.id === boneChannel.boneId);
-        if (!bone || typeof value !== "number" || !Number.isFinite(value)) return false;
-        bone[boneChannel.field] = value;
+        const channel = resolveRigAnimationChannel(this.rigs?.armatures.find((rig) => rig.id === targetId), property);
+        if (!channel || typeof value !== "number" || !Number.isFinite(value)) return false;
+        channel.write(value);
         return true;
       }
       const target = this.targetById.get(targetId);
@@ -1243,8 +1631,8 @@ var SVGAnimatorRuntime = (() => {
           return false;
       }
     }
-    render() {
-      this.applyRigs();
+    render(time = 0, loop) {
+      this.applyRigs(time, loop);
       for (const target of this.targets) if (target.path?.outlineSections && target.stroke) {
         const problem = outlineProjectionProblem(target.path.contours, target.path.outlineSections, { ...target.stroke, rounded: target.path.rounded });
         if (problem) throw new RuntimePlayerError("invalid-bundle", problem);
@@ -1264,10 +1652,14 @@ var SVGAnimatorRuntime = (() => {
     }
     clear() {
       this.targetNodesById.clear();
+      this.resetPhysics();
     }
     /** Recompute from captured rest points on every seek; solved FK never replaces authored channels. */
-    applyRigs() {
-      const evaluated = this.rigPlans.map((plan, index) => plan.evaluate(this.rigs.armatures[index], true));
+    resetPhysics() {
+      this.physicsPlans.forEach((plan) => plan?.reset());
+    }
+    applyRigs(time, loop) {
+      const evaluated = this.rigPlans.map((plan, index) => this.physicsPlans[index]?.evaluate(time, loop) ?? plan.evaluate(this.rigs.armatures[index], true));
       for (const rig of evaluated) {
         for (const [id2, points] of rig.paths) {
           const target = this.targetById.get(id2);
@@ -1731,7 +2123,7 @@ var SVGAnimatorRuntime = (() => {
     const boneChannel = parseRigAnimationProperty(channel.property);
     if (boneChannel) {
       const rig = rigs.armatures.find((rig2) => rig2.id === channel.targetId);
-      const constraint = rig?.constraints?.find((constraint2) => constraint2.enabled && [constraint2.upperBoneId, constraint2.lowerBoneId].includes(boneChannel.boneId));
+      const constraint = rig?.constraints?.find((constraint2) => constraint2.enabled && [constraint2.upperBoneId, constraint2.lowerBoneId].includes(boneChannel.boneId ?? ""));
       return constraint ? `\u201C${constraint.name}\u201D controls this bone. Animate its IK target, or disable the constraint before animating this bone.` : void 0;
     }
     if (!/^(geometry\.|path\.points\.|transform\.|motion\.)/.test(channel.property)) return;
@@ -1823,13 +2215,15 @@ var SVGAnimatorRuntime = (() => {
       if (!bundle.requiredCapabilities.includes("rig.pose-v1")) fail("Rig data requires rig.pose-v1.");
       const problem = rigSceneProblem(bundle.rigs, bundle.artwork.targets);
       if (problem) fail(problem);
+      if ((bundle.rigs.armatures.some(hasRigWindData) || bundle.animation.properties.some((property) => /^physics\.wind[XY]$/.test(property))) && !bundle.requiredCapabilities.includes("rig.wind-v1")) fail("Wind requires rig.wind-v1.");
+      if (bundle.rigs.armatures.some((rig) => rig.springs?.length) && !bundle.requiredCapabilities.includes("rig.spring-v1")) fail("Spring constraints require rig.spring-v1.");
     }
     for (const track of bundle.animation.tracks) {
       const targetId = bundle.animation.targets[track.target], property = bundle.animation.properties[track.property];
       const channel = parseRigAnimationProperty(property);
       const rig = bundle.rigs?.armatures.find((rig2) => rig2.id === targetId);
       if (channel || rig) {
-        if (!channel || !rig?.bones.some((bone) => bone.id === channel.boneId) || track.kind !== "number") fail(`Rig channel \u201C${targetId}/${property}\u201D has an invalid target or property.`);
+        if (!channel || !resolveRigAnimationChannel(rig, property) || track.kind !== "number") fail(`Rig channel \u201C${targetId}/${property}\u201D has an invalid target or property.`);
       }
       const conflict = rigChannelConflict(bundle.rigs, bundle.artwork.targets, { targetId, property });
       if (conflict) fail(conflict);
@@ -1844,13 +2238,14 @@ var SVGAnimatorRuntime = (() => {
       this._time = 0;
       this._state = "paused";
       this.loopIteration = 0;
+      this.physicsOffset = 0;
       this.listeners = /* @__PURE__ */ new Map();
       validateRuntimeBundle(bundle);
       validateArtwork(root, bundle);
       this._playbackRate = finiteRate(options.playbackRate ?? 1);
       this._loop = options.loop ?? bundle.animation.loop;
       this.initialAttributes = snapshotAttributes(root);
-      this.scene = new RuntimeScene(root, bundle.artwork.targets, bundle.rigs);
+      this.scene = new RuntimeScene(root, bundle.artwork.targets, bundle.rigs, bundle.animation);
       this.applyAt(0);
       queueMicrotask(() => this.emit("ready", { player: this }));
       if (options.autoPlay && (options.autoplayWhenReducedMotion || !prefersReducedMotion())) queueMicrotask(() => this.play());
@@ -1876,6 +2271,10 @@ var SVGAnimatorRuntime = (() => {
     }
     set loop(value) {
       this.assertActive();
+      if (this._loop !== Boolean(value)) {
+        this.physicsOffset = 0;
+        this.scene.resetPhysics();
+      }
       this._loop = Boolean(value);
     }
     setPlaybackRate(value) {
@@ -1915,6 +2314,8 @@ var SVGAnimatorRuntime = (() => {
     }
     stop() {
       this.assertActive();
+      this.physicsOffset = 0;
+      this.scene.resetPhysics();
       if (this.frameId != null) cancelAnimationFrame(this.frameId);
       this.frameId = void 0;
       this.lastFrameTime = void 0;
@@ -1925,6 +2326,8 @@ var SVGAnimatorRuntime = (() => {
     }
     seek(time) {
       this.assertActive();
+      if (this.physicsOffset !== 0) this.scene.resetPhysics();
+      this.physicsOffset = 0;
       const previousTime = this._time;
       const nextTime = clamp2(Number.isFinite(time) ? time : 0, 0, this.duration);
       this.emitMarkers(previousTime, nextTime);
@@ -1977,10 +2380,13 @@ var SVGAnimatorRuntime = (() => {
           if (next > this.duration) {
             this.emitMarkers(markerCursor, this.duration);
             next -= this.duration;
+            this.physicsOffset += this.duration;
             this.loopIteration++;
             this.emit("loop", { time: next, iteration: this.loopIteration, direction: "forward" });
             markerCursor = 0;
           } else {
+            this.physicsOffset = 0;
+            this.scene.resetPhysics();
             this.emitMarkers(markerCursor, 0);
             next += this.duration;
             this.loopIteration++;
@@ -2008,7 +2414,7 @@ var SVGAnimatorRuntime = (() => {
         if (value !== void 0) this.scene.write(animation.targets[track.target], animation.properties[track.property], value);
       });
       try {
-        this.scene.render();
+        this.scene.render(time + this.physicsOffset, this._loop ? { start: 0, end: this.duration } : void 0);
         this._time = time;
       } catch (error) {
         this.pause();

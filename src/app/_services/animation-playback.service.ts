@@ -22,6 +22,7 @@ import { EditorPreferencesService } from "./editor-preferences.service";
 import { parseRigAnimationProperty, readDocumentAnimationProperty, rigAnimationBaseProblem, writeDocumentAnimationProperty } from '../editor/rig-animation';
 import { captureRigAnimationPreview, restoreRigAnimationPreview, RigAnimationPreviewSnapshot } from '../editor/rig-animation-preview';
 import { documentRigChannelProblem } from '../editor/rig-animation-conflicts';
+import { hasPhysics } from '../../../packages/runtime/src/rig/physics';
 
 export type EditorMode = "edit" | "animate";
 
@@ -97,7 +98,10 @@ export class AnimationPlaybackService implements OnDestroy {
     private timelineView?: PlaybackTimelineView;
     private renderer?: ImperativeSvgRenderer;
     private rigPlan?: DocumentRigEvaluationPlan;
-
+    private physicsOffset = 0;
+    private readonly baseRestorers = new Set<() => void>();
+    registerBaseRestorer(restore: () => void): () => void { this.baseRestorers.add(restore); return () => this.baseRestorers.delete(restore); }
+    rigPreviewPose(id: string) { return this.rigPlan?.pose(id); }
     constructor(
         private editor: EditorService,
         private zone: NgZone,
@@ -190,11 +194,12 @@ export class AnimationPlaybackService implements OnDestroy {
         const safeStart = Math.max(0, Math.min(animation.duration - minimum, start));
         const safeEnd = Math.max(safeStart + minimum, Math.min(animation.duration, end));
         animation.workArea = { start: safeStart, end: safeEnd };
+        this.physicsOffset=0; this.rigPlan?.resetPhysics();
     }
 
     resetWorkArea(): void {
         const animation = this.activeAnimation;
-        if(animation) animation.workArea = { start: 0, end: animation.duration };
+        if(animation) { animation.workArea = { start: 0, end: animation.duration }; this.physicsOffset=0; this.rigPlan?.resetPhysics(); }
     }
 
     trimToWorkArea(): boolean {
@@ -224,6 +229,7 @@ export class AnimationPlaybackService implements OnDestroy {
 
     setLoop(loop: boolean) {
         if(this.editor.selectedSVG) {
+            if(this.activeAnimation!.loop !== loop) { this.physicsOffset=0; this.rigPlan?.resetPhysics(); }
             this.activeAnimation!.loop = loop;
         }
     }
@@ -371,7 +377,7 @@ export class AnimationPlaybackService implements OnDestroy {
         }
         this.playing = true;
         this.setOverlaysVisible(false);
-        this.ensureEvaluationPlan(true);
+        this.ensureEvaluationPlan();
         // Prepare setup and the first exact pose before starting the display clock.
         this.previewAt(this.currentTime);
         this.diagnostics.resetClock();
@@ -409,6 +415,8 @@ export class AnimationPlaybackService implements OnDestroy {
     }
 
     seek(time: number) {
+        if(this.physicsOffset !== 0) this.rigPlan?.resetPhysics();
+        this.physicsOffset = 0;
         if(this.clampTime(time) !== this.currentTime) this.contextChanging.next('seek');
         this.currentTime = this.clampTime(time);
         if(this.mode === "animate") {
@@ -430,6 +438,7 @@ export class AnimationPlaybackService implements OnDestroy {
         this.previewSVG = svg;
         const renderer = this.renderer!;
         const rigIds = new Set(plan.tracks.filter((track, index) => appliedValues[index]?.applied && track.rigChannel).map(track => track.targetId));
+        for(const rig of svg.rigs.armatures) if(hasPhysics(rig) && this.allowsTarget(rig.id)) rigIds.add(rig.id);
         this.previewedRigs = rigIds;
         if(rigIds.size && !this.previewRigBase) {
             const problem = rigAnimationBaseProblem(svg, rigIds);
@@ -439,6 +448,7 @@ export class AnimationPlaybackService implements OnDestroy {
             }
             this.previewRigBase = captureRigAnimationPreview(svg);
         }
+        if(rigIds.size) this.rigPlan ??= new DocumentRigEvaluationPlan(svg, this.activeAnimation);
         plan.tracks.forEach((track, index) => {
             const appliedValue = appliedValues[index];
             if(!appliedValue?.applied) return;
@@ -452,14 +462,14 @@ export class AnimationPlaybackService implements OnDestroy {
                 });
             }
             if(track.rigChannel) {
-                if(typeof appliedValue.value === 'number' && Number.isFinite(appliedValue.value)) track.rigChannel.bone[track.rigChannel.field] = appliedValue.value;
+                if(typeof appliedValue.value === 'number' && Number.isFinite(appliedValue.value)) track.rigChannel.write(appliedValue.value);
             }
             else renderer.apply(track, appliedValue.value);
         });
         const evaluatedAt = this.diagnostics.active ? performance.now() : 0;
         if(rigIds.size) {
             try {
-                for(const id of (this.rigPlan ??= new DocumentRigEvaluationPlan(svg)).apply(rigIds)) {
+                for(const id of this.rigPlan!.apply(rigIds, time + this.physicsOffset, this.loop ? this.workArea : undefined)) {
                     const target = plan.targetMap.get(id);
                     if(target) renderer.markDirty(target);
                 }
@@ -502,7 +512,8 @@ export class AnimationPlaybackService implements OnDestroy {
     }
 
     withBaseState<T>(callback: () => T): T {
-        const shouldRestorePreview = this.mode === "animate" && this.previewBaseValues.size > 0;
+        this.baseRestorers.forEach(restore => restore());
+        const shouldRestorePreview = this.mode === "animate" && (this.previewBaseValues.size > 0 || !!this.previewRigBase);
         const previewTime = this.currentTime;
         this.restorePreview();
 
@@ -534,6 +545,7 @@ export class AnimationPlaybackService implements OnDestroy {
 
     invalidate(trackIds?: Iterable<string>): void {
         this.revision++;
+        this.physicsOffset = 0;
         const svg = this.editor.selectedSVG;
         this.restorePreview();
         if(trackIds && this.evaluationPlan && this.evaluationPlan.animation === this.activeAnimation) {
@@ -606,6 +618,7 @@ export class AnimationPlaybackService implements OnDestroy {
         let nextTime = this.currentTime + deltaSeconds;
         if(nextTime > range.end) {
             if(this.loop) {
+                this.physicsOffset += Math.floor((nextTime - range.start) / span) * span;
                 nextTime = range.start + ((nextTime - range.start) % span);
             } else {
                 nextTime = range.end;
@@ -624,9 +637,10 @@ export class AnimationPlaybackService implements OnDestroy {
     private ensureEvaluationPlan(force = false): AnimationEvaluationPlan {
         const svg = this.editor.selectedSVG;
         if(!svg) throw new Error("Cannot compile animation without an active document.");
-        if(force || !this.evaluationPlan || this.evaluationPlan.animation !== this.activeAnimation) {
+        const animation = this.activeAnimation!;
+        if(force || !this.evaluationPlan || this.evaluationPlan.animation !== animation) {
             this.restorePreview();
-            this.evaluationPlan = new AnimationEvaluationPlan(this.activeAnimation!, svg.elements, svg.rigs);
+            this.evaluationPlan = new AnimationEvaluationPlan(animation, svg.elements, svg.rigs);
             this.renderer?.destroy();
             this.renderer = this.zone.runOutsideAngular(() => new ImperativeSvgRenderer(svg));
         }

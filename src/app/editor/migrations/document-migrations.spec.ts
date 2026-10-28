@@ -128,7 +128,7 @@ describe("document migrations", () => {
         const invalid = structuredClone(documentV12IK);
         invalid.data.rigs.armatures[0].constraints[0].targetBoneId = 'lower';
         expect(migrateDocument(invalid).status).toBe('invalid');
-        const future = structuredClone(documentV12IK); future.data.rigs.version = 6;
+        const future = structuredClone(documentV12IK); future.data.rigs.version = 7;
         expect(migrateDocument(future).status).toBe('unsupported');
         const disconnected = structuredClone(documentV12IK); disconnected.data.rigs.armatures[0].bones[2].x = 20;
         expect(migrateDocument(disconnected).status).toBe('invalid');

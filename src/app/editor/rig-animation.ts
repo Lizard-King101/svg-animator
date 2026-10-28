@@ -5,9 +5,9 @@ import type { SVG } from './objects/svg.object';
 import { bindingProblem } from './rig-binding';
 import { attachmentProblem } from './rig-attachments';
 import { evaluateRigConstraints } from './rig-constraints';
-import { parseRigAnimationProperty, readRigAnimationProperty } from '../../../packages/runtime/src/rig/channels';
+import { parseRigAnimationProperty, readRigAnimationProperty, resolveRigAnimationChannel } from '../../../packages/runtime/src/rig/channels';
 export type { RigAnimationField, RigAnimationProperty } from '../../../packages/runtime/src/rig/channels';
-export { parseRigAnimationProperty, rigAnimationProperty, readRigAnimationProperty } from '../../../packages/runtime/src/rig/channels';
+export { rigWindProperty, parseRigAnimationProperty, rigAnimationProperty, readRigAnimationProperty } from '../../../packages/runtime/src/rig/channels';
 
 export function readDocumentAnimationProperty(svg: SVG, targetId: string, property: string): unknown {
     if(parseRigAnimationProperty(property)) return readRigAnimationProperty(svg.rigs, targetId, property);
@@ -18,9 +18,9 @@ export function readDocumentAnimationProperty(svg: SVG, targetId: string, proper
 export function writeDocumentAnimationProperty(svg: SVG, targetId: string, property: string, value: unknown): boolean {
     const parsed = parseRigAnimationProperty(property);
     if(parsed) {
-        const bone = svg.rigs.armatures.find(rig => rig.id === targetId)?.bones.find(bone => bone.id === parsed.boneId);
-        if(!bone || typeof value !== 'number' || !Number.isFinite(value)) return false;
-        bone[parsed.field] = value;
+        const channel=resolveRigAnimationChannel(svg.rigs.armatures.find(rig=>rig.id===targetId),property);
+        if(!channel || typeof value !== 'number' || !Number.isFinite(value)) return false;
+        channel.write(value);
         return true;
     }
     const target = findAnimationTarget(svg.elements, targetId);

@@ -96,7 +96,9 @@ SVG Animator is a motion SVG studio: a browser-based drawing, editing, and keyfr
 - Tangent/perpendicular construction supports straight pen segments, with native ellipse curve-endpoint and common-line tangency also available; existing-segment constraint editing remains planned. Edge rotation excludes clipped geometry, curved path segments, and motion-driven moving geometry.
 - Region creation uses boolean union; a complete object-level boolean toolset remains planned. Region/trim scopes skip hidden, locked, clipped, motion-driven, and directly animated sources, with a 600-source-curve limit. Construction ellipses use high-precision cubic approximations; analytic tangency remains exact. Gap closing and drag-to-paint region/trim selection remain planned.
 - Patterns, images, masks, filters, reusable symbol semantics, rich text, embedded fonts, and accessibility metadata remain planned.
-- Expressions, physics, general constraint types, pole controls, bone scaling and keyed constraint settings remain planned. FK and persistent two-bone IK support editable bone/control keyframes and reusable rig actions.
+- Armature wind: keyframeable canvas-space Wind X/Y, independent per-bone influence, scene/action tracks, normal graph and loop controls, and deterministic exported motion.
+- Persistent spring physics: create and tune constraints in Edit, test them live in Pose, and evaluate them automatically during animation and exported playback. Includes explicit inclusive bone ranges, per-bone stiffness/damping/gravity/angular limits/mix, deterministic seeks and continuous forward loops. Physics-driven child points can drive separate IK chains through dependency-ordered evaluation. Drag previews preserve live motion. Baking to editable keys is optional.
+- Expressions, general constraint types, pole controls, bone scaling and keyed constraint settings remain planned. FK and persistent two-bone IK support editable bone/control keyframes and reusable rig actions.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for ownership rules and [SVG_COMPATIBILITY.md](SVG_COMPATIBILITY.md) for element-level coverage.
 

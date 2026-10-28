@@ -3,6 +3,7 @@ export interface CurvePoint {
     x: number;
     y: number;
 }
+export declare const DEFAULT_CURVE_SAMPLE_STEPS = 64;
 export interface CurveLengthSample {
     t: number;
     length: number;

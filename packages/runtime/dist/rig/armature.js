@@ -1,5 +1,6 @@
 import { applyMatrix, identityMatrix, invertMatrix, multiplyMatrix, rotationMatrix, translationMatrix } from './transform';
 import { constraintPlan } from './constraint-plan';
+import { springConstraintsProblem } from './spring-chain';
 /** Drawing may leave subpixel joint differences; IK requires the same connected joint. */
 export function isConnectedBoneJoint(upper, lower) {
     return Math.abs(lower.x + (lower.poseX ?? 0) - upper.length) <= .05 && Math.abs(lower.y + (lower.poseY ?? 0)) <= .05;
@@ -106,7 +107,7 @@ export function deformBinding(rig, binding) {
     }));
 }
 export function validRigs(value) {
-    if (!record(value) || ![1, 2, 3, 4, 5].includes(value.version) || !Array.isArray(value.armatures))
+    if (!record(value) || ![1, 2, 3, 4, 5, 6].includes(value.version) || !Array.isArray(value.armatures))
         return false;
     const rigIds = new Set(), paths = new Set();
     for (const rig of value.armatures) {
@@ -127,6 +128,10 @@ export function validRigs(value) {
         catch {
             return false;
         }
+        if (['windX', 'windY'].some(field => rig[field] !== undefined && (value.version < 6 || typeof rig[field] !== 'number' || !Number.isFinite(rig[field]))))
+            return false;
+        if (rig.springs !== undefined && (value.version < 6 || springConstraintsProblem(rig)))
+            return false;
         if (rig.constraintsActive !== undefined && typeof rig.constraintsActive !== 'boolean')
             return false;
         if (constraintPlan(rig).problem)

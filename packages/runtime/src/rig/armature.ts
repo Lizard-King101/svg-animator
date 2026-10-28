@@ -1,5 +1,6 @@
 import { applyMatrix, identityMatrix, invertMatrix, Matrix, multiplyMatrix, rotationMatrix, translationMatrix, TransformState } from './transform';
 import { constraintPlan } from './constraint-plan';
+import { springConstraintsProblem, SpringConstraint } from './spring-chain';
 
 /** Rest joints are parent-local; pose angles are offsets from rest, in degrees. */
 export interface Bone { kind?: 'bone' | 'point'; id: string; name: string; parentId: string | null; x: number; y: number; angle: number; length: number; pose: number; poseX?: number; poseY?: number; }
@@ -9,8 +10,8 @@ export interface BoundPoint { id: string; anchorId: string; x: number; y: number
 export interface PathBinding { pathId: string; scopeId?: string; matrix: Matrix; topology: string; boneIds?: string[]; points: BoundPoint[]; }
 export interface RigidAttachment { elementId: string; boneId: string; parentMatrix: Matrix; worldMatrix: Matrix; restTransform: TransformState; }
 export interface TwoBoneIKConstraint { id: string; name: string; type: 'two-bone-ik'; enabled: boolean; upperBoneId: string; lowerBoneId: string; targetBoneId: string; bend: 1 | -1; }
-export interface Armature { attachments?: RigidAttachment[]; constraints?: TwoBoneIKConstraint[]; constraintsActive?: boolean; id: string; name: string; bones: Bone[]; bindings: PathBinding[]; }
-export interface RigDocument { version: 1 | 2 | 3 | 4 | 5; armatures: Armature[]; }
+export interface Armature { windX?: number; windY?: number; springs?: SpringConstraint[]; attachments?: RigidAttachment[]; constraints?: TwoBoneIKConstraint[]; constraintsActive?: boolean; id: string; name: string; bones: Bone[]; bindings: PathBinding[]; }
+export interface RigDocument { version: 1 | 2 | 3 | 4 | 5 | 6; armatures: Armature[]; }
 
 /** Drawing may leave subpixel joint differences; IK requires the same connected joint. */
 export function isConnectedBoneJoint(upper: Bone, lower: Bone): boolean {
@@ -102,7 +103,7 @@ export function deformBinding(rig: Armature, binding: PathBinding): Map<string, 
 }
 
 export function validRigs(value: unknown): value is RigDocument {
-    if(!record(value) || ![1, 2, 3, 4, 5].includes(value.version) || !Array.isArray(value.armatures)) return false;
+    if(!record(value) || ![1, 2, 3, 4, 5, 6].includes(value.version) || !Array.isArray(value.armatures)) return false;
     const rigIds = new Set<string>(), paths = new Set<string>();
     for(const rig of value.armatures) {
         if(!record(rig) || !id(rig.id) || rigIds.has(rig.id) || typeof rig.name !== 'string' || !Array.isArray(rig.bones) || !Array.isArray(rig.bindings)) return false;
@@ -114,6 +115,8 @@ export function validRigs(value: unknown): value is RigDocument {
             bones.add(bone.id);
         }
         try { boneMatrices(rig as unknown as Armature); } catch { return false; }
+        if(['windX','windY'].some(field=>rig[field] !== undefined && (value.version < 6 || typeof rig[field] !== 'number' || !Number.isFinite(rig[field])))) return false;
+        if(rig.springs !== undefined && (value.version < 6 || springConstraintsProblem(rig as unknown as Armature))) return false;
         if(rig.constraintsActive !== undefined && typeof rig.constraintsActive !== 'boolean') return false;
         if(constraintPlan(rig as unknown as Armature).problem) return false;
         if(rig.constraintsActive !== false && rig.constraints?.some((constraint: TwoBoneIKConstraint) => constraint.enabled

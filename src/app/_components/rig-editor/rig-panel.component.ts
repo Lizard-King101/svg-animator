@@ -1,6 +1,8 @@
 import { RigBindingControlsComponent } from './rig-binding-controls.component';
 import { RigConstraintsComponent } from './rig-constraints.component';
 import { RigPoseActionsComponent } from './rig-pose-actions.component';
+import { RigWindComponent } from './rig-wind.component';
+import { RigSpringComponent } from './rig-spring.component';
 import { Component, OnDestroy } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
@@ -10,7 +12,7 @@ import { RigBindingSessionService } from '../../_services/rig-binding-session.se
 
 /** Workspace switching plus the selected bone's setup or pose; artwork and weights live in the binding controls. */
 @Component({
-    selector: 'app-rig-panel', standalone: true, imports: [RigBindingControlsComponent, RigConstraintsComponent, RigPoseActionsComponent, NgFor, NgIf, FaIconComponent],
+    selector: 'app-rig-panel', standalone: true, imports: [RigBindingControlsComponent, RigConstraintsComponent, RigPoseActionsComponent, RigSpringComponent, RigWindComponent, NgFor, NgIf, FaIconComponent],
     template: `
     <div class="workspace-bar" *ngIf="rig.active">
       <div class="rig-segmented" role="group" aria-label="Rig workspace">
@@ -55,6 +57,8 @@ import { RigBindingSessionService } from '../../_services/rig-binding-session.se
           <button *ngIf="!rig.isAnimating && rig.workspace === 'pose' && active.constraints?.length" class="btn btn-sm btn-secondary" title="Clear the pose and pause IK until you pose again; needed before binding artwork" (click)="rig.resetToRest()">Reset to rest</button></div>
       </section>
       <section *ngIf="rig.workspace !== 'weights' && rig.bone" class="rig-section" aria-label="Inverse kinematics" (keydown)="$event.stopPropagation()"><app-rig-constraints /></section>
+      <section *ngIf="rig.workspace !== 'weights' && active.springs?.length" class="rig-section" aria-label="Armature wind" (keydown)="$event.stopPropagation()"><app-rig-wind /></section>
+      <section *ngIf="rig.workspace !== 'weights' && rig.bone" class="rig-section" aria-label="Spring physics" (keydown)="$event.stopPropagation()"><app-rig-spring /></section>
     </ng-container>`,
     styleUrl: './rig-panel.scss',
     styles: `:host {display:block;} .workspace-bar {display:flex; align-items:center; gap:6px; padding:10px 12px; border-bottom:1px solid var(--border);} .workspace-bar .rig-segmented {flex:1;}

@@ -1,5 +1,7 @@
 import { RuntimeSceneTargetV1 } from "./contracts";
 import { RigDocument } from './rig/armature';
+import { RuntimeBundleV1 } from './contracts';
+import { PhysicsLoop } from './rig/physics';
 export declare class RuntimeScene {
     private readonly root;
     readonly targets: RuntimeSceneTargetV1[];
@@ -7,11 +9,13 @@ export declare class RuntimeScene {
     private readonly targetNodesById;
     private readonly rigs?;
     private readonly rigPlans;
-    constructor(root: SVGSVGElement, sourceTargets: RuntimeSceneTargetV1[], rigs?: RigDocument);
+    private readonly physicsPlans;
+    constructor(root: SVGSVGElement, sourceTargets: RuntimeSceneTargetV1[], rigs?: RigDocument, animation?: RuntimeBundleV1['animation']);
     write(targetId: string, property: string, value: unknown): boolean;
-    render(): void;
+    render(time?: number, loop?: PhysicsLoop): void;
     clear(): void;
     /** Recompute from captured rest points on every seek; solved FK never replaces authored channels. */
+    resetPhysics(): void;
     private applyRigs;
     private writeGeometryPosition;
     private writeGeometrySize;

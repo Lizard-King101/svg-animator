@@ -4,9 +4,10 @@ import type { RigDocument } from './rig/armature';
 import type { OutlineSection } from './outline';
 export type { OutlinePosition, OutlineTaper, OutlineSection } from './outline';
 export type { Armature, Bone, BoneWeight, BoundPoint, PathBinding, RigidAttachment, TwoBoneIKConstraint, RigDocument, WeightPointRef } from './rig/armature';
-export declare const RUNTIME_VERSION: "1.5.0";
+export type { SpringSettings, SpringConstraint } from './rig/spring-chain';
+export declare const RUNTIME_VERSION: "1.7.0";
 export declare const RUNTIME_BROWSER_GLOBAL: "SVGAnimatorRuntime";
-export declare const RUNTIME_CAPABILITIES_V1: readonly ["tracks.numeric-v1", "rig.pose-v1", "composition.action-windows-v1", "composition.action-timing-v1", "tracks.color-v1", "tracks.discrete-v1", "render.transforms-v1", "render.geometry-v1", "render.paint-v1", "render.gradient-v1", "render.path-v1", "render.outline-sections-v1", "render.clipping-v1", "render.visible-clipping-v1", "render.motion-path-v1"];
+export declare const RUNTIME_CAPABILITIES_V1: readonly ["tracks.numeric-v1", "rig.pose-v1", "rig.spring-v1", "rig.wind-v1", "composition.action-windows-v1", "composition.action-timing-v1", "tracks.color-v1", "tracks.discrete-v1", "render.transforms-v1", "render.geometry-v1", "render.paint-v1", "render.gradient-v1", "render.path-v1", "render.outline-sections-v1", "render.clipping-v1", "render.visible-clipping-v1", "render.motion-path-v1"];
 export type RuntimeCapabilityV1 = typeof RUNTIME_CAPABILITIES_V1[number];
 export type RuntimeSegmentMode = "linear" | "hold" | "ease-in" | "ease-out" | "ease-in-out" | "temporal";
 export interface CompiledNumericTrackV1 {

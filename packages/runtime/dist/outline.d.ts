@@ -47,6 +47,12 @@ export interface OutlineProjection {
     };
     problem?: string;
 }
+/** Numeric drawing output; polygons retain winding and share SVG's 1e-4 precision.
+ * Internal renderer boundary, not a saved document or public runtime contract.
+ */
+export interface OutlineGeometry extends Omit<OutlineProjection, 'strokeData'> {
+    polygons: CurvePoint[][];
+}
 /** Includes the implicit Z edge without ever adding an editable point. */
 export declare function outlineContourSegments(contour: RuntimeContourV1): RuntimeLineV1[];
 export declare function outlinePositionPoint(contour: RuntimeContourV1, position: OutlinePosition, rounded?: boolean): CurvePoint | undefined;
@@ -54,8 +60,15 @@ export declare function outlinePositionPoint(contour: RuntimeContourV1, position
 export declare function closestOutlinePosition(contour: RuntimeContourV1, point: CurvePoint, rounded?: boolean): OutlinePosition | undefined;
 export declare function outlineSectionLines(contour: RuntimeContourV1, section: OutlineSection, rounded?: boolean): RuntimeLineV1[];
 export declare function outlineSectionPathData(contour: RuntimeContourV1, section: OutlineSection, rounded?: boolean): string;
-/** The only stroke projection used by editor, export and portable playback. */
+/** SVG and numeric renderers consume the same stroke expansion, sampling and rounding. */
 export declare function projectOutlineSections(contours: RuntimeContourV1[], sections: readonly OutlineSection[], style: OutlineStyle): OutlineProjection;
+export declare function projectOutlineGeometry(contours: RuntimeContourV1[], sections: readonly OutlineSection[], style: OutlineStyle): OutlineGeometry;
+/** Emits rounded polygons synchronously without section path strings or source bounds.
+ * Vertices are borrowed for the callback only; a consumer may pack them immediately.
+ */
+export declare function visitOutlinePolygons(contours: RuntimeContourV1[], sections: readonly OutlineSection[], style: OutlineStyle, sink: (points: readonly CurvePoint[]) => void): {
+    problem?: string;
+};
 export declare function fullOutlineSections(contours: RuntimeContourV1[]): OutlineSection[];
 /** Validates authored addresses without projecting or silently repairing their geometry. */
 export declare function outlineSectionsProblem(contours: RuntimeContourV1[], sections: readonly OutlineSection[]): string | undefined;

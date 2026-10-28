@@ -3,7 +3,7 @@ import { moveBoneJoint, restSkeleton } from '../../editor/rig-rest-edit';
 import { BoneDrawingService } from '../../_services/bone-drawing.service';
 import { RigBindingSessionService } from '../../_services/rig-binding-session.service';
 import { boneDiamond } from '../../editor/bone-glyph';
-import { Component, DoCheck, HostListener, Input, OnDestroy } from '@angular/core';
+import { ChangeDetectorRef, Component, DoCheck, HostListener, Input, OnDestroy } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { RigEditingService } from '../../_services/rig-editing.service';
 import { DocumentMutationService } from '../../_services/document-mutation.service';
@@ -36,7 +36,10 @@ export class RigOverlayComponent implements DoCheck, OnDestroy {
         /** Bone setup drags of a connected bone move the joint it shares with its parent. */ jointStart?: { x: number; y: number }; jointTo?: { x: number; y: number }; };
     private suppressClick = false;
     private creation?: { pointerId: number; capture: HTMLElement };
-    constructor(public rig: RigEditingService, private mutations: DocumentMutationService, public session: RigBindingSessionService, public drawing: BoneDrawingService) {}
+    private physicsSubscription;
+    constructor(public rig: RigEditingService, private mutations: DocumentMutationService, public session: RigBindingSessionService, public drawing: BoneDrawingService, detector?: ChangeDetectorRef) {
+        this.physicsSubscription = rig.physicsFrames?.subscribe(() => detector?.detectChanges());
+    }
     choose(id: string): void {
         if(this.suppressClick) { this.suppressClick = false; return; }
         if(this.rig.activeId) this.session.toggle(this.rig.activeId, id);
@@ -84,7 +87,7 @@ export class RigOverlayComponent implements DoCheck, OnDestroy {
         if(!bone || !svg || !this.rig.active || !this.rig.bone) return;
         event.preventDefault(); const rect = this.workspace.element.getBoundingClientRect();
         const joint = { x: bone.start.x + rect.left, y: bone.start.y + rect.top }, capture = event.currentTarget as HTMLElement;
-        const displayed = this.rig.displayedRig!, originalBone = displayed.bones.find(item => item.id === id)!;
+        const displayed = this.rig.posePreview ?? this.rig.displayedRig!, originalBone = displayed.bones.find(item => item.id === id)!;
         const parent = originalBone.parentId ? boneMatrices(displayed).get(originalBone.parentId) : undefined;
         this.drag = { tool: this.rig.editor.activeTool, animationContext: this.rig.animationContext, mode: this.rig.workspace, part, originalBone: { ...originalBone }, changes: {}, inverse: invertMatrix(this.projection), parentInverse: parent ? invertMatrix(parent) : undefined, id, rigId: this.rig.active.id, documentId: svg.id, revision: this.mutations.revision, pointerId: event.pointerId, capture, joint, startX: event.clientX, startY: event.clientY,
             startAngle: Math.atan2(event.clientY - joint.y, event.clientX - joint.x), original: this.rig.bone.pose, angle: this.rig.bone.pose,
@@ -103,7 +106,7 @@ export class RigOverlayComponent implements DoCheck, OnDestroy {
         this.ngDoCheck();
         const drag = this.drag; if(!drag || drag.pointerId !== event.pointerId) return;
         event.preventDefault(); event.stopPropagation();
-        if(Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 3) { drag.angle = drag.original; drag.changes = {}; drag.jointTo = undefined; if(drag.mode === 'pose') this.rig.clearPosePreview(); return; }
+        if(Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 3) { drag.angle = drag.original; drag.changes = {}; drag.jointTo = undefined; if(drag.mode === 'pose') this.rig.cancelPoseGesture(); return; }
         this.update(drag, event);
         if(drag.mode !== 'pose') return;
         if(drag.part === 'tip') this.rig.previewFK(drag.id, { pose: drag.angle });
@@ -162,7 +165,7 @@ export class RigOverlayComponent implements DoCheck, OnDestroy {
         const creation = this.creation; this.creation = undefined;
         if(creation) { this.drawing.cancel(); if(creation.capture.hasPointerCapture(creation.pointerId)) creation.capture.releasePointerCapture(creation.pointerId); }
         const drag = this.drag; this.drag = undefined;
-        if(drag?.mode === 'pose') this.rig.clearPosePreview();
+        if(drag?.mode === 'pose') this.rig.cancelPoseGesture();
         if(drag?.capture.hasPointerCapture(drag.pointerId)) drag.capture.releasePointerCapture(drag.pointerId);
     }
     ngDoCheck(): void {
@@ -170,5 +173,5 @@ export class RigOverlayComponent implements DoCheck, OnDestroy {
         const drag = this.drag;
         if(drag && (!this.rig.visible || !this.rig.canManipulate || this.rig.workspace !== drag.mode || drag.animationContext !== this.rig.animationContext || drag.tool !== this.rig.editor.activeTool || drag.id !== this.rig.boneId || drag.rigId !== this.rig.activeId || drag.documentId !== this.rig.editor.selectedSVG?.id || drag.revision !== this.mutations.revision)) this.cancel();
     }
-    ngOnDestroy(): void { this.cancel(); }
+    ngOnDestroy(): void { this.physicsSubscription?.unsubscribe(); this.cancel(); }
 }

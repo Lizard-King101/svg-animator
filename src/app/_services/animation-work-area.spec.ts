@@ -15,7 +15,7 @@ describe("animation work area", () => {
         const animation = createDefaultAnimation();
         animation.duration = 6;
         animation.workArea = { start: 0, end: 6 };
-        const editor = { selectedSVG: { animation, elements: [] } } as any;
+        const editor = { selectedSVG: { animation, elements: [], rigs: { version: 5, armatures: [] } } } as any;
         const zone = { run: (callback: () => unknown) => callback(), runOutsideAngular: (callback: () => unknown) => callback() } as any;
         const playback = new AnimationPlaybackService(editor, zone, { mode: "edit", setMode: () => {} } as any);
         return { playback, animation };

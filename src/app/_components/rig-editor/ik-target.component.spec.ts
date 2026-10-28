@@ -23,7 +23,7 @@ describe('persistent IK target gestures', () => {
         const rig = {editor:{selectedSVG:{id:'document',width:100,height:100,zoom:2,pos:{x:100,y:150},canvasBounds:{x:10,y:20,width:100,height:100}},activeTool:{}},
             active,displayedRig:active,activeId:'rig',boneId:'lower',bone:active.bones[1],activeIKConstraint:constraint as TwoBoneIKConstraint | undefined,
             ikChain:{upper:active.bones[0],lower:active.bones[1]},ikTargetPosition:{x:300,y:200},ikEndpoint:{x:90,y:0},
-            posePreview:undefined as Armature | undefined,clearPosePreview:jasmine.createSpy('clearPosePreview'),visible:true,canEdit:true,canPose:true,animationContext:'scene:0',workspace:'pose',poseMethod:'fk',problem:undefined,
+            posePreview:undefined as Armature | undefined,cancelPoseGesture:jasmine.createSpy('cancelPoseGesture'),visible:true,canEdit:true,canPose:true,animationContext:'scene:0',workspace:'pose',poseMethod:'fk',problem:undefined,
             previewIK:jasmine.createSpy('previewIK').and.returnValue(active),setIKTarget:jasmine.createSpy('setIKTarget')};
         const mutations={revision:0}, session={pending:undefined as object | undefined};
         const component=new IKTargetComponent(rig as never,mutations as never,session as never);
@@ -52,7 +52,7 @@ describe('persistent IK target gestures', () => {
         expect(t.rig.setIKTarget).not.toHaveBeenCalled();
         t.component.end(t.event(120));
         expect(t.rig.setIKTarget).toHaveBeenCalledOnceWith({x:310,y:200});
-        expect(t.rig.clearPosePreview).toHaveBeenCalled();
+        expect(t.rig.cancelPoseGesture).toHaveBeenCalled();
         t.component.end(t.event(120));
         expect(t.rig.setIKTarget).toHaveBeenCalledTimes(1);
     });
@@ -93,7 +93,7 @@ describe('persistent IK target gestures', () => {
         expect(t.rig.setIKTarget).not.toHaveBeenCalled();
         t.component.begin(t.event(100)); t.component.move(t.event(120)); t.component.end(t.event(100));
         expect(t.rig.setIKTarget).not.toHaveBeenCalled();
-        expect(t.rig.clearPosePreview).toHaveBeenCalled();
+        expect(t.rig.cancelPoseGesture).toHaveBeenCalled();
     });
 
     it('cancels drafts on history, constraint, selection, mode, binding, focus, and Escape changes', () => {
@@ -111,7 +111,7 @@ describe('persistent IK target gestures', () => {
             if(reason==='playing') t.rig.canPose=false;
             t.component.end(t.event(120));
             expect(t.rig.setIKTarget).withContext(reason).not.toHaveBeenCalled();
-            expect(t.rig.clearPosePreview).withContext(reason).toHaveBeenCalled();
+            expect(t.rig.cancelPoseGesture).withContext(reason).toHaveBeenCalled();
         }
     });
 });

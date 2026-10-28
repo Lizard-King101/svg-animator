@@ -6,6 +6,14 @@ The October 24, 2026 scene-composition direction adds reusable actions, animated
 
 This is the source of truth for planned work and delivery order. [FEATURES.md](FEATURES.md) records shipped behavior, [ARCHITECTURE.md](ARCHITECTURE.md) defines ownership, and [SVG_COMPATIBILITY.md](SVG_COMPATIBILITY.md) tracks SVG coverage. Novelty modes and the earlier silly-feature category are excluded. Useful techniques such as springs, squash/stretch, stagger, and follow constraints remain ordinary animation tools.
 
+## Secondary motion update — October 28
+
+The renderer overhaul is parked at the experimental lab; SVG remains the production renderer. Secondary motion now uses **persistent live spring constraints**, created and tuned in Edit. Pose simulates parent/root movement interactively; Animate, onion skins, and standalone playback evaluate the same fixed-step spring kernel automatically. Baking is optional conversion, not the normal workflow. This supersedes the initial preview-and-bake-only delivery and earlier blanket physics deferrals below.
+
+The live-pose follow-up removes competing unsimulated pointer previews, adds explicit start/end ranges and independent per-bone settings, and supports physics-driven child points feeding separate IK chains. Simulation and display share a dependency order.
+
+Document v19 / rig v6 store constraint settings, with runtime 1.7 advertising `rig.spring-v1` and `rig.wind-v1`. Simulation buffers and bounded replay checkpoints are transient. Forward loops retain dynamics while direct seeks reproduce first-traversal poses. Armature Wind X/Y now use editable scene/action tracks, with per-bone wind influence and canvas-space forces. Remaining: real-project tuning, reusable presets if useful, and optional preparation of precisely closed loop clips. Colliders stay excluded unless demonstrated necessary. See `ANIMATION_GUIDE.md` for the workflow and limits.
+
 ## Timeline UI cleanup — October 27, 2026
 
 - The active scene/action's **Loop** toggle now enables repeating playback, wrapped onion skins and graph ghosts together. Ghost helpers derive from that single saved setting through history, reload and context changes. Ordinary onion skins retain their independent session preference with Loop off; motion trails remain independent. Endpoint links and matched speeds still require explicit authoring.
@@ -157,7 +165,7 @@ Each stage ships as focused, reviewable changes. Stages are a sequence, not a pr
 
 Appearance and publishing improvements accompany the stage that needs them. Project safety and accessibility are ongoing requirements throughout the sequence. Larger expansions remain in the deferred section below.
 
-**C3 rig animation foundation is implemented:** bone/control channels, reusable armature actions, deterministic seeking and shared animated rig export extend persistent target IK and the unified binding/weights workflow. Shared timeline scrolling, source trims, positive rates and finite loop counts also apply to rig actions. The next planning boundary is richer animation controls and reusable actor instances; pointer stretch handles, reverse/ping-pong playback, pose blending and broader constraints remain planned. Physics still requires a separate deterministic seek/export design.
+**C3 rig animation foundation is implemented:** bone/control channels, reusable armature actions, deterministic seeking and shared animated rig export extend persistent target IK and the unified binding/weights workflow. Shared timeline scrolling, source trims, positive rates and finite loop counts also apply to rig actions. The next planning boundary is richer animation controls and reusable actor instances; pointer stretch handles, reverse/ping-pong playback, pose blending and broader constraints remain planned. Persistent spring physics now shares deterministic seek and exported evaluation; see the update above.
 
 The C1/C2 action-composition foundation is implemented; completing every C follow-up is not a prerequisite for rigging. D presets should reuse action storage where appropriate, and E actor reuse should extend the same resource/binding model. Precision-drawing follow-ups remain on the backlog. The completed slices define shipped behavior; the broader integration design below includes planned extensions.
 
@@ -775,7 +783,7 @@ The workspace provides stable bone colors, direct multi-point selection, mixed-v
 4. **Done:** Add/Subtract/Set/Smooth painting, bone-first reverse scope and independent overlap-group inspection/editing. Temporary colors, keyboard dabs, cancellation and one-stroke commits share the established weight model.
 5. **Done:** unified assignment, automatic rest-space weighting, selected-owner slider/numeric editing, locks, selection-limited painting and explicit legacy custom weights. Check initialization versus preservation, zero/one/multiple assignments, mixed selection, normalization, preview cancellation and migration.
 6. **Done:** bone/control keyframes, reusable armature actions, deterministic seeking and animated export through the shared rig evaluator. Keep source-time action editing, multi-channel undo, context cancellation and editor/runtime parity as regression gates.
-7. **Later:** reusable actor instances/retargeting, richer constraint controls and pose blending. Secondary-motion constraints remain deferred; physics needs defined seek/export semantics before implementation.
+7. **Later:** reusable actor instances/retargeting, richer constraint controls and pose blending. Persistent spring secondary motion is implemented; richer physics remains separate future work.
 
 Current persistence uses envelope v17 for clipping-source visibility, retaining envelope v16 outline sections and explicit open contours, bone/control animation channels from envelope v15, rig v5 canonical-owner locks from envelope v14, group/shared-point and independent-handle weights from rig v4 / envelope v13, and target constraints from rig v3 / envelope v12. Migration preserves legacy closure, poses, target links, separate weights, empty weights and inherited handles without inventing assignments, locks or relationships. Compatibility and undo/reload remain release gates. Static exports consume materialized base artwork; animated rig, outline and visible-clipping export use runtime 1.5's shared evaluator with `rig.pose-v1`, `render.outline-sections-v1` and `render.visible-clipping-v1` capabilities.
 

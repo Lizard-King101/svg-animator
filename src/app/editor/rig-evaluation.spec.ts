@@ -17,7 +17,7 @@ describe('compiled rig evaluation', () => {
         const times = [...Array.from({ length: 181 }, (_, i) => i / 60), 2.999999, 0, 1.37, .01, 3, 1.37];
         for(const time of times) {
             animation.evaluateEach(time, (track, value) => {
-                if(track.rigChannel) track.rigChannel.bone[track.rigChannel.field] = Number(value);
+                if(track.rigChannel) track.rigChannel.write(Number(value));
             });
             const before = structuredClone(source), reference = evaluateRigConstraints(source), result = plan.evaluate(source);
             expect(source).toEqual(before);

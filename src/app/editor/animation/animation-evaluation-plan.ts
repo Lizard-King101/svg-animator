@@ -15,7 +15,7 @@ import { animationPropertyKey, AppliedAnimationValue, readAnimationProperty } fr
 import { Group } from "../objects/elements/group.object";
 import { AnyElement } from "../objects/svg.object";
 import { Bone, RigDocument } from '../objects/armature';
-import { parseRigAnimationProperty, readRigAnimationProperty } from '../../../../packages/runtime/src/rig/channels';
+import { RigChannelWriter, resolveRigAnimationChannel, readRigAnimationProperty } from '../../../../packages/runtime/src/rig/channels';
 
 export interface EvaluatedAnimationValue {
     targetId: string;
@@ -32,7 +32,7 @@ export interface CompiledAnimationTrack {
     readonly valueType: AnimationValueType;
     readonly target?: AnyElement;
     readonly applicable: boolean;
-    readonly rigChannel?: { bone: Bone; field: 'pose' | 'poseX' | 'poseY' };
+    readonly rigChannel?: RigChannelWriter;
     readonly times: Float64Array;
     readonly numericValues?: Float64Array;
     readonly values: readonly unknown[];
@@ -65,8 +65,7 @@ export class AnimationEvaluationPlan {
         this.tracksByTargetProperty.clear();
         this.tracks = compositionChannels(animation, track => {
             const target = this.targetMap.get(track.targetId);
-        const channel = parseRigAnimationProperty(track.property);
-        const bone = channel && this.rigs?.armatures.find(rig => rig.id === track.targetId)?.bones.find(bone => bone.id === channel.boneId);
+
             return target ? readAnimationProperty(target, track.property) : readRigAnimationProperty(this.rigs, track.targetId, track.property);
         }).map(channel => ({ ...this.compileTrack(channel.base),
             windows: channel.windows.map(window => ({ ...window, track: this.compileTrack(window.track) })) }));
@@ -164,15 +163,14 @@ export class AnimationEvaluationPlan {
             }
         });
         const target = this.targetMap.get(track.targetId);
-        const channel = parseRigAnimationProperty(track.property);
-        const bone = channel && this.rigs?.armatures.find(rig => rig.id === track.targetId)?.bones.find(bone => bone.id === channel.boneId);
+
         return {
             id: track.id,
             targetId: track.targetId,
             property: track.property,
             valueType: track.valueType,
             target,
-            rigChannel: bone && channel ? { bone, field: channel.field } : undefined,
+            rigChannel: resolveRigAnimationChannel(this.rigs?.armatures.find(rig=>rig.id===track.targetId),track.property),
             applicable: target ? readAnimationProperty(target, track.property) !== undefined
                 : track.valueType === 'number' && readRigAnimationProperty(this.rigs, track.targetId, track.property) !== undefined,
             times,

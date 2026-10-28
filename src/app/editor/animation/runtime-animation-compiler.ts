@@ -24,7 +24,7 @@ import { TextSave } from "../objects/elements/text.object";
 import { ElementSave, SVGSave } from "../objects/svg.object";
 import { GradientPaintSave, PaintSave } from "../objects/paint.object";
 import { RigDocument } from '../objects/armature';
-import { parseRigAnimationProperty, readRigAnimationProperty } from '../../../../packages/runtime/src/rig/channels';
+import { hasRigWindData, resolveRigAnimationChannel, parseRigAnimationProperty, readRigAnimationProperty } from '../../../../packages/runtime/src/rig/channels';
 import { rigChannelConflict, rigSceneProblem } from '../../../../packages/runtime/src/rig/runtime-rigs';
 import { outlineProjectionProblem, outlineSectionsProblem } from '../../../../packages/runtime/src/outline';
 
@@ -74,6 +74,7 @@ export function compileRuntimeAnimation(document: SVGSave, options: { bakeRounde
         ? readRigAnimationProperty(document.rigs, track.targetId, track.property)
         : sceneBaseValue(sceneById.get(track.targetId), track.property)) : [];
     const animatedRigIds = new Set(channels.filter(channel => channel.base.enabled !== false && parseRigAnimationProperty(channel.base.property)).map(channel => channel.base.targetId));
+    document.rigs?.armatures.forEach(rig => { if(rig.springs?.some(spring => spring.enabled)) animatedRigIds.add(rig.id); });
     const rigs: RigDocument | undefined = document.rigs && animatedRigIds.size ? {
         version: document.rigs.version,
         armatures: document.rigs.armatures.filter(rig => animatedRigIds.has(rig.id)).map(rig => structuredClone(rig)),
@@ -92,7 +93,7 @@ export function compileRuntimeAnimation(document: SVGSave, options: { bakeRounde
                 addSkipped(diagnostics, track, targetNames, "Track was skipped because its target is unavailable.");
                 return;
             }
-            if(boneProperty ? !rig?.bones.some(bone => bone.id === boneProperty.boneId) || track.valueType !== 'number'
+            if(boneProperty ? !resolveRigAnimationChannel(rig,track.property) || track.valueType !== 'number'
                 : !target || !supportedProperty(track.property) || !targetSupportsProperty(target, track.property)) {
                 addDiagnostic(diagnostics, track, targetNames, "unsupported-property", `Property “${track.property}” is not supported for this layer by runtime v1.`, "Retarget the track to a compatible property or remove it.");
                 addSkipped(diagnostics, track, targetNames, "Track was skipped because its property is unsupported.");
@@ -141,7 +142,7 @@ export function compileRuntimeAnimation(document: SVGSave, options: { bakeRounde
         kind: RUNTIME_BUNDLE_KIND,
         formatVersion: RUNTIME_BUNDLE_FORMAT_VERSION,
         generator: { name: "SVG Animator" as const, version: packageInfo.version },
-        requiredCapabilities: [...requiredCapabilities(normalizedTargets, tracks), ...(rigs ? ['rig.pose-v1' as const] : []), ...(tracks.some(track => track.actionWindows?.some(window => window.timing)) ? ["composition.action-timing-v1" as const] : []), ...(tracks.some(track => track.actionWindows?.length) ? ["composition.action-windows-v1" as const] : [])],
+        requiredCapabilities: [...(rigs?.armatures.some(hasRigWindData) || channels.some(channel=>/^physics\.wind[XY]$/.test(channel.base.property)) ? ['rig.wind-v1' as const] : []), ...requiredCapabilities(normalizedTargets, tracks), ...(rigs ? ['rig.pose-v1' as const] : []), ...(rigs?.armatures.some(rig => rig.springs?.length) ? ['rig.spring-v1' as const] : []), ...(tracks.some(track => track.actionWindows?.some(window => window.timing)) ? ["composition.action-timing-v1" as const] : []), ...(tracks.some(track => track.actionWindows?.length) ? ["composition.action-windows-v1" as const] : [])],
         ...(rigs ? { rigs } : {}),
         artwork: { id: document.id, signature, width, height, viewBox, targets: normalizedTargets },
         animation: {

@@ -1,6 +1,6 @@
 {
   "name": "@svg-animator/runtime-private",
-  "version": "1.5.0",
+  "version": "1.7.0",
   "private": true,
   "description": "Private, dependency-free SVG Animator playback runtime",
   "license": "MIT",
@@ -24,7 +24,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "node ../../scripts/clean-runtime-dist.mjs && tsc -p tsconfig.json && esbuild src/index.ts --bundle --format=esm --sourcemap --banner:js=\"/*! SVG Animator Runtime v1.5.0 | MIT License */\" --outfile=dist/svg-animator-runtime.esm.js && esbuild src/index.ts --bundle --format=iife --global-name=SVGAnimatorRuntime --sourcemap --banner:js=\"/*! SVG Animator Runtime v1.5.0 | MIT License */\" --outfile=dist/svg-animator-runtime.js && esbuild src/index.ts --bundle --format=iife --global-name=SVGAnimatorRuntime --minify --sourcemap --legal-comments=inline --banner:js=\"/*! SVG Animator Runtime v1.5.0 | MIT License */\" --outfile=dist/svg-animator-runtime.min.js",
+    "build": "node ../../scripts/clean-runtime-dist.mjs && tsc -p tsconfig.json && esbuild src/index.ts --bundle --format=esm --sourcemap --banner:js=\"/*! SVG Animator Runtime v1.7.0 | MIT License */\" --outfile=dist/svg-animator-runtime.esm.js && esbuild src/index.ts --bundle --format=iife --global-name=SVGAnimatorRuntime --sourcemap --banner:js=\"/*! SVG Animator Runtime v1.7.0 | MIT License */\" --outfile=dist/svg-animator-runtime.js && esbuild src/index.ts --bundle --format=iife --global-name=SVGAnimatorRuntime --minify --sourcemap --legal-comments=inline --banner:js=\"/*! SVG Animator Runtime v1.7.0 | MIT License */\" --outfile=dist/svg-animator-runtime.min.js",
     "size": "node ../../scripts/check-runtime-size.mjs",
     "api-report": "node ../../scripts/generate-runtime-api-report.mjs",
     "docs": "typedoc --options ../../typedoc.json"

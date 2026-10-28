@@ -4,13 +4,16 @@ import type { RigDocument } from './rig/armature';
 import type { OutlineSection } from './outline';
 export type { OutlinePosition, OutlineTaper, OutlineSection } from './outline';
 export type { Armature, Bone, BoneWeight, BoundPoint, PathBinding, RigidAttachment, TwoBoneIKConstraint, RigDocument, WeightPointRef } from './rig/armature';
+export type { SpringSettings, SpringConstraint } from './rig/spring-chain';
 
-export const RUNTIME_VERSION = "1.5.0" as const;
+export const RUNTIME_VERSION = "1.7.0" as const;
 export const RUNTIME_BROWSER_GLOBAL = "SVGAnimatorRuntime" as const;
 
 export const RUNTIME_CAPABILITIES_V1 = [
     "tracks.numeric-v1",
     "rig.pose-v1",
+    "rig.spring-v1",
+    "rig.wind-v1",
     "composition.action-windows-v1",
     "composition.action-timing-v1",
     "tracks.color-v1",

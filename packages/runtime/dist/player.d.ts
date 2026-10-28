@@ -56,6 +56,7 @@ export declare class RuntimePlayer {
     private frameId?;
     private lastFrameTime?;
     private loopIteration;
+    private physicsOffset;
     private readonly listeners;
     private readonly scene;
     private readonly initialAttributes;

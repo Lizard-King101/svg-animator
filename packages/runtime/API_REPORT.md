@@ -24,9 +24,10 @@ import type { RigDocument } from './rig/armature';
 import type { OutlineSection } from './outline';
 export type { OutlinePosition, OutlineTaper, OutlineSection } from './outline';
 export type { Armature, Bone, BoneWeight, BoundPoint, PathBinding, RigidAttachment, TwoBoneIKConstraint, RigDocument, WeightPointRef } from './rig/armature';
-export declare const RUNTIME_VERSION: "1.5.0";
+export type { SpringSettings, SpringConstraint } from './rig/spring-chain';
+export declare const RUNTIME_VERSION: "1.7.0";
 export declare const RUNTIME_BROWSER_GLOBAL: "SVGAnimatorRuntime";
-export declare const RUNTIME_CAPABILITIES_V1: readonly ["tracks.numeric-v1", "rig.pose-v1", "composition.action-windows-v1", "composition.action-timing-v1", "tracks.color-v1", "tracks.discrete-v1", "render.transforms-v1", "render.geometry-v1", "render.paint-v1", "render.gradient-v1", "render.path-v1", "render.outline-sections-v1", "render.clipping-v1", "render.visible-clipping-v1", "render.motion-path-v1"];
+export declare const RUNTIME_CAPABILITIES_V1: readonly ["tracks.numeric-v1", "rig.pose-v1", "rig.spring-v1", "rig.wind-v1", "composition.action-windows-v1", "composition.action-timing-v1", "tracks.color-v1", "tracks.discrete-v1", "render.transforms-v1", "render.geometry-v1", "render.paint-v1", "render.gradient-v1", "render.path-v1", "render.outline-sections-v1", "render.clipping-v1", "render.visible-clipping-v1", "render.motion-path-v1"];
 export type RuntimeCapabilityV1 = typeof RUNTIME_CAPABILITIES_V1[number];
 export type RuntimeSegmentMode = "linear" | "hold" | "ease-in" | "ease-out" | "ease-in-out" | "temporal";
 export interface CompiledNumericTrackV1 {
@@ -230,6 +231,7 @@ export interface CurvePoint {
     x: number;
     y: number;
 }
+export declare const DEFAULT_CURVE_SAMPLE_STEPS = 64;
 export interface CurveLengthSample {
     t: number;
     length: number;
@@ -334,6 +336,12 @@ export interface OutlineProjection {
     };
     problem?: string;
 }
+/** Numeric drawing output; polygons retain winding and share SVG's 1e-4 precision.
+ * Internal renderer boundary, not a saved document or public runtime contract.
+ */
+export interface OutlineGeometry extends Omit<OutlineProjection, 'strokeData'> {
+    polygons: CurvePoint[][];
+}
 /** Includes the implicit Z edge without ever adding an editable point. */
 export declare function outlineContourSegments(contour: RuntimeContourV1): RuntimeLineV1[];
 export declare function outlinePositionPoint(contour: RuntimeContourV1, position: OutlinePosition, rounded?: boolean): CurvePoint | undefined;
@@ -341,8 +349,15 @@ export declare function outlinePositionPoint(contour: RuntimeContourV1, position
 export declare function closestOutlinePosition(contour: RuntimeContourV1, point: CurvePoint, rounded?: boolean): OutlinePosition | undefined;
 export declare function outlineSectionLines(contour: RuntimeContourV1, section: OutlineSection, rounded?: boolean): RuntimeLineV1[];
 export declare function outlineSectionPathData(contour: RuntimeContourV1, section: OutlineSection, rounded?: boolean): string;
-/** The only stroke projection used by editor, export and portable playback. */
+/** SVG and numeric renderers consume the same stroke expansion, sampling and rounding. */
 export declare function projectOutlineSections(contours: RuntimeContourV1[], sections: readonly OutlineSection[], style: OutlineStyle): OutlineProjection;
+export declare function projectOutlineGeometry(contours: RuntimeContourV1[], sections: readonly OutlineSection[], style: OutlineStyle): OutlineGeometry;
+/** Emits rounded polygons synchronously without section path strings or source bounds.
+ * Vertices are borrowed for the callback only; a consumer may pack them immediately.
+ */
+export declare function visitOutlinePolygons(contours: RuntimeContourV1[], sections: readonly OutlineSection[], style: OutlineStyle, sink: (points: readonly CurvePoint[]) => void): {
+    problem?: string;
+};
 export declare function fullOutlineSections(contours: RuntimeContourV1[]): OutlineSection[];
 /** Validates authored addresses without projecting or silently repairing their geometry. */
 export declare function outlineSectionsProblem(contours: RuntimeContourV1[], sections: readonly OutlineSection[]): string | undefined;
@@ -447,6 +462,7 @@ export declare class RuntimePlayer {
     private frameId?;
     private lastFrameTime?;
     private loopIteration;
+    private physicsOffset;
     private readonly listeners;
     private readonly scene;
     private readonly initialAttributes;
@@ -484,6 +500,8 @@ export declare function validateRuntimeBundle(value: unknown): asserts value is 
 ```ts
 import { RuntimeSceneTargetV1 } from "./contracts";
 import { RigDocument } from './rig/armature';
+import { RuntimeBundleV1 } from './contracts';
+import { PhysicsLoop } from './rig/physics';
 export declare class RuntimeScene {
     private readonly root;
     readonly targets: RuntimeSceneTargetV1[];
@@ -491,11 +509,13 @@ export declare class RuntimeScene {
     private readonly targetNodesById;
     private readonly rigs?;
     private readonly rigPlans;
-    constructor(root: SVGSVGElement, sourceTargets: RuntimeSceneTargetV1[], rigs?: RigDocument);
+    private readonly physicsPlans;
+    constructor(root: SVGSVGElement, sourceTargets: RuntimeSceneTargetV1[], rigs?: RigDocument, animation?: RuntimeBundleV1['animation']);
     write(targetId: string, property: string, value: unknown): boolean;
-    render(): void;
+    render(time?: number, loop?: PhysicsLoop): void;
     clear(): void;
     /** Recompute from captured rest points on every seek; solved FK never replaces authored channels. */
+    resetPhysics(): void;
     private applyRigs;
     private writeGeometryPosition;
     private writeGeometrySize;

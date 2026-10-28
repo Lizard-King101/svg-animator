@@ -1,10 +1,12 @@
 export const RUNTIME_BUNDLE_KIND = "svg-animator/runtime-bundle";
 export const RUNTIME_BUNDLE_FORMAT_VERSION = 1;
-export const RUNTIME_VERSION = "1.5.0";
+export const RUNTIME_VERSION = "1.7.0";
 export const RUNTIME_BROWSER_GLOBAL = "SVGAnimatorRuntime";
 export const RUNTIME_CAPABILITIES_V1 = [
     "tracks.numeric-v1",
     "rig.pose-v1",
+    "rig.spring-v1",
+    "rig.wind-v1",
     "composition.action-windows-v1",
     "composition.action-timing-v1",
     "tracks.color-v1",

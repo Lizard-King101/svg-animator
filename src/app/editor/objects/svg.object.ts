@@ -115,7 +115,7 @@ export class SVG {
 
     save(): SVGSave {
         return {
-            rigs: this.rigs.armatures.length ? { ...structuredClone(this.rigs), version: 5 } : undefined,
+            rigs: this.rigs.armatures.length ? { ...structuredClone(this.rigs), version: this.rigs.armatures.some(rig => rig.springs?.length || rig.windX!==undefined || rig.windY!==undefined) ? 6 : 5 } : undefined,
             projectColors: this.projectColors.length ? this.projectColors.map(color => ({ ...color })) : undefined,
             id: this.id,
             name: this.name ?? '',

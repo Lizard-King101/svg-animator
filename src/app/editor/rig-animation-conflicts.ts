@@ -18,7 +18,7 @@ export function documentRigChannelProblem(svg: SVG, targetId: string, property: 
     const parsed = parseRigAnimationProperty(property);
     if(parsed) {
         const rig = svg.rigs.armatures.find(rig => rig.id === targetId);
-        if(!rig?.bones.some(bone => bone.id === parsed.boneId)) return 'This bone no longer exists.';
+        if(!rig || (parsed.boneId!==undefined && !rig.bones.some(bone => bone.id === parsed.boneId))) return 'This armature or bone no longer exists.';
         const rigs = { ...svg.rigs, armatures: [rig] };
         const ownProblem = rigChannelConflict(rigs, scene, { targetId, property });
         if(ownProblem) return ownProblem;
@@ -30,5 +30,6 @@ export function documentRigChannelProblem(svg: SVG, targetId: string, property: 
         return;
     }
     const animatedIds = new Set(tracks.filter(track => parseRigAnimationProperty(track.property)).map(track => track.targetId));
+    svg.rigs.armatures.filter(rig => rig.springs?.some(spring => spring.enabled)).forEach(rig => animatedIds.add(rig.id));
     return rigChannelConflict({ ...svg.rigs, armatures: svg.rigs.armatures.filter(rig => animatedIds.has(rig.id)) }, scene, { targetId, property });
 }

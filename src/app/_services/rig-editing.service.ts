@@ -8,6 +8,7 @@ import { AnyElement, SVG } from '../editor/objects/svg.object';
 import { captureGeometrySnapshot, restoreGeometrySnapshot } from '../editor/objects/element-geometry';
 import { applyMatrix, invertMatrix, multiplyMatrix } from '../editor/objects/transform.object';
 import { findAnimationTarget } from '../editor/objects/animation-targets';
+import { Subject } from 'rxjs';
 import { Injectable } from '@angular/core';
 import { Armature, Bone, TwoBoneIKConstraint, WeightPointRef, boneMatrices, deformBinding, effectivePointWeights, hasBonePose, isConnectedBoneJoint, validRigs } from '../editor/objects/armature';
 import { addPathBindings, prepareArtworkAssignment } from '../editor/rig-assignment';
@@ -24,13 +25,15 @@ import { allAnimationDocuments } from '../editor/objects/animation.object';
 import { EditorService } from './editor.service';
 import { AnimationPlaybackService } from './animation-playback.service';
 import { DocumentMutationService, MutationDomain } from './document-mutation.service';
-import { rigAnimationBaseProblem, rigAnimationProperty } from '../editor/rig-animation';
+import { rigAnimationBaseProblem, rigAnimationProperty, rigWindProperty } from '../editor/rig-animation';
 import { applyRigPoseSnapshot, captureRigPose, POSE_FIELDS, poseControls, poseStructure, RigPoseSnapshot } from '../editor/animation/rig-pose';
 import { documentRigChannelProblem } from '../editor/rig-animation-conflicts';
+import { SpringConstraint, springConstraintsProblem, springChain } from '../../../packages/runtime/src/rig/spring-chain';
 
 /** Owns rig commands; selection and the rest/pose workspace are session-only. */
 @Injectable()
 export class RigEditingService {
+    readonly physicsFrames = new Subject<void>();
     anchorId = '';
     activeId?: string;
     boneId?: string;
@@ -49,24 +52,31 @@ export class RigEditingService {
     poseMethod: 'fk' | 'ik' = 'fk';
     /** Uncommitted evaluated pose shown on the live artwork; every rig command restores it before committing. */
     private previewEvaluation?: { rig: Armature; revision: number; plan: RigEvaluationPlan };
-    private livePose?: { svg: SVG; rigId: string; rig: Armature; restore: () => void };
+    private livePose?: { svg: SVG; rigId: string; rig: Armature; physics?: boolean; restore: () => void };
+    private authoredPreview?: Armature;
+    private physicsPreview?: (source: Armature) => RigEvaluationPlan | undefined;
+    registerPhysicsPreview(preview: (source: Armature) => RigEvaluationPlan | undefined): () => void {
+        this.physicsPreview=preview;
+        return () => { if(this.physicsPreview===preview) this.physicsPreview=undefined; };
+    }
+    get physicsInput(): Armature | undefined { return this.authoredPreview ?? this.active; }
     get posePreview(): Armature | undefined { const live = this.livePose; return live && live.svg === this.editor.selectedSVG && live.rigId === this.activeId ? live.rig : undefined; }
     private ikBends = new Map<string, 1 | -1>();
     selectedIKConstraintId?: string;
     get selectedIKConstraints() { return this.active?.constraints?.filter(item => [item.upperBoneId,item.lowerBoneId,item.targetBoneId].includes(this.boneId ?? '')) ?? []; }
     get activeIKConstraint(): TwoBoneIKConstraint | undefined { return this.selectedIKConstraints.find(item => item.id === this.selectedIKConstraintId) ?? this.selectedIKConstraints[0]; }
     selectIKConstraint(id: string): void { this.selectedIKConstraintId = id; this.clearPosePreview(); }
-    get displayedRig() { try { return this.active && evaluateRigConstraints(this.playback.isRigPreviewed(this.active.id) ? {...this.active, constraintsActive:true} : this.active); } catch { return this.active; } }
+    get displayedRig() { try { return this.active && (this.playback.rigPreviewPose(this.active.id) ?? evaluateRigConstraints(this.playback.isRigPreviewed(this.active.id) ? {...this.active, constraintsActive:true} : this.active)); } catch { return this.active; } }
     /** The enabled constraint that owns a bone's rotation; such bones are posed through their target. */
     drivingConstraint(boneId: string): TwoBoneIKConstraint | undefined { return this.active?.constraints?.find(item => item.enabled && [item.upperBoneId,item.lowerBoneId].includes(boneId)); }
-    get ikChain() { const rig = this.displayedRig, id = this.activeIKConstraint?.lowerBoneId ?? this.boneId; return rig && id ? twoBoneChain(rig,id) : undefined; }
+    get ikChain() { const rig = this.posePreview ?? this.displayedRig, id = this.activeIKConstraint?.lowerBoneId ?? this.boneId; return rig && id ? twoBoneChain(rig,id) : undefined; }
     get ikBend(): 1 | -1 { return this.activeIKConstraint?.bend ?? this.ikBends.get(this.activeId + ':' + this.boneId) ?? (this.active && this.boneId ? chainBend(this.active,this.boneId) : 1); }
     get ikEndpoint() {
         const chain = this.ikChain; if(!chain || !this.active) return undefined;
-        return applyMatrix(boneMatrices(this.displayedRig!).get(chain.lower.id)!,chain.lower.length,0);
+        return applyMatrix(boneMatrices(this.posePreview ?? this.displayedRig!).get(chain.lower.id)!,chain.lower.length,0);
     }
     get ikTargetPosition() {
-        const constraint = this.activeIKConstraint, rig = this.displayedRig;
+        const constraint = this.activeIKConstraint, rig = this.posePreview ?? this.displayedRig;
         if(!constraint || !rig) return this.ikEndpoint;
         const matrix = boneMatrices(rig).get(constraint.targetBoneId); return matrix && applyMatrix(matrix,0,0);
     }
@@ -192,6 +202,8 @@ export class RigEditingService {
         const length = Math.hypot(b.x - a.x, b.y - a.y); if(kind === 'bone' && length < .001) return false;
         const bone: Bone = fresh && kind === 'point' ? rig.bones[0] : { id: this.editor.ID, name: (kind === 'point' ? 'Point ' : 'Bone ') + rig.bones.length, kind,
             parentId: parent?.id ?? null, x: a.x, y: a.y, angle: kind === 'point' ? 0 : Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI, length: kind === 'point' ? 0 : length, pose: 0 };
+        const candidate = {...rig, bones: rig.bones.includes(bone) ? rig.bones : [...rig.bones,bone]};
+        const springProblem = springConstraintsProblem(candidate); if(springProblem) { this.message = springProblem; return false; }
         const target = rig;
         this.mutate(() => { if(fresh) svg.rigs.armatures.push(target); if(!target.bones.includes(bone)) target.bones.push(bone); }, 'metadata');
         this.selectBone(rig.id, bone.id); this.workspace = 'rest'; return true;
@@ -207,6 +219,7 @@ export class RigEditingService {
         const bone: Bone = { id: this.editor.ID, name: `Bone ${rig.bones.length + 1}`, parentId: parent?.id ?? null,
             x: parent ? parent.length : svg.viewBoxX + svg.width / 2, y: parent ? 0 : svg.viewBoxY + svg.height / 2,
             angle: 0, length: Math.max(10, svg.width / 5), pose: 0 };
+        const springProblem = springConstraintsProblem({...rig,bones:[...rig.bones,bone]}); if(springProblem) { this.message = springProblem; return; }
         this.mutate(() => rig.bones.push(bone), 'metadata'); this.boneId = bone.id;
     }
     editBone(changes: Partial<Omit<Bone, 'id' | 'pose'>>): void {
@@ -222,7 +235,7 @@ export class RigEditingService {
         const before = restSkeleton(this.displayedRig!), broken = candidate.constraints?.find(item => constraintJointGap(candidate, item) && !constraintJointGap(before, item));
         const gap = broken && constraintJointGap(candidate, broken);
         if(broken && gap) { this.message = `${gap.lower} must stay on ${gap.upper}'s tip for ${broken.name}. Drag the joint on the canvas to move both bones together.`; return; }
-        if(!validRigs({ version: 5, armatures: [candidate] })) { this.message = 'Use finite values, a positive length, and a parent outside this bone’s descendants.'; return; }
+        if(!validRigs({ version: 6, armatures: [candidate] })) { this.message = 'Use finite values, a positive length, and a parent outside this bone’s descendants.'; return; }
         this.commitRig(candidate);
         this.message = 'Rest setup updated. Artwork and weights preserved.';
     }
@@ -234,7 +247,7 @@ export class RigEditingService {
         if(candidate.constraints?.length) candidate.constraintsActive = false;
         const constraintProblem = rigConstraintProblem(candidate);
         if(constraintProblem) { this.message = constraintProblem; return false; }
-        if(!validRigs({ version: 5, armatures: [candidate] })) { this.message = 'Use finite values and positive bone lengths.'; return false; }
+        if(!validRigs({ version: 6, armatures: [candidate] })) { this.message = 'Use finite values and positive bone lengths.'; return false; }
         this.commitRig(candidate); this.boneId = boneId;
         this.message = world ? 'Joint moved. Both bones stay connected; artwork stays in place.' : 'Joint reconnected. This chain can use IK again.';
         return true;
@@ -259,6 +272,7 @@ export class RigEditingService {
             rig.bindings = candidate.bindings;
             if(candidate.attachments) rig.attachments = candidate.attachments; else delete rig.attachments;
             rig.constraints = candidate.constraints; rig.constraintsActive = candidate.constraintsActive;
+            if(candidate.springs) rig.springs = candidate.springs; else delete rig.springs;
             const root = rig.bones.find(bone => bone.id === rig.id); if(root) rig.name = root.name;
         }, 'metadata');
     }
@@ -291,10 +305,11 @@ export class RigEditingService {
         candidate.bones.splice(index,0,moving);
         const constraintProblem = rigConstraintProblem(candidate);
         if(constraintProblem) { this.message = constraintProblem; return; }
-        if(validRigs({version:5,armatures:[candidate]})) this.commitRig(candidate);
+        if(validRigs({version:6,armatures:[candidate]})) this.commitRig(candidate);
     }
     deleteBone(): void {
         const rig = this.active, bone = this.bone; if(!rig || !bone || !this.restEditable()) return;
+        if(rig.springs?.some(spring => springChain({...rig,constraints:[]},spring.rootBoneId,spring.endBoneId).includes(bone.id))) { this.message = 'Remove this bone’s spring constraint before deleting it.'; return; }
         if(rig.constraints?.some(item => [item.upperBoneId,item.lowerBoneId,item.targetBoneId].includes(bone.id))) { this.message = 'Delete this bone’s IK constraint before deleting the bone.'; return; }
         if(rig.bindings.some(link => link.boneIds?.includes(bone.id) || link.points.some(point => point.lockedBoneIds?.includes(bone.id) || point.weights.some(weight => weight.boneId === bone.id))) || rig.attachments?.some(link => link.boneId === bone.id)) { this.message = 'Unbind or detach this bone before deleting it.'; return; }
         if(rig.bones.some(item => item.parentId === bone.id)) { this.message = 'Reparent or remove child bones first.'; return; }
@@ -335,19 +350,44 @@ export class RigEditingService {
         this.clearPosePreview();
         const svg = this.editor.selectedSVG, rig = this.active;
         if(!svg || !rig || !this.canPose || !this.readyToPose()) return;
-        const evaluation = this.evaluatePose(candidate, reuseSetup); if(!evaluation) return;
+        let physics: RigEvaluationPlan | undefined;
+        try { if(reuseSetup && !this.isAnimating && this.workspace==='pose') physics=this.physicsPreview?.(candidate); }
+        catch(error) { this.message=(error as Error).message; return; }
+        const evaluation = physics ?? this.evaluatePose(candidate, reuseSetup); if(!evaluation) return;
+        this.authoredPreview = candidate;
+        return this.showPoseEvaluation(evaluation,!!physics);
+    }
+    /** A live simulation publishes artwork only; authored controls never receive its solved angles. */
+    showPhysicsPreview(evaluation: RigEvaluationPlan): void {
+        const input = this.authoredPreview;
+        this.clearPosePreview(); this.authoredPreview = input;
+        this.showPoseEvaluation(evaluation, true);
+        this.physicsFrames.next();
+    }
+    clearPhysicsPreview(): void { if(this.livePose?.physics) {
+        const input = this.authoredPreview; this.clearPosePreview(); this.authoredPreview = input;
+    } }
+    private showPoseEvaluation(evaluation: RigEvaluationPlan, physics = false): Armature | undefined {
+        const svg = this.editor.selectedSVG, rig = this.active; if(!svg || !rig) return;
         const evaluated = evaluation.pose;
         const paths = evaluated.bindings.flatMap(binding => { const path = findAnimationTarget(svg.elements, binding.pathId); return path instanceof Path ? [path] : []; });
         const geometry = paths.map(path => ({ path, snapshot: captureGeometrySnapshot(path) }));
         const transforms = (evaluated.attachments ?? []).flatMap(link => { const element = findAnimationTarget(svg.elements, link.elementId); return element ? [{ element, transform: { ...element.transform } }] : []; });
         applyRigPose(svg, evaluated, evaluation.paths); applyAttachments(svg, evaluated, evaluation.transforms);
-        this.livePose = { svg, rigId: rig.id, rig: evaluated, restore: () => {
+        this.livePose = { svg, rigId: rig.id, rig: evaluated, physics, restore: () => {
             geometry.forEach(({ path, snapshot }) => restoreGeometrySnapshot(path, snapshot));
             transforms.forEach(({ element, transform }) => element.transform = transform);
         } };
         return evaluated;
     }
-    clearPosePreview(): void { const live = this.livePose; this.livePose = undefined; live?.restore(); }
+    /** Gesture cancellation restores authored controls while retaining live spring state. */
+    cancelPoseGesture(): void { this.clearPosePreview(); this.refreshPhysicsPreview(); }
+    private refreshPhysicsPreview(): void {
+        if(this.isAnimating || this.workspace!=='pose' || !this.active) return;
+        try { const evaluation=this.physicsPreview?.(this.active); if(evaluation) this.showPhysicsPreview(evaluation); }
+        catch(error) { this.message=(error as Error).message; }
+    }
+    clearPosePreview(): void { const live = this.livePose; this.livePose = undefined; this.authoredPreview = undefined; live?.restore(); }
     setIKTarget(target: {x:number;y:number}): void {
         if(!this.active || !this.canPose || !this.readyToPose()) return;
         const candidate = this.ikCandidate(target); if(candidate) this.commitAuthoredPose(candidate);
@@ -447,10 +487,45 @@ export class RigEditingService {
             rig.bindings = candidate.bindings;
             if(candidate.attachments) rig.attachments = candidate.attachments; else delete rig.attachments;
             if(candidate.constraints) rig.constraints = candidate.constraints; else delete rig.constraints;
+            if(candidate.springs) { rig.springs = candidate.springs; svg.rigs.version = 6; } else delete rig.springs;
             if(candidate.constraintsActive !== undefined) rig.constraintsActive = candidate.constraintsActive; else delete rig.constraintsActive;
             applyRigPose(svg,evaluated,evaluation.paths); applyAttachments(svg,evaluated,evaluation.transforms);
         });
-        this.message = ''; return true;
+        this.message = ''; this.refreshPhysicsPreview(); return true;
+    }
+    get canEditWind(): boolean { return !!this.active && (this.canEdit || (this.isAnimating && !this.playback.playing && this.playback.allowsTarget(this.active.id))); }
+    windKeyed(field: 'windX'|'windY'): boolean {
+        return !!this.active && !!this.playback.activeAnimation?.tracks.find(track=>track.targetId===this.activeId && track.property===rigWindProperty(field))?.keyframes.some(key=>Math.abs(key.time-this.playback.currentTime)<.0005);
+    }
+    setWind(field: 'windX'|'windY', value: number, keyOnly=false): void {
+        const rig=this.active,svg=this.editor.selectedSVG;
+        if(!rig || !svg || !this.canEditWind || !Number.isFinite(value) || Math.abs(value)>1000) return;
+        const property=rigWindProperty(field);
+        if(!keyOnly && (rig[field]??0)===value) return;
+        if(this.isAnimating) {
+            const problem=documentRigChannelProblem(svg,rig.id,property);
+            if(problem) {this.message=problem;return;}
+            this.mutate(()=>this.playback.upsertTargetKeyframe(rig.id,property,'number',value),'animation');
+        } else this.mutate(()=>{rig[field]=value;svg.rigs.version=6;},'metadata');
+        this.message=this.playback.contextMessage; this.refreshPhysicsPreview();
+    }
+    setSpringConstraint(spring: SpringConstraint, remove = false): boolean {
+        if(!this.canEdit || !this.active) return false;
+        const candidate = structuredClone(this.active);
+        candidate.springs ??= [];
+        const index=candidate.springs.findIndex(item=>item.id===spring.id);
+        if(remove) candidate.springs=candidate.springs.filter(item=>item.id!==spring.id);
+        else if(index>=0) candidate.springs[index]={...spring};
+        else candidate.springs.push({...spring});
+        if(!candidate.springs.length) delete candidate.springs;
+        const problem = springConstraintsProblem(candidate);
+        if(problem) { this.message = problem; return false; }
+        if(!remove && spring.enabled) {
+            const conflict = documentRigChannelProblem(this.editor.selectedSVG!, candidate.id, rigAnimationProperty(spring.rootBoneId,'pose'));
+            if(conflict) { this.message = conflict; return false; }
+        }
+        if(JSON.stringify(candidate.springs) === JSON.stringify(this.active.springs)) return true;
+        return this.commitPose(candidate);
     }
     private ikCandidate(target: {x:number;y:number}): Armature | undefined {
         if(!this.active || ![target.x,target.y].every(Number.isFinite)) return;
@@ -470,7 +545,7 @@ export class RigEditingService {
     }
     private placeTarget(candidate: Armature, id: string, world: {x:number;y:number}): void {
         const bone = candidate.bones.find(item => item.id === id)!;
-        const matrix = bone.parentId ? boneMatrices(this.displayedRig!).get(bone.parentId) : undefined;
+        const matrix = bone.parentId ? boneMatrices(this.posePreview ?? this.displayedRig!).get(bone.parentId) : undefined;
         const local = matrix ? applyMatrix(invertMatrix(matrix),world.x,world.y) : world;
         bone.poseX = local.x-bone.x; bone.poseY = local.y-bone.y;
     }
@@ -542,7 +617,7 @@ export class RigEditingService {
         const problem = weightScopeProblem(svg,target); if(problem) { this.message = problem; return false; }
         if(this.overlapsLink(target)) { this.message = 'This artwork or a descendant already has a rig link. Unbind or detach it before binding the complete group.'; return false; }
         const paths = nativeWeightPaths(target), linked = addPathBindings(svg,rig,target,ids,restrictInfluences);
-        if(!validRigs({version:5,armatures:[linked]})) { this.message = 'The binding contains invalid point weights.'; return false; }
+        if(!validRigs({version:6,armatures:[linked]})) { this.message = 'The binding contains invalid point weights.'; return false; }
         this.mutate(() => {
             const ancestors = new Set(paths.flatMap(path => findElementChain(svg.elements,path) ?? []));
             ancestors.forEach(pinTransformOrigin); rig.bindings = linked.bindings;
@@ -556,7 +631,7 @@ export class RigEditingService {
         try {
             if(boneIds.length && this.problem) return this.problem;
             const {candidate} = prepareArtworkAssignment(svg,rig,target,boneIds);
-            if(!validRigs({version:5,armatures:[candidate]})) return 'These bones are not permitted by every shared point. Edit the shared group first.';
+            if(!validRigs({version:6,armatures:[candidate]})) return 'These bones are not permitted by every shared point. Edit the shared group first.';
             return undefined;
         } catch(error) { return (error as Error).message; }
     }
@@ -580,7 +655,7 @@ export class RigEditingService {
     unbindScope(pathIds: string[]): boolean {
         const rig = this.active; if(!rig || !this.canEdit || !pathIds.length) return false;
         const candidate = detachBindingWeights(rig,pathIds);
-        if(!validRigs({version:5,armatures:[candidate]})) { this.message = 'Repair shared point links before unbinding.'; return false; }
+        if(!validRigs({version:6,armatures:[candidate]})) { this.message = 'Repair shared point links before unbinding.'; return false; }
         this.mutate(() => rig.bindings = candidate.bindings, 'metadata');
         this.message = 'Unbound. The current artwork is preserved; reset pose before binding again.';
         return true;
@@ -659,7 +734,7 @@ export class RigEditingService {
         catch(error) { this.message = (error as Error).message; return false; }
     }
     private commitWeightCandidate(candidate: Armature): boolean {
-        if(!validRigs({version:5,armatures:[candidate]})) { this.message = 'Weights must use influences allowed by every linked path. Edit influences or unlink this weight group first.'; return false; }
+        if(!validRigs({version:6,armatures:[candidate]})) { this.message = 'Weights must use influences allowed by every linked path. Edit influences or unlink this weight group first.'; return false; }
         return this.commitPose(candidate);
     }
     setBindingInfluences(pathId: string, boneIds: string[]): boolean {

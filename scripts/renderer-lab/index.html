@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Renderer comparison lab</title>
+<style>
+:root { color-scheme: dark; font: 15px/1.5 system-ui, sans-serif; background: #15171b; color: #e6e7eb; }
+body { max-width: 1400px; margin: 32px auto; padding: 0 24px; }
+h1 { font-size: 26px; margin-bottom: 8px; } p { max-width: 100ch; color: #b9bfca; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 24px 0; }
+button, select, input { font: inherit; } button, select { padding: 8px 12px; border: 1px solid #49515f; border-radius: 6px; background: #242933; color: inherit; }
+button:disabled { opacity: .45; } :focus-visible { outline: 2px solid #80b5ff; outline-offset: 3px; }
+.views { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; } figure { margin: 0; min-width: 0; }
+figcaption { margin-bottom: 8px; } [hidden] { display: none !important; }
+canvas, svg { width: 100%; height: auto; aspect-ratio: 5/4; background: white; display: block; }
+.scene-views canvas, .scene-views svg { aspect-ratio: 1; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid #383f49; padding: 16px; border-radius: 6px; }
+@media(max-width:800px) { .views { grid-template-columns: 1fr; } }
+</style></head><body>
+<h1>Renderer comparison lab</h1>
+<p>SVG is the default. Enable Experimental WebGPU to compare outline workloads or animated polygon rigs with fills, strokes, attachments and nested clipping. Supported scene features are limited; this is not an editor performance score.</p>
+<div class="controls"><label><input id="experimental-gpu" type="checkbox"> Experimental WebGPU</label></div>
+<div class="controls">
+<label>Workload <select id="workload"></select></label>
+<button id="retry" hidden>Retry WebGPU</button><button id="play">Play comparison</button><label>Time <input id="time" type="range" min="0" max="3" step="any" value="0"></label>
+<button id="play-worker" disabled>Play worker only</button>
+<label>Samples per backend <select id="samples"><option value="180">180 · quick check</option><option value="1800" selected>1,800 · ~30 seconds at 60 Hz</option><option value="7200">7,200 · ~2 minutes at 60 Hz</option></select></label>
+<button id="measure">Measure separately</button><button id="cancel-measure" hidden>Cancel measurement</button><button id="verify">Check pixels</button>
+</div>
+<p>Geometry and layer presets vary independently. Static-surroundings presets keep nine rigs still and animate one. Measurements run each backend separately; duration depends on refresh rate and workload. Keep this tab visible. GPU timings cover CPU preparation and submission, not physical presentation.</p>
+<p id="status" role="status">Checking WebGPU…</p>
+<div class="views"><figure><figcaption>SVG reference</figcaption><svg id="reference" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 800"></svg></figure><figure><figcaption>WebGPU · 4× multisampling</figcaption><canvas id="gpu" width="1000" height="800"></canvas></figure></div>
+<div class="views"><figure id="worker-view" hidden><figcaption>Worker WebGPU · evaluation, outlines and submission off the main thread</figcaption><canvas id="worker-gpu" width="1000" height="800"></canvas></figure></div>
+<p id="worker-status" role="status">Checking worker renderer…</p>
+<details id="scene-preview"><summary>Scene rendering preview · transforms and nested clips</summary>
+<p>Static scene fixtures compare SVG with GPU drawing order, transforms and clipping. Unsupported features show an explicit SVG fallback.</p>
+<div class="controls"><label>Scene <select aria-label="Scene fixture"></select></label><label>Move scene <input aria-label="Scene horizontal offset" type="range" min="-20" max="20" step="any" value="0"></label></div>
+<div class="views scene-views"><figure><figcaption>SVG reference</figcaption><div data-scene-reference></div></figure><figure><figcaption>WebGPU scene</figcaption><canvas width="128" height="128"></canvas></figure></div>
+<p role="status">Open to initialize scene rendering.</p></details>
+<pre id="results" aria-live="polite">No measurements yet.</pre>
+<script type="module" src="/lab.js"></script></body></html>

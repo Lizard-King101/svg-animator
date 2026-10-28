@@ -6,7 +6,7 @@ import type { TransformState } from './objects/transform.object';
 interface BonePoseSnapshot { id: string; pose: number; poseX?: number; poseY?: number; }
 export interface RigAnimationPreviewSnapshot {
     documentId: string;
-    rigs: { id: string; constraintsActive?: boolean; bones: BonePoseSnapshot[] }[];
+    rigs: { id: string; constraintsActive?: boolean; windX?: number; windY?: number; bones: BonePoseSnapshot[] }[];
     paths: { id: string; points: { id: string; x: number; y: number }[] }[];
     attachments: { id: string; transform: TransformState }[];
 }
@@ -22,7 +22,7 @@ export function captureRigAnimationPreview(svg: SVG, rigIds?: ReadonlySet<string
         const target = findAnimationTarget(svg.elements, id);
         return target ? [{ id, transform: { ...target.transform } }] : [];
     });
-    return { documentId: svg.id, rigs: rigs.map(rig => ({ id: rig.id, constraintsActive: rig.constraintsActive,
+    return { documentId: svg.id, rigs: rigs.map(rig => ({ id: rig.id, constraintsActive: rig.constraintsActive, windX:rig.windX, windY:rig.windY,
         bones: rig.bones.map(bone => ({ id: bone.id, pose: bone.pose, poseX: bone.poseX, poseY: bone.poseY })) })), paths, attachments };
 }
 
@@ -33,6 +33,7 @@ export function restoreRigAnimationPreview(svg: SVG, snapshot: RigAnimationPrevi
         const rig = svg.rigs.armatures.find(rig => rig.id === base.id);
         if(!rig) continue;
         if(base.constraintsActive === undefined) delete rig.constraintsActive; else rig.constraintsActive = base.constraintsActive;
+        for(const field of ['windX','windY'] as const) { if(base[field]===undefined) delete rig[field]; else rig[field]=base[field]; }
         for(const value of base.bones) {
             const bone = rig.bones.find(bone => bone.id === value.id);
             if(!bone) continue;

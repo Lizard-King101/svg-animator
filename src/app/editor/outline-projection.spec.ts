@@ -1,6 +1,6 @@
 import { RuntimeContourV1, RuntimeLineV1 } from '../../../packages/runtime/src/contracts';
 import { buildRuntimePathData } from '../../../packages/runtime/src/path-data';
-import { closestOutlinePosition, fullOutlineSections, OutlineSection, outlineContourSegments, outlinePositionPoint, outlineSectionLines, outlineSectionsProblem, projectOutlineSections } from '../../../packages/runtime/src/outline';
+import { closestOutlinePosition, fullOutlineSections, OutlineSection, outlineContourSegments, outlinePositionPoint, outlineSectionLines, outlineSectionsProblem, projectOutlineSections, projectOutlineGeometry, visitOutlinePolygons } from '../../../packages/runtime/src/outline';
 import { cubicPoint } from '../../../packages/runtime/src/curve-range';
 
 describe('derived outline geometry', () => {
@@ -9,6 +9,26 @@ describe('derived outline geometry', () => {
     const straight = (): RuntimeContourV1 => ({ id: 'contour', closed: false, lines: [line('edge', 0, 0, 100, 0)] });
     const section = (contour: RuntimeContourV1, start = 0, end = 1): OutlineSection => ({ id: 'outline', contourId: contour.id, start: { segmentId: contour.lines[0].id, t: start }, end: { segmentId: contour.lines[0].id, t: end } });
     const vertices = (data: string) => { const values = data.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? []; return values.filter((_, index) => index % 2 === 0).map((x, index) => ({ x, y: values[index * 2 + 1] })); };
+
+    it('exposes the same rounded polygons to numeric and SVG renderers across outline styles', () => {
+        const contours = [straight(), { id: 'box', closed: true, lines: [line('top', 0, 20, 90, 20), line('right', 90, 20, 90, 90), line('bottom', 90, 90, 0, 90)] }];
+        contours[0].lines[0].type = 'bezier';
+        contours[0].lines[0].controlStart = point('c', 25, -35); contours[0].lines[0].controlEnd = point('d', 70, 40);
+        const before = JSON.stringify(contours), sections = fullOutlineSections(contours);
+        sections[0].startTaper = { length: .2, tipWidth: .1 };
+        for(const lineCap of ['butt', 'round', 'square'] as const) for(const lineJoin of ['miter', 'bevel', 'round'] as const) {
+            for(const drawProgress of [0, .43, 1]) for(const dasharray of [[], [0, 10], [13, 7]]) {
+                const style = { width: 7.12345, lineCap, lineJoin, drawProgress, dasharray, dashoffset: -3 };
+                const numeric = projectOutlineGeometry(contours, sections, style), svg = projectOutlineSections(contours, sections, style);
+                expect(numeric.polygons.map(polygon => `M ${polygon.map(p => `${p.x} ${p.y}`).join(' L ')} Z`).join(' ')).toBe(svg.strokeData);
+                const streamed: string[] = [];
+                const emitted = visitOutlinePolygons(contours, sections, style, points => streamed.push(`M ${points.map(p => `${p.x} ${p.y}`).join(' L ')} Z`));
+                expect(streamed.join(' ')).toBe(svg.strokeData); expect(emitted.problem).toBe(svg.problem);
+                expect(numeric.sourceBounds).toEqual(svg.sourceBounds); expect(numeric.sections).toEqual(svg.sections);
+            }
+        }
+        expect(JSON.stringify(contours)).toBe(before);
+    });
 
     it('cuts a cubic at exact curve-local positions without changing source points', () => {
         const contour = straight(), edge = contour.lines[0];

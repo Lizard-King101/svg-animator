@@ -7,7 +7,7 @@ import type { RuntimeContourV1, RuntimeLineV1, RuntimePointV1 } from '../../../.
 
 export const DOCUMENT_ENVELOPE_KIND = "svg-animator/document" as const;
 export const PROJECT_DATABASE_KIND = "svg-animator/project-database" as const;
-export const CURRENT_DOCUMENT_VERSION = 18 as const;
+export const CURRENT_DOCUMENT_VERSION = 19 as const;
 export const CURRENT_PROJECT_DATABASE_VERSION = 1 as const;
 
 export interface DocumentEnvelopeV1 {
@@ -84,6 +84,12 @@ export interface DocumentEnvelopeV16 {
 
 export interface DocumentEnvelopeV18 {
     kind: typeof DOCUMENT_ENVELOPE_KIND;
+    version: 18;
+    data: SVGSave;
+}
+
+export interface DocumentEnvelopeV19 {
+    kind: typeof DOCUMENT_ENVELOPE_KIND;
     version: typeof CURRENT_DOCUMENT_VERSION;
     data: SVGSave;
 }
@@ -94,7 +100,7 @@ export interface StoredProjectV1 {
     thumbnail: string;
     createdAt: number;
     updatedAt: number;
-    document: DocumentEnvelopeV18;
+    document: DocumentEnvelopeV19;
 }
 
 export interface ProjectDatabaseV1 {
@@ -127,7 +133,7 @@ export interface MigrationFailure {
     version?: number;
 }
 
-export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV18 {
+export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV19 {
     return {
         kind: DOCUMENT_ENVELOPE_KIND,
         version: CURRENT_DOCUMENT_VERSION,
@@ -136,7 +142,7 @@ export function createDocumentEnvelope(document: SVGSave): DocumentEnvelopeV18 {
 }
 
 /** Migrates one persisted document without constructing editor model objects. */
-export function migrateDocument(input: unknown): MigrationResult<DocumentEnvelopeV18> {
+export function migrateDocument(input: unknown): MigrationResult<DocumentEnvelopeV19> {
     // Prior renderers inferred closure from coincident endpoints. Preserve that
     // appearance once; v16 treats an explicit open contour as open thereafter.
     if(isRecord(input) && input['kind'] === DOCUMENT_ENVELOPE_KIND) {
@@ -148,7 +154,7 @@ export function migrateDocument(input: unknown): MigrationResult<DocumentEnvelop
     } else if(isSVGSave(input)) input = withHiddenClippingArtworkV17(withExplicitClosureV16(input));
     const payload = isRecord(input) && input['kind'] === DOCUMENT_ENVELOPE_KIND ? input['data'] : input;
     const rigs = isRecord(payload) ? payload['rigs'] : undefined;
-    if(isRecord(rigs) && rigs['version'] !== 1 && rigs['version'] !== 2 && rigs['version'] !== 3 && rigs['version'] !== 4 && rigs['version'] !== 5) return unsupported('armature', numericVersion(rigs['version']));
+    if(isRecord(rigs) && rigs['version'] !== 1 && rigs['version'] !== 2 && rigs['version'] !== 3 && rigs['version'] !== 4 && rigs['version'] !== 5 && rigs['version'] !== 6) return unsupported('armature', numericVersion(rigs['version']));
     const animation = isRecord(payload) ? payload['animation'] : undefined;
     const composition = isRecord(animation) ? animation['composition'] : undefined;
     if(isRecord(composition) && composition['version'] !== 1) return unsupported('action composition', numericVersion(composition['version']));
@@ -224,13 +230,17 @@ export function migrateDocument(input: unknown): MigrationResult<DocumentEnvelop
             if(!isSVGSave(input['data'])) return invalid('Document v17 contains an invalid SVG payload.');
             return success(createDocumentEnvelope(input['data']), true, ['Migrated document version 17 to version 18 with optional loop endpoint links.']);
         }
+        if(version === 18) {
+            if(!isSVGSave(input['data'])) return invalid('Document v18 contains an invalid SVG payload.');
+            return success(createDocumentEnvelope(input['data']), true, ['Migrated document version 18 to version 19 with optional live spring constraints.']);
+        }
         if(version !== CURRENT_DOCUMENT_VERSION) return unsupported("document", version);
         if(!isSVGSave(input["data"])) {
-            return invalid("Document v18 contains an invalid SVG payload.");
+            return invalid("Document v19 contains an invalid SVG payload.");
         }
         const upgraded = withRigV5(withStrokeStyleV5(withAnimationV2(input["data"])));
         const migrated = upgraded !== input["data"];
-        return success(migrated ? createDocumentEnvelope(upgraded) : input as unknown as DocumentEnvelopeV18, migrated,
+        return success(migrated ? createDocumentEnvelope(upgraded) : input as unknown as DocumentEnvelopeV19, migrated,
             migrated ? ["Normalized document defaults."] : []);
     }
 
@@ -323,7 +333,7 @@ function legacyClosed(lines: { points: { id: string; x: number; y: number }[] }[
 
 /** Legacy poses, anchor inheritance, and separate weights remain unchanged; links are never guessed. */
 function withRigV5(document: SVGSave): SVGSave {
-    return document.rigs && document.rigs.version !== 5
+    return document.rigs && document.rigs.version < 5
         ? { ...document, rigs: { ...document.rigs, version: 5 } }
         : document;
 }

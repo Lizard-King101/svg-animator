@@ -154,7 +154,7 @@ describe('armature editing and weighted FK', () => {
         expect(migrateDocument({ kind: 'svg-animator/document', version: 9, data: save }).status).toBe('ok');
         const invalid = structuredClone(save); invalid.rigs!.armatures[0].bones[0].parentId = invalid.rigs!.armatures[0].bones[0].id;
         expect(migrateDocument(createDocumentEnvelope(invalid)).status).toBe('invalid');
-        const future = { ...save, rigs: { version: 6, armatures: [] } }; expect(migrateDocument(future).status).toBe('unsupported');
+        const future = { ...save, rigs: { version: 7, armatures: [] } }; expect(migrateDocument(future).status).toBe('unsupported');
         const attached = migrateDocument(attachmentFixture); expect(attached.status).toBe('ok');
         if(attached.status === 'ok') { t.editor.selectedSVG = SVG.fromSave(attached.value.data,t.editor); t.rigs.select('rig'); expect(t.rigs.problem).toBeUndefined(); }
         const fixture = migrateDocument(rigFixture); expect(fixture.status).toBe('ok');
@@ -166,7 +166,7 @@ describe('armature editing and weighted FK', () => {
     });
     it('commits numeric fields on Enter/blur, restores rejected values, and cancels Escape', () => {
         const t = setup(); t.rigs.workspace = 'pose';
-        TestBed.configureTestingModule({ imports: [RigPanelComponent], providers: [{ provide: RigEditingService, useValue: t.rigs }, { provide: RigBindingSessionService, useValue: new RigBindingSessionService(t.rigs, t.mutations) }] });
+        TestBed.configureTestingModule({ imports: [RigPanelComponent], providers: [{ provide: AnimationPlaybackService, useValue: t.playback }, { provide: DocumentMutationService, useValue: t.mutations }, { provide: RigEditingService, useValue: t.rigs }, { provide: RigBindingSessionService, useValue: new RigBindingSessionService(t.rigs, t.mutations) }] });
         const fixture = TestBed.createComponent(RigPanelComponent); fixture.detectChanges();
         const input = fixture.nativeElement.querySelector('[aria-label="FK rotation"]') as HTMLInputElement;
         input.value = '35'; input.dispatchEvent(new Event('blur')); fixture.detectChanges(); expect(t.rigs.bone!.pose).toBe(35);

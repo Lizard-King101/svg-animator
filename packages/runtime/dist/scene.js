@@ -2,27 +2,51 @@ import { packedColorValue } from "./evaluator";
 import { buildRuntimePathData } from "./path-data";
 import { geometryRoleNodes, isClippingGeometry, paintRoleNodes, pathRevealNodes, projectedDefinitionId, renderTargetNodes } from "./render-roles.internal";
 import { RigEvaluationPlan } from './rig/evaluation-plan';
-import { parseRigAnimationProperty } from './rig/channels';
+import { parseRigAnimationProperty, resolveRigAnimationChannel } from './rig/channels';
 import { outlineProjectionProblem, projectOutlineSections } from './outline';
 import { RuntimePlayerError } from './errors';
+import { hasPhysics, RigPhysicsPlan } from './rig/physics';
+import { evaluateRuntimeTrack } from './evaluator';
 const MIN_VISIBLE_DRAW_PROGRESS = 0.0002;
 export class RuntimeScene {
-    constructor(root, sourceTargets, rigs) {
+    constructor(root, sourceTargets, rigs, animation) {
         this.root = root;
         this.targetById = new Map();
         this.targetNodesById = new Map();
         this.targets = clone(sourceTargets);
         this.rigs = rigs && clone(rigs);
         this.rigPlans = this.rigs?.armatures.map(rig => new RigEvaluationPlan(rig)) ?? [];
+        this.physicsPlans = this.rigs?.armatures.map(rig => {
+            if (!hasPhysics(rig))
+                return undefined;
+            const source = clone(rig), bases = source.bones.map(bone => ({ pose: bone.pose, poseX: bone.poseX, poseY: bone.poseY }));
+            const wind = { windX: source.windX, windY: source.windY };
+            const channels = (animation?.tracks ?? []).flatMap(track => {
+                if (animation.targets[track.target] !== rig.id)
+                    return [];
+                const channel = resolveRigAnimationChannel(source, animation.properties[track.property]);
+                return channel ? [{ track, channel }] : [];
+            });
+            return new RigPhysicsPlan(source, time => {
+                Object.assign(source, wind);
+                source.bones.forEach((bone, index) => Object.assign(bone, bases[index]));
+                for (const { track, channel } of channels) {
+                    const value = evaluateRuntimeTrack(track, time);
+                    if (typeof value === 'number' && Number.isFinite(value))
+                        channel.write(value);
+                }
+                return source;
+            });
+        }) ?? [];
         this.targets.forEach((target) => this.targetById.set(target.id, target));
     }
     write(targetId, property, value) {
         const boneChannel = parseRigAnimationProperty(property);
         if (boneChannel) {
-            const bone = this.rigs?.armatures.find(rig => rig.id === targetId)?.bones.find(bone => bone.id === boneChannel.boneId);
-            if (!bone || typeof value !== 'number' || !Number.isFinite(value))
+            const channel = resolveRigAnimationChannel(this.rigs?.armatures.find(rig => rig.id === targetId), property);
+            if (!channel || typeof value !== 'number' || !Number.isFinite(value))
                 return false;
-            bone[boneChannel.field] = value;
+            channel.write(value);
             return true;
         }
         const target = this.targetById.get(targetId);
@@ -90,8 +114,8 @@ export class RuntimeScene {
             default: return false;
         }
     }
-    render() {
-        this.applyRigs();
+    render(time = 0, loop) {
+        this.applyRigs(time, loop);
         // Validate the complete authored length after deformation, before changing any SVG nodes.
         for (const target of this.targets)
             if (target.path?.outlineSections && target.stroke) {
@@ -113,10 +137,11 @@ export class RuntimeScene {
             this.renderGradients(target);
         });
     }
-    clear() { this.targetNodesById.clear(); }
+    clear() { this.targetNodesById.clear(); this.resetPhysics(); }
     /** Recompute from captured rest points on every seek; solved FK never replaces authored channels. */
-    applyRigs() {
-        const evaluated = this.rigPlans.map((plan, index) => plan.evaluate(this.rigs.armatures[index], true));
+    resetPhysics() { this.physicsPlans.forEach(plan => plan?.reset()); }
+    applyRigs(time, loop) {
+        const evaluated = this.rigPlans.map((plan, index) => this.physicsPlans[index]?.evaluate(time, loop) ?? plan.evaluate(this.rigs.armatures[index], true));
         for (const rig of evaluated) {
             for (const [id, points] of rig.paths) {
                 const target = this.targetById.get(id);

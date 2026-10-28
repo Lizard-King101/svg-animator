@@ -9,6 +9,7 @@ import { buildSVGMarkup } from '../svg-markup';
 import { captureGeometrySnapshot, restoreGeometrySnapshot } from '../objects/element-geometry';
 import { parseRigAnimationProperty, rigArtworkIds, writeDocumentAnimationProperty } from '../rig-animation';
 import { captureRigAnimationPreview, restoreRigAnimationPreview } from '../rig-animation-preview';
+import { hasPhysics } from '../../../../packages/runtime/src/rig/physics';
 
 export interface InspectionPoint { x: number; y: number; time: number; }
 export interface MotionTrail { id: string; segments: InspectionPoint[][]; ticks: InspectionPoint[]; }
@@ -28,12 +29,13 @@ export class AnimationInspectionSnapshot {
     private readonly rigBaseline;
     private readonly animatedRigIds: Set<string>;
     constructor(readonly document: SVG) {
-        this.rigPlan = new DocumentRigEvaluationPlan(document);
+        this.rigPlan = new DocumentRigEvaluationPlan(document, document.animation);
         this.plan = new AnimationEvaluationPlan(document.animation, document.elements, document.rigs);
         this.baselines = [...this.plan.targetMap.values()].map(target => ({
             target, geometry: captureGeometrySnapshot(target), transform: { ...target.transform },
         }));
         this.animatedRigIds = new Set(this.plan.tracks.filter(track => track.applicable && parseRigAnimationProperty(track.property)).map(track => track.targetId));
+        document.rigs.armatures.filter(hasPhysics).forEach(rig => this.animatedRigIds.add(rig.id));
         this.rigBaseline = captureRigAnimationPreview(document, this.animatedRigIds);
     }
 
@@ -48,7 +50,7 @@ export class AnimationInspectionSnapshot {
         this.plan.evaluate(time).forEach(value => {
             if(value.applied) writeDocumentAnimationProperty(this.document, value.targetId, value.property, value.value);
         });
-        this.rigPlan.apply(this.animatedRigIds);
+        this.rigPlan.apply(this.animatedRigIds, time);
     }
 
     skins(time: number, step: number, selectedIds: readonly string[] = [], loopRange?: {start: number; end: number}): OnionSkin[] {

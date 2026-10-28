@@ -32,7 +32,7 @@ import {
     RigPropertyTimelineRow,
     timelineRowTargetId,
     timelineRowId,
-    rigTimelineProperties,
+    rigWindProperties, rigTimelineProperties,
     rigBoneBranchIds,
     snapKeyframeTimeDelta,
     snapTimelineTime,
@@ -277,7 +277,7 @@ export class TimelineEditorService implements OnDestroy {
     }
 
     private rowInScope(row: TimelineRow, scope = this.selectionScope()): boolean {
-        return scope.targets.has(timelineRowTargetId(row)) && (!('bone' in row) || !scope.bones.size || scope.bones.has(row.bone.id));
+        return scope.targets.has(timelineRowTargetId(row)) && (!('bone' in row) || !scope.bones.size || !row.bone || scope.bones.has(row.bone.id));
     }
 
     revealSelection(): void {
@@ -307,7 +307,7 @@ export class TimelineEditorService implements OnDestroy {
         if(selected.length) return selected;
         const scope = this.selectionScope();
         return scope.targets.size ? tracks.filter(track => scope.targets.has(track.targetId)
-            && (!scope.bones.size || scope.bones.has(parseRigAnimationProperty(track.property)?.boneId ?? ''))) : tracks;
+            && (!scope.bones.size || parseRigAnimationProperty(track.property)?.boneId===undefined || scope.bones.has(parseRigAnimationProperty(track.property)?.boneId ?? ''))) : tracks;
     }
 
     adjacentPoseTime(direction: -1 | 1): number | undefined {
@@ -390,11 +390,11 @@ export class TimelineEditorService implements OnDestroy {
         if(this.expandedLayerIds.has(id)) this.expandedLayerIds.delete(id); else this.expandedLayerIds.add(id);
     }
     rowLabel(row: TimelineRow): string { return 'property' in row ? row.property.label : row.type === 'rig' ? row.rig.name : row.type === 'bone' ? row.bone.name : row.element.name; }
-    rowSelected(row: TimelineRow): boolean { return 'rig' in row ? this.rig?.activeId === row.rig.id && (row.type === 'rig' || this.rig?.boneId === row.bone.id) : this.editor.selectedElements.includes(row.element); }
+    rowSelected(row: TimelineRow): boolean { return 'rig' in row ? this.rig?.activeId === row.rig.id && (row.type === 'rig' || !row.bone || this.rig?.boneId === row.bone.id) : this.editor.selectedElements.includes(row.element); }
     rowDisabledReason(row: TimelineRow): string {
         if(row.type !== 'rig-property') return '';
         if(this.animation.playing) return 'Pause playback to edit pose keys.';
-        const constraint = row.rig.constraints?.find(item => item.enabled && [item.upperBoneId, item.lowerBoneId].includes(row.bone.id));
+        const constraint = row.rig.constraints?.find(item => item.enabled && [item.upperBoneId, item.lowerBoneId].includes(row.bone?.id??''));
         return constraint ? `Posed by IK. Animate ${row.rig.bones.find(bone => bone.id === constraint.targetBoneId)?.name ?? 'the target'} instead.` : '';
     }
     rowLoopLabel(row: TimelineRow): string {
@@ -430,7 +430,7 @@ export class TimelineEditorService implements OnDestroy {
         this.selectedGraphHandleKeys.clear();
         if('rig' in row) {
             this.editor.selectedElements = [];
-            if(row.type === 'rig') this.rig?.select(row.rig.id); else this.rig?.selectBone(row.rig.id, row.bone.id);
+            if(row.type === 'rig' || !row.bone) this.rig?.select(row.rig.id); else this.rig?.selectBone(row.rig.id, row.bone.id);
             if(row.type === 'rig-property') {
                 this.selectedRowKey = `${row.rig.id}:${row.property.property}`;
                 this.selectedGraphTargetId = row.rig.id; this.selectedGraphProperty = row.property.property;
@@ -560,7 +560,7 @@ export class TimelineEditorService implements OnDestroy {
 
     private rigRowTracks(row: Extract<TimelineRow, {type: 'rig' | 'bone'}>): AnimationTrack[] {
         const ids = rigBoneBranchIds(row.rig, row.type === 'bone' ? row.bone.id : undefined);
-        return this.activeAnimation?.tracks.filter(track => track.targetId === row.rig.id && ids.has(parseRigAnimationProperty(track.property)?.boneId ?? '')) ?? [];
+        return this.activeAnimation?.tracks.filter(track => track.targetId === row.rig.id && (row.type==='rig' || ids.has(parseRigAnimationProperty(track.property)?.boneId ?? ''))) ?? [];
     }
 
     private summaryElements(element: AnyElement): AnyElement[] {
@@ -666,6 +666,7 @@ export class TimelineEditorService implements OnDestroy {
         if(direct) return direct;
         const rig = this.editor.selectedSVG?.rigs.armatures.find(rig => rig.id === this.selectedGraphTargetId);
         const parsed = parseRigAnimationProperty(this.selectedGraphProperty ?? '');
+        if(rig && parsed && parsed.boneId===undefined) return {type:'rig-property',rig,depth:1,property:rigWindProperties().find(property=>property.property===this.selectedGraphProperty)!};
         const bone = parsed && rig?.bones.find(bone => bone.id === parsed.boneId);
         if(rig && bone) return { type: 'rig-property', rig, bone, depth: 1, property: rigTimelineProperties(bone).find(property => property.property === this.selectedGraphProperty)! };
         const element = findAnimationTarget(this.editor.selectedSVG?.elements ?? [], this.selectedGraphTargetId ?? "");
@@ -1459,7 +1460,7 @@ export class TimelineEditorService implements OnDestroy {
                 if(rigSelected) {
                     if(!parsed) return undefined;
                     // Reuse channels on their original bones; an explicitly selected destination bone remaps one bone's keys.
-                    return copiedBones.size === 1 && this.rig?.boneId ? rigAnimationProperty(this.rig.boneId, parsed.field) : property;
+                    return parsed.boneId!==undefined && copiedBones.size === 1 && this.rig?.boneId ? rigAnimationProperty(this.rig.boneId, parsed.field) : property;
                 }
                 if(parsed) return undefined;
                 const source = findAnimationTarget(svg.elements, sourceTargetId);
@@ -1470,6 +1471,7 @@ export class TimelineEditorService implements OnDestroy {
                 const parsed = parseRigAnimationProperty(property);
                 if(!parsed) return !!findAnimationTarget(svg.elements, id);
                 const rig = svg.rigs.armatures.find(rig => rig.id === id), bone = rig?.bones.find(bone => bone.id === parsed.boneId);
+                if(rig && parsed.boneId===undefined) return true;
                 return !!rig && !!bone && !this.rowDisabledReason({ type: 'rig-property', rig, bone, depth: 0, property: rigTimelineProperties(bone).find(p => p.property === property)! });
             },
         )) {
@@ -2109,6 +2111,7 @@ export class TimelineEditorService implements OnDestroy {
     private propertyLabel(property: string): string {
         const parsed = parseRigAnimationProperty(property);
         if(parsed) {
+            if(parsed.boneId===undefined) return parsed.field==='windX'?'Wind X':'Wind Y';
             const bone = this.editor.selectedSVG?.rigs.armatures.flatMap(rig => rig.bones).find(bone => bone.id === parsed.boneId);
             return `${bone?.name ?? 'Bone'} · ${parsed.field === 'pose' ? 'Rotation' : parsed.field === 'poseX' ? 'Offset X' : 'Offset Y'}`;
         }

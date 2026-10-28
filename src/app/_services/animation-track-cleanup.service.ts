@@ -40,7 +40,7 @@ export class AnimationTrackCleanupService {
 export function findOrphanedAnimationTracks(svg: SVG): AnimationTrack[] {
     return allAnimationDocuments(svg.animation).flatMap(animation => animation.tracks).filter(track => {
         const property = parseRigAnimationProperty(track.property);
-        if(property) return !svg.rigs.armatures.some(rig => rig.id === track.targetId && rig.bones.some(bone => bone.id === property.boneId));
+        if(property) return !svg.rigs.armatures.some(rig => rig.id === track.targetId && (property.boneId===undefined || rig.bones.some(bone => bone.id === property.boneId)));
         return !findAnimationTarget(svg.elements, track.targetId);
     });
 }

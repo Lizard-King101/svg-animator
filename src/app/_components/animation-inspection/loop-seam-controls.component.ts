@@ -64,7 +64,7 @@ export class LoopSeamControlsComponent {
             const parsed = parseRigAnimationProperty(track.property);
             const rig = parsed && this.timeline.editor.selectedSVG?.rigs.armatures.find(rig => rig.id === track.targetId);
             return !parsed || !rig?.constraints?.some(constraint => constraint.enabled
-                && [constraint.upperBoneId, constraint.lowerBoneId].includes(parsed.boneId));
+                && [constraint.upperBoneId, constraint.lowerBoneId].includes(parsed.boneId??''));
         });
     }
     get linkedCount(): number { return this.tracks.filter(track => loopEndpoints(track)).length; }

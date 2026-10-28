@@ -51,3 +51,13 @@ Outline dash expansion is limited to 20,000 runs per path, measured over complet
 ## Visible clipping sources (runtime 1.5)
 
 `render.visible-clipping-v1` guards the optional `clipping.sourceVisibility: true` descriptor. The source target's visibility controls its fill behind clipped contents and its stroke above them. The clipping geometry always remains active, shares geometry and transform animation with those paint projections, and ignores source opacity, Draw Progress and paint. Descendant visibility remains meaningful for a group source. Ancestor clips still enclose the complete result. Runtime markup links uniquely identified projections with `data-render-target` and `data-render-projection`; this does not duplicate document targets or weights. Legacy bundles and their unprojected markup keep their previous behavior.
+
+## Live spring constraints (1.6)
+
+Bundles with rig-v6 spring settings require `rig.spring-v1` as well as `rig.pose-v1`. Enabled spring rigs are exported even when they have no animation tracks. The player evaluates authored channels, orders spring and IK writers by ancestry and target dependencies, then deforms the existing SVG artwork. A physics-driven child point may drive a separate IK chain; physics and IK cannot write the same bone. Optional inclusive `endBoneId` limits a constraint to an ancestry path; optional `boneSettings` overrides stiffness, damping, gravity, limit and mix per bone. Older records without these fields retain whole-strand behavior and shared defaults. Physics settings are portable; transient velocity and replay checkpoints are not serialized.
+
+Physics uses fixed 120 Hz simulation with interpolated output at the requested time. Direct seeks reconstruct first-traversal state, while forward looping carries motion across cycles using an unwrapped clock. Pausing freezes physics; changing Loop or seeking resets replay state. Reverse playback uses deterministic timeline reconstruction. Existing bundles without springs keep the previous stateless rig path. A runtime lacking `rig.spring-v1` rejects the bundle explicitly.
+
+## Wind (1.7)
+
+Optional armature `windX`/`windY` base values default to zero. Numeric `physics.windX` and `physics.windY` channels animate them, including composed action windows. Spring `windInfluence` defaults to 1, ranges from 0 to 10, and can be overridden per bone. Wind uses canvas axes (+X right, +Y down), with acceleration scaled by bone length; it is independent of the armature’s rotation. Saved wind values, influence settings or wind channels require `rig.wind-v1`. Older documents without these fields retain their previous behavior. Sampling and loop clocks are shared with spring physics; no random gust generator is involved.

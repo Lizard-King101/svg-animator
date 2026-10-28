@@ -1,5 +1,6 @@
 /** Framework-free curve primitives shared by authoring and derived rendering. */
 export interface CurvePoint { x: number; y: number; }
+export const DEFAULT_CURVE_SAMPLE_STEPS = 64;
 export interface CurveLengthSample { t: number; length: number; }
 export interface CurveLine { type: 'line' | 'bezier'; points: readonly CurvePoint[]; controlStart?: CurvePoint; controlEnd?: CurvePoint; }
 export function lerpCurvePoint(a: CurvePoint, b: CurvePoint, t: number): CurvePoint {
@@ -23,7 +24,7 @@ export function curvePoint(line: CurveLine, t: number): CurvePoint {
         ? cubicPoint(line.points[0], line.controlStart, line.controlEnd, line.points[1], t)
         : lerpCurvePoint(line.points[0], line.points[1], t);
 }
-export function curveLengthSamples(line: CurveLine, steps = 64): CurveLengthSample[] {
+export function curveLengthSamples(line: CurveLine, steps = DEFAULT_CURVE_SAMPLE_STEPS): CurveLengthSample[] {
     if(line.type !== 'bezier' || !line.controlStart || !line.controlEnd) return [{ t: 0, length: 0 }, { t: 1, length: Math.hypot(line.points[1].x - line.points[0].x, line.points[1].y - line.points[0].y) }];
     const samples = [{ t: 0, length: 0 }]; let previous = line.points[0], length = 0;
     for(let index = 1; index <= steps; index++) {

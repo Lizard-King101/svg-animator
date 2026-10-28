@@ -6,7 +6,7 @@ import { Group } from "../editor/objects/elements/group.object";
 import { Path } from "../editor/objects/elements/path.object";
 import { gradientTimelineProperties } from "../editor/objects/paint.object";
 import { Armature, Bone } from '../editor/objects/armature';
-import { parseRigAnimationProperty, rigAnimationProperty } from '../editor/rig-animation';
+import { rigWindProperty, parseRigAnimationProperty, rigAnimationProperty } from '../editor/rig-animation';
 
 export type ArtworkTimelineRow = LayerTimelineRow | PropertyTimelineRow;
 export type TimelineRow = ArtworkTimelineRow | RigTimelineRow | BoneTimelineRow | RigPropertyTimelineRow;
@@ -14,16 +14,20 @@ export type LayerTimelineRow = { type: "layer"; element: AnyElement; depth: numb
 export type PropertyTimelineRow = { type: "property"; element: AnyElement; depth: number; property: AnimatablePropertyDefinition };
 export type RigTimelineRow = { type: 'rig'; rig: Armature; depth: number };
 export type BoneTimelineRow = { type: 'bone'; rig: Armature; bone: Bone; depth: number };
-export type RigPropertyTimelineRow = { type: 'rig-property'; rig: Armature; bone: Bone; depth: number; property: AnimatablePropertyDefinition };
+export type RigPropertyTimelineRow = { type: 'rig-property'; rig: Armature; bone?: Bone; depth: number; property: AnimatablePropertyDefinition };
 export type NumericTimelineRow = PropertyTimelineRow | RigPropertyTimelineRow;
 
 export function timelineRowTargetId(row: TimelineRow): string { return 'rig' in row ? row.rig.id : row.element.id; }
 export function timelineRowId(row: TimelineRow): string {
-    return row.type === 'bone' || row.type === 'rig-property' ? `${row.rig.id}:${row.bone.id}` : timelineRowTargetId(row);
+    return (row.type === 'bone' || row.type === 'rig-property') && row.bone ? `${row.rig.id}:${row.bone.id}` : timelineRowTargetId(row);
 }
 export function rigTimelineProperties(bone: Bone): AnimatablePropertyDefinition[] {
     return (['poseX', 'poseY', 'pose'] as const).map(field => ({ property: rigAnimationProperty(bone.id, field),
         label: field === 'pose' ? 'Rotation' : field === 'poseX' ? 'Offset X' : 'Offset Y', valueType: 'number', group: 'transform', mvp: true }));
+}
+
+export function rigWindProperties(): AnimatablePropertyDefinition[] {
+    return (['windX','windY'] as const).map(field=>({property:rigWindProperty(field),label:field==='windX'?'Wind X':'Wind Y',valueType:'number',group:'transform',mvp:true}));
 }
 
 export function rigBoneBranchIds(rig: Armature, boneId?: string): Set<string> {
@@ -72,6 +76,7 @@ export class TimelineEditingService {
         armatures.forEach(rig => {
             rows.push({ type: 'rig', rig, depth: 0 });
             if(!expanded.has(rig.id)) return;
+            rigWindProperties().forEach(property=>rows.push({type:'rig-property',rig,depth:1,property}));
             const append = (parentId: string | null, depth: number) => rig.bones.filter(bone => bone.parentId === parentId).forEach(bone => {
                 rows.push({ type: 'bone', rig, bone, depth });
                 if(!expanded.has(`${rig.id}:${bone.id}`)) return;
@@ -250,6 +255,8 @@ function cloneValue<T>(value: T): T { return value == null ? value : JSON.parse(
 /** Returns the numeric channel displayed alongside a selected speed curve. */
 export function semanticPartnerProperty(property: string): string | undefined {
     const rig = parseRigAnimationProperty(property);
+    if(rig?.field === 'windX') return rigWindProperty('windY');
+    if(rig?.field === 'windY') return rigWindProperty('windX');
     if(rig?.field === 'poseX') return rigAnimationProperty(rig.boneId, 'poseY');
     if(rig?.field === 'poseY') return rigAnimationProperty(rig.boneId, 'poseX');
     const fixed: Record<string, string> = {
